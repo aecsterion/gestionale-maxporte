@@ -714,9 +714,10 @@ tr.data-row:hover td{background:var(--beige);cursor:pointer}
       <div id="ndoc-righe-list" style="min-height:60px;border:0.5px solid var(--border);border-radius:var(--radius);padding:8px 12px;margin-bottom:14px"></div>
     </div>
     <div class="form-modal-foot" style="justify-content:space-between">
-      <div style="display:flex;align-items:baseline;gap:8px">
-        <span style="font-size:12px;color:var(--mid)">Totale netto stimato:</span>
-        <span id="ndoc-totale" style="font-size:20px;font-weight:500;color:var(--red)">€ 0,00</span>
+      <div>
+        <div style="font-size:11px;color:var(--mid)">Totale netto stimato:</div>
+        <div id="ndoc-totale" style="font-size:20px;font-weight:500;color:var(--red)">€ 0,00</div>
+        <div id="ndoc-sconto-detail"></div>
       </div>
       <div style="display:flex;gap:10px">
         <button class="btn" onclick="document.getElementById('modal-nuovo-doc').classList.remove('open')">Annulla</button>
@@ -1135,7 +1136,7 @@ async function renderOrdini(){
 }
 
 async function openFormOrdine(data){
-  const {data:clienti} = await sb.from('anagrafiche').select('id,ragione_sociale').in('tipo',['cliente','entrambi']).order('ragione_sociale');
+  const {data:clienti} = await sb.from('anagrafiche').select('id,ragione_sociale').order('ragione_sociale');
   const opts=(clienti||[]).map(c=>`<option value="${c.id}" ${data?.anagrafica_id===c.id?'selected':''}>${c.ragione_sociale}</option>`).join('');
   document.getElementById('ord-cliente').innerHTML='<option value="">Seleziona cliente...</option>'+opts;
   document.getElementById('form-ord-title').textContent = data?'Modifica ordine':'Nuovo ordine';
@@ -1327,9 +1328,13 @@ function validateIBAN(){
 function closeForm(id){
   document.getElementById(id).classList.remove('open');
 }
-document.querySelectorAll('.form-overlay').forEach(o=>{
-  o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open');});
-});
+// Form overlay — NON chiudere cliccando fuori, solo con i pulsanti espliciti
+// document.querySelectorAll('.form-overlay').forEach(o=>{
+//   o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open');});
+// });
+// Chiudi solo anagrafica e ordine con click fuori (non configuratore e nuovo doc)
+document.getElementById('form-anagrafica').addEventListener('click',e=>{if(e.target===document.getElementById('form-anagrafica'))closeForm('form-anagrafica');});
+document.getElementById('form-ordine').addEventListener('click',e=>{if(e.target===document.getElementById('form-ordine'))closeForm('form-ordine');});
 
 // ══════════════════════════════════════════════════════
 // CONFIGURATORE — stato globale
@@ -1497,7 +1502,6 @@ async function cfgFinitura(){
         background:${CFG.finitura===f.codice_finitura?'var(--red-bg)':'var(--white)'}">
       <div style="font-size:13px;font-weight:500;color:${CFG.finitura===f.codice_finitura?'var(--red)':'var(--dark)'}">${f.nome_finitura}</div>
       <div style="font-size:11px;color:var(--mid);margin-top:2px">${sp>0?'+€'+sp:'Inclusa'}</div>
-      ${f.consente_bugna?'<div style="font-size:10px;color:var(--green-tx);margin-top:2px">Bugna disponibile</div>':''}
     </div>`;
   }).join('');
   document.getElementById('cfg-body').innerHTML=`
@@ -1615,32 +1619,80 @@ async function selBugna(){
   CFG.pannello_bugna='bugna'; CFG.p_bugna=fin?.[`sovrapprezzo_bugna_${listino()}`]||0;
   cfgOpzioniUpdate();
 }
-function selAlu(cod,nome,sovr){ CFG.colore_alu=cod;CFG.nome_colore_alu=nome;CFG.p_inserto=sovr; cfgOpzioniUpdate(); }
-function selPietra(cod,nome,sovr){ CFG.colore_pietra=cod;CFG.nome_colore_pietra=nome;CFG.p_inserto=sovr; cfgOpzioniUpdate(); }
-function selVetro(cod,nome,prezzo){ CFG.tipo_vetro=cod;CFG.nome_tipo_vetro=nome;CFG.p_vetro=prezzo; cfgOpzioniUpdate(); }
+function selAlu(cod,nome,sovr){ CFG.colore_alu=cod;CFG.nome_colore_alu=nome;CFG.p_inserto=sovr; cfgUpdatePrice(); renderCfgStep('apertura'); }
+function selPietra(cod,nome,sovr){ CFG.colore_pietra=cod;CFG.nome_colore_pietra=nome;CFG.p_inserto=sovr; cfgUpdatePrice(); renderCfgStep('apertura'); }
+function selVetro(cod,nome,prezzo){ CFG.tipo_vetro=cod;CFG.nome_tipo_vetro=nome;CFG.p_vetro=prezzo; cfgUpdatePrice(); cfgOpzioniUpdate(); }
 
 async function cfgApertura(){
-  const {data} = await sb.from('tipologie_apertura').select('*').eq('attiva',true).order('famiglia').order('codice');
+  const [{data:ap},{data:sensi}] = await Promise.all([
+    sb.from('tipologie_apertura').select('*').eq('attiva',true).order('codice'),
+    sb.from('sensi_apertura').select('*'),
+  ]);
+
+  // Famiglia order and labels from Excel
+  const famOrder = ['BAT','CS','LIBRO','SALOON','ROTOTRASLANTI','SPECIALI','SCORREVOLI INTERNO MURO','SCORREVOLI ESTERNO MURO','FILO MURO','COMPLANARI','PASSATE'];
+  const famLabels = {
+    'BAT':'Battente con anuba registrabili',
+    'CS':'Senza battura con cerniere a scomparsa',
+    'LIBRO':'A libro',
+    'SALOON':'Va e vieni (Saloon)',
+    'ROTOTRASLANTI':'Rototraslante',
+    'SPECIALI':'Speciali',
+    'SCORREVOLI INTERNO MURO':'Scorrevole interno muro',
+    'SCORREVOLI ESTERNO MURO':'Scorrevole esterno muro',
+    'FILO MURO':'Filo muro',
+    'COMPLANARI':'Complanare',
+    'PASSATE':'Passata (stipite senza anta)',
+  };
+
+  // Build map codice→sensi from sensi_apertura
+  const sensiMap = {};
+  (sensi||[]).forEach(s=>{
+    if(!sensiMap[s.codice_apertura]) sensiMap[s.codice_apertura]=[];
+    sensiMap[s.codice_apertura].push(s);
+  });
+
+  // Group aperture by famiglia from sensi_apertura (more accurate than tipologie_apertura.famiglia)
   const gruppi = {};
-  (data||[]).forEach(a=>{ if(!gruppi[a.famiglia]) gruppi[a.famiglia]=[]; gruppi[a.famiglia].push(a); });
-  const labelFam={BAT:'Battente',SI:'Scorrevole interno',SE:'Scorrevole esterno',FM:'Filo muro',COM:'Complanare',ROTO:'Rototraslante',ALTRO:'Altro'};
-  let html=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+  (ap||[]).forEach(a=>{
+    const s = sensiMap[a.codice];
+    const fam = s?.[0]?.famiglia || a.famiglia || 'ALTRO';
+    if(!gruppi[fam]) gruppi[fam]=[];
+    gruppi[fam].push(a);
+  });
+
+  let html=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
     <div style="font-size:13px;font-weight:500">Tipologia di apertura</div>
     <button class="btn btn-sm" onclick="renderCfgStep('opzioni')">← Indietro</button>
   </div>`;
-  Object.entries(gruppi).forEach(([fam,aps])=>{
-    html+=`<div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:var(--mid);margin:10px 0 6px">${labelFam[fam]||fam}</div>
+
+  // Render in correct family order
+  const orderedFams = [...famOrder.filter(f=>gruppi[f]), ...Object.keys(gruppi).filter(f=>!famOrder.includes(f))];
+
+  orderedFams.forEach(fam=>{
+    const aps = gruppi[fam];
+    if(!aps||!aps.length) return;
+    html+=`<div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:var(--mid);margin:14px 0 6px;padding-bottom:4px;border-bottom:0.5px solid var(--border)">${famLabels[fam]||fam}</div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:4px">`;
     aps.forEach(a=>{
       const sp = a.logica_prezzo==='fisso'?(a[`sovrapprezzo_${listino()}`]||0):null;
-      html+=`<div onclick="selApertura('${a.codice.replace(/'/g,"\\'")}','${a.nome.replace(/'/g,"\\'")}','${a.logica_prezzo}',${sp||0},${a.doppio_prezzo},${a.maggiorazione_pct||0})"
-        style="border:${CFG.apertura===a.codice?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:8px 10px;cursor:pointer;font-size:12px;background:${CFG.apertura===a.codice?'var(--red-bg)':'var(--white)'}">
-        <div style="font-weight:500;color:${CFG.apertura===a.codice?'var(--red)':'var(--dark)'}">${a.nome}</div>
-        <div style="font-size:11px;color:var(--mid);margin-top:2px">${a.logica_prezzo==='spessore'?'Prezzo × spessore':a.logica_prezzo==='percentuale'?'+'+a.maggiorazione_pct+'%':a.logica_prezzo==='doppio'?'Prezzo doppio':sp>0?'+€'+sp:'Inclusa'}</div>
+      const prezzoLabel = a.logica_prezzo==='spessore'?'Prezzo dipende dallo spessore muro':
+        a.logica_prezzo==='percentuale'?'Maggiorazione +'+a.maggiorazione_pct+'%':
+        a.logica_prezzo==='doppio'?'Prezzo doppio':
+        sp>0?'Sovrapprezzo +€'+sp:'Inclusa nel prezzo porta';
+      const isSelected = CFG.apertura===a.codice;
+      // Short description from nome (remove long details)
+      const desc = a.nome ? a.nome.replace(a.codice,'').trim() : '';
+      html+=`<div onclick="selApertura('${a.codice.replace(/'/g,"\\'")}','${a.nome.replace(/'/g,"\\'")}','${a.logica_prezzo}',${sp||0},${a.doppio_prezzo||false},${a.maggiorazione_pct||0})"
+        style="border:${isSelected?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:10px;cursor:pointer;background:${isSelected?'var(--red-bg)':'var(--white)'};display:flex;flex-direction:column;gap:3px">
+        <div style="font-size:13px;font-weight:700;color:${isSelected?'var(--red)':'var(--dark)'}">${a.codice}</div>
+        <div style="font-size:11px;color:${isSelected?'var(--red)':'var(--mid)'};line-height:1.4;flex:1">${desc}</div>
+        <div style="font-size:10px;color:${sp>0?'var(--amber-tx)':isSelected?'var(--green-tx)':'var(--green-tx)'};margin-top:4px;font-weight:500">${prezzoLabel}</div>
       </div>`;
     });
     html+='</div>';
   });
+
   document.getElementById('cfg-body').innerHTML=html;
 }
 
@@ -1649,7 +1701,50 @@ async function selApertura(cod, nome, logica, sovr, doppio, magg){
   CFG._logicaApertura=logica; CFG._maggApertura=magg; CFG._doppioApertura=doppio;
   if(logica==='fisso') CFG.p_apertura=sovr;
   else if(logica==='percentuale') CFG.p_apertura=Math.round(CFG.p_base*(magg/100)*100)/100;
-  else CFG.p_apertura=0; // verrà calcolato dopo lo spessore
+  else CFG.p_apertura=0;
+
+  // Carica sensi disponibili per questa apertura
+  const {data:sensi} = await sb.from('sensi_apertura').select('*').eq('codice_apertura',cod).eq('attivo',true).order('ordine');
+
+  if(!sensi||sensi.length===0){
+    // Nessun senso configurato — vai direttamente alle misure
+    CFG.senso=null;
+    await renderCfgStep('misure');
+    return;
+  }
+
+  if(sensi.length===1 && sensi[0].codice_senso==='BIDIREZIONALE' || sensi[0].codice_senso==='NESSUNO' || sensi[0].codice_senso==='X'){
+    // Senso fisso o non applicabile
+    CFG.senso=sensi[0].codice_senso;
+    await renderCfgStep('misure');
+    return;
+  }
+
+  // Mostra scelta senso
+  await cfgSenso(sensi);
+}
+
+async function cfgSenso(sensi){
+  updateCfgStepper('misure'); // stepper rimane su misure visivamente
+  const cards=sensi.map(s=>{
+    const isSelected=CFG.senso===s.codice_senso;
+    return `<div onclick="selSenso('${s.codice_senso}','${(s.descrizione_senso||'').replace(/'/g,"\\'")}')"
+      style="border:${isSelected?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:14px 16px;cursor:pointer;background:${isSelected?'var(--red-bg)':'var(--white)'};display:flex;flex-direction:column;gap:4px">
+      <div style="font-size:16px;font-weight:700;color:${isSelected?'var(--red)':'var(--dark)'}">${s.codice_senso}</div>
+      <div style="font-size:12px;color:${isSelected?'var(--red)':'var(--mid)'}">${s.descrizione_senso||''}</div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('cfg-body').innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div style="font-size:13px;font-weight:500">Senso di apertura <span style="color:var(--mid);font-weight:400">— ${CFG.apertura}</span></div>
+      <button class="btn btn-sm" onclick="renderCfgStep('apertura')">← Indietro</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px">${cards}</div>`;
+}
+
+async function selSenso(senso, desc){
+  CFG.senso=senso;
   await renderCfgStep('misure');
 }
 
@@ -1841,10 +1936,14 @@ async function cfgFerramenta(){
 
   const rowsFerr=(ferr||[]).map(f=>{
     const sp=f[`sovrapprezzo_${listino()}`]||0;
+    const hex=f.colore_hex||'CCCCCC';
     return `<div onclick="selFerramenta('${f.codice}','${f.nome}',${sp})"
-      style="border:${CFG.ferramenta===f.codice?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:8px 10px;cursor:pointer;background:${CFG.ferramenta===f.codice?'var(--red-bg)':'var(--white)'}">
-      <div style="font-size:13px;font-weight:500;color:${CFG.ferramenta===f.codice?'var(--red)':'var(--dark)'}">${f.nome}</div>
-      <div style="font-size:11px;color:var(--mid)">${sp>0?'+€'+sp:'Inclusa'}</div>
+      style="border:${CFG.ferramenta===f.codice?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:8px 10px;cursor:pointer;background:${CFG.ferramenta===f.codice?'var(--red-bg)':'var(--white)'};display:flex;align-items:center;gap:8px">
+      <div style="width:22px;height:22px;border-radius:50%;background:#${hex};border:0.5px solid rgba(0,0,0,0.15);flex-shrink:0"></div>
+      <div>
+        <div style="font-size:12px;font-weight:500;color:${CFG.ferramenta===f.codice?'var(--red)':'var(--dark)'}">${f.nome}</div>
+        <div style="font-size:10px;color:var(--mid)">${sp>0?'+€'+sp:'Inclusa'}</div>
+      </div>
     </div>`;
   }).join('');
 
@@ -1864,7 +1963,7 @@ async function cfgFerramenta(){
     </div>
     <div style="margin-bottom:16px">
       <div style="font-size:12px;font-weight:500;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.4px;color:var(--mid)">Colore ferramenta</div>
-      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px">${rowsFerr||'<p style="color:var(--mid);font-size:12px">Nessuna ferramenta configurata</p>'}</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">${rowsFerr||'<p style="color:var(--mid);font-size:12px">Nessuna ferramenta configurata — aggiungila dal pannello admin</p>'}</div>
     </div>
     <div style="margin-bottom:16px">
       <div style="font-size:12px;font-weight:500;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.4px;color:var(--mid)">Maniglia <span style="font-weight:400;text-transform:none">(opzionale)</span></div>
@@ -1949,6 +2048,7 @@ async function aggiungiRigaAlDocumento(){
   const tot = cfgTotale();
   const riga = {
     codice_serie:CFG.serie, codice_modello:CFG.modello, nome_modello:CFG.nome_modello,
+    nome_serie:CFG.nome_serie,
     codice_finitura:CFG.finitura, nome_finitura:CFG.nome_finitura,
     pannello_bugna:CFG.pannello_bugna,
     codice_colore_alu:CFG.colore_alu, nome_colore_alu:CFG.nome_colore_alu,
@@ -2048,7 +2148,7 @@ async function renderPreventivi(){
 async function nuovoPreventivo(){
   // Carica clienti e agenti
   const [{data:clienti},{data:agenti}] = await Promise.all([
-    sb.from('anagrafiche').select('id,ragione_sociale,listino,sconto_dedicato_A,sconto_dedicato_P,indirizzo,cap,citta,provincia').in('tipo',['cliente','entrambi']).neq('stato','inattivo').order('ragione_sociale'),
+    sb.from('anagrafiche').select('id,ragione_sociale,listino,sconto_dedicato_A,sconto_dedicato_P,indirizzo,cap,citta,provincia').order('ragione_sociale'),
     sb.from('agenti').select('*').eq('attivo',true).order('cognome'),
   ]);
   CFG_RIGHE=[];
@@ -2079,8 +2179,19 @@ function aggiornaTotaleNdoc(){
   const sc1=parseFloat(document.getElementById('ndoc-sconto1')?.value||0)/100;
   const sc2=parseFloat(document.getElementById('ndoc-sconto2')?.value||0)/100;
   const imponibile=CFG_RIGHE.reduce((s,r)=>s+(r.prezzo_totale_riga||0),0);
-  const netto=imponibile*(1-sc1)*(1-sc2);
+  const dopoSc1=imponibile*(1-sc1);
+  const netto=dopoSc1*(1-sc2);
+  const scTot=((1-(1-sc1)*(1-sc2))*100).toFixed(2);
   document.getElementById('ndoc-totale').textContent=fmtEuro(netto);
+  // mostra dettaglio sconti se applicati
+  const detEl=document.getElementById('ndoc-sconto-detail');
+  if(detEl){
+    if(sc1>0||sc2>0){
+      detEl.innerHTML=`<span style="font-size:11px;color:var(--mid)">Imponibile ${fmtEuro(imponibile)} → sconto effettivo ${scTot}%</span>`;
+    } else {
+      detEl.innerHTML='';
+    }
+  }
   // aggiorna lista righe
   const list=document.getElementById('ndoc-righe-list');
   if(CFG_RIGHE.length===0){
@@ -2090,15 +2201,15 @@ function aggiornaTotaleNdoc(){
   list.innerHTML=CFG_RIGHE.map((r,i)=>`
     <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid var(--border)">
       <div>
-        <div style="font-size:13px;font-weight:500">${r.nome_serie} ${r.nome_modello} — ${r.nome_finitura}</div>
-        <div style="font-size:11px;color:var(--mid)">${r.nome_apertura} ${r.senso_apertura} | ${r.larghezza_cm}×${r.altezza_cm} cm | sp.${r.spessore_muro_cm} cm</div>
+        <div style="font-size:13px;font-weight:500">${r.nome_serie||''} ${r.nome_modello||''} — ${r.nome_finitura||''}</div>
+        <div style="font-size:11px;color:var(--mid)">${[r.nome_apertura,r.senso_apertura,r.larghezza_cm&&r.larghezza_cm+'×'+r.altezza_cm+' cm','sp.'+(r.spessore_muro_cm||'?')+' cm'].filter(Boolean).join(' | ')}</div>
       </div>
       <div style="display:flex;align-items:center;gap:12px">
         <div style="text-align:right">
-          <div style="font-size:12px;color:var(--mid)">×${r.quantita}</div>
-          <div style="font-size:14px;font-weight:500;color:var(--red)">${fmtEuro(r.prezzo_totale_riga)}</div>
+          <div style="font-size:11px;color:var(--mid)">×${r.quantita} — list. ${fmtEuro(r.prezzo_totale_riga)}</div>
+          <div style="font-size:14px;font-weight:500;color:var(--red)">${fmtEuro(r.prezzo_totale_riga*(1-sc1)*(1-sc2))}</div>
         </div>
-        <button onclick="rimuoviRigaNdoc(${i})" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px;padding:0 4px">×</button>
+        <button onclick="rimuoviRigaNdoc(${i})" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:18px;padding:0 4px;line-height:1">×</button>
       </div>
     </div>`).join('');
 }
@@ -2323,7 +2434,7 @@ async function renderOrdiniDiretti(){
 
 async function nuovoOrdineDiretto(){
   const [{data:clienti},{data:agenti}] = await Promise.all([
-    sb.from('anagrafiche').select('id,ragione_sociale,listino,sconto_dedicato_A,sconto_dedicato_P,indirizzo,cap,citta,provincia').in('tipo',['cliente','entrambi']).neq('stato','inattivo').order('ragione_sociale'),
+    sb.from('anagrafiche').select('id,ragione_sociale,listino,sconto_dedicato_A,sconto_dedicato_P,indirizzo,cap,citta,provincia').order('ragione_sociale'),
     sb.from('agenti').select('*').eq('attivo',true).order('cognome'),
   ]);
   CFG_RIGHE=[];
@@ -2424,356 +2535,742 @@ async function approvaOrdine(id, tipo){
   renderOrdineDetail(id);
 }
 
-// ── ADMIN — CATALOGO PRODOTTI ─────────────────────────
+// ══════════════════════════════════════════════════════
+// PANNELLO SUPER-ADMIN — navigazione e struttura
+// ══════════════════════════════════════════════════════
+
+const ADMIN_SECTIONS = [
+  {id:'catalogo',    label:'Catalogo',          icon:'M4 4h8v8H4zM10 2h4v4h-4zM2 10h4v4H2z'},
+  {id:'prezzi',      label:'Prezzi e listini',  icon:'M8 1l2 5h5l-4 3 1.5 5L8 11l-4.5 3L5 9 1 6h5z'},
+  {id:'telaio',      label:'Telaio e componenti',icon:'M2 8h12M8 2v12'},
+  {id:'distinte',    label:'Distinte base',     icon:'M3 3h10v2H3zM3 7h10v2H3zM3 11h6v2H3z'},
+  {id:'agenti',      label:'Agenti',            icon:'M8 5a3 3 0 100 6 3 3 0 000-6zM2 14c0-3 2-5 6-5s6 2 6 5'},
+  {id:'impostazioni',label:'Impostazioni',      icon:'M8 5a3 3 0 100 6M8 1v2M8 13v2M1 8h2M13 8h2'},
+];
+
+const ADMIN_SUB = {
+  catalogo:   ['serie','modelli','finiture','aperture','ferramenta','maniglie'],
+  prezzi:     ['listini','sovrapprezzi','scontistiche'],
+  telaio:     ['spalle','regole','scorrevoli_int','scorrevoli_ext','colori'],
+  distinte:   ['db_modelli'],
+  agenti:     ['agenti_lista'],
+  impostazioni:['generale','utenti'],
+};
+
+let adminSection = 'catalogo';
+let adminSub = 'serie';
+
 async function renderAdmin(){
-  if(!isAdmin()){document.getElementById('main-content').innerHTML='<div class="card"><p style="color:var(--red)">Accesso non autorizzato.</p></div>';return;}
-  const tabs=[
-    {id:'modelli',label:'Modelli e prezzi'},
-    {id:'vetro',label:'Vetro e inserti'},
-    {id:'telaio',label:'Telaio e spalle'},
-    {id:'scorrevoli',label:'Scorrevoli'},
-    {id:'finiture',label:'Finiture e bugna'},
-    {id:'aperture',label:'Tipologie apertura'},
-  ];
-  const tabHtml = tabs.map((t,i)=>`<div class="form-tab ${i===0?'active':''}" onclick="adminTab('${t.id}',this)">${t.label}</div>`).join('');
+  if(!isAdmin()){
+    document.getElementById('main-content').innerHTML='<div class="card"><p style="color:var(--red)">Accesso non autorizzato.</p></div>';
+    return;
+  }
+  const navHtml = ADMIN_SECTIONS.map(s=>`
+    <div onclick="switchAdminSection('${s.id}')" style="display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;border-radius:var(--radius);font-size:13px;
+      background:${adminSection===s.id?'rgba(208,32,26,0.08)':'transparent'};
+      color:${adminSection===s.id?'var(--red)':'var(--mid)'};font-weight:${adminSection===s.id?'500':'400'}">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="${s.icon}"/></svg>
+      ${s.label}
+    </div>`).join('');
+
   document.getElementById('main-content').innerHTML=`
-  <div class="form-tabs" style="margin-bottom:16px;flex-wrap:wrap">${tabHtml}</div>
-  <div id="admin-content"><div class="loading"><div class="spinner"></div></div></div>`;
-  adminTab('modelli', document.querySelector('.form-tab'));
+  <div style="display:flex;gap:0;height:calc(100vh - 50px);overflow:hidden">
+    <div style="width:180px;min-width:180px;border-right:0.5px solid var(--border);padding:12px 8px;overflow-y:auto;background:var(--white)">
+      <div style="font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:var(--mid);padding:0 4px 8px">Configurazione</div>
+      ${navHtml}
+    </div>
+    <div style="flex:1;overflow-y:auto;padding:20px" id="admin-main"></div>
+  </div>`;
+  loadAdminSection();
 }
 
-function adminTab(tab, el){
-  document.querySelectorAll('.form-tab').forEach(t=>t.classList.remove('active'));
-  if(el) el.classList.add('active');
-  const c = document.getElementById('admin-content');
-  c.innerHTML='<div class="loading"><div class="spinner"></div>Caricamento...</div>';
-  if(tab==='modelli') adminModelli();
-  else if(tab==='vetro') adminVetro();
-  else if(tab==='telaio') adminTelaio();
-  else if(tab==='scorrevoli') adminScorrevoli();
-  else if(tab==='finiture') adminFiniture();
-  else if(tab==='aperture') adminAperture();
+function switchAdminSection(sec){
+  adminSection=sec;
+  adminSub=ADMIN_SUB[sec]?.[0]||'';
+  renderAdmin();
 }
 
+function loadAdminSection(){
+  if(adminSection==='catalogo') adminCatalogo();
+  else if(adminSection==='prezzi') adminPrezzi();
+  else if(adminSection==='telaio') adminTelaioPanel();
+  else if(adminSection==='distinte') adminDistinte();
+  else if(adminSection==='agenti') adminAgenti();
+  else if(adminSection==='impostazioni') adminImpostazioni();
+}
+
+// ── HELPER UI ──────────────────────────────────────────
+function adminSubTabs(tabs, active, onclick){
+  return `<div style="display:flex;gap:0;margin-bottom:16px;border-bottom:0.5px solid var(--border)">
+    ${tabs.map(t=>`<div onclick="${onclick}('${t.id}')" style="padding:8px 16px;cursor:pointer;font-size:13px;border-bottom:${active===t.id?'2px solid var(--red)':'2px solid transparent'};color:${active===t.id?'var(--red)':'var(--mid)'};font-weight:${active===t.id?'500':'400'};margin-bottom:-0.5px">${t.label}</div>`).join('')}
+  </div>`;
+}
+
+function adminCard(title, content, actions=''){
+  return `<div class="card" style="margin-bottom:14px">
+    <div class="card-header">${title?`<span class="card-title">${title}</span>`:''}${actions}</div>
+    ${content}
+  </div>`;
+}
+
+function inlineInput(val, onchange, width='80px', type='number', placeholder=''){
+  return `<input type="${type}" value="${val??''}" placeholder="${placeholder}" step="0.01"
+    style="width:${width};padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit"
+    onchange="${onchange}">`;
+}
+
+function adminToggle(attivo, onclick){
+  return `<span class="badge ${attivo?'bg':'br'}" style="cursor:pointer" onclick="${onclick}">${attivo?'Attivo':'Inattivo'}</span>`;
+}
+
+// ══════════════════════════════════════════════════════
+// CATALOGO
+// ══════════════════════════════════════════════════════
+function adminCatalogo(){
+  const tabs=[
+    {id:'serie',label:'Serie'},{id:'modelli',label:'Modelli'},
+    {id:'finiture',label:'Finiture'},{id:'aperture',label:'Aperture e sensi'},
+    {id:'ferramenta',label:'Ferramenta'},{id:'maniglie',label:'Maniglie'},
+  ];
+  const el=document.getElementById('admin-main');
+  el.innerHTML=adminSubTabs(tabs,adminSub,'switchAdminCat')+'<div id="admin-sub"></div>';
+  switchAdminCat(adminSub||'serie');
+}
+
+function switchAdminCat(sub){
+  adminSub=sub;
+  document.querySelectorAll('#admin-main [onclick^="switchAdminCat"]').forEach(t=>{
+    const isActive=t.getAttribute('onclick').includes(`'${sub}'`);
+    t.style.borderBottom=isActive?'2px solid var(--red)':'2px solid transparent';
+    t.style.color=isActive?'var(--red)':'var(--mid)';
+    t.style.fontWeight=isActive?'500':'400';
+  });
+  if(sub==='serie') adminSerie();
+  else if(sub==='modelli') adminModelli();
+  else if(sub==='finiture') adminFiniture();
+  else if(sub==='aperture') adminAperture();
+  else if(sub==='ferramenta') adminFerramenta();
+  else if(sub==='maniglie') adminManiglie();
+}
+
+// SERIE
+async function adminSerie(){
+  const {data} = await sb.from('serie').select('*').order('nome');
+  const rows=(data||[]).map(s=>`<tr>
+    <td>${inlineInput(s.codice,`adminSalva('serie','${s.id}','codice',this.value)`,'70px','text')}</td>
+    <td>${inlineInput(s.nome,`adminSalva('serie','${s.id}','nome',this.value)`,'120px','text')}</td>
+    <td>${inlineInput(s.descrizione||'',`adminSalva('serie','${s.id}','descrizione',this.value)`,'200px','text','Descrizione')}</td>
+    <td>
+      ${s.immagine_url?`<img src="${s.immagine_url}" style="width:40px;height:40px;object-fit:cover;border-radius:4px;margin-right:6px">`:'<span style="font-size:11px;color:var(--mid)">Nessuna</span>'}
+      <label style="cursor:pointer"><input type="file" accept="image/*" style="display:none" onchange="uploadImmagine('serie','${s.id}',this)"><span class="btn btn-sm" style="font-size:11px">Carica</span></label>
+    </td>
+    <td>${adminToggle(s.attiva,`toggleCampo('serie','${s.id}','attiva',${s.attiva})`)}</td>
+  </tr>`).join('');
+  document.getElementById('admin-sub').innerHTML=adminCard('Serie',`
+    <table><thead><tr><th>Codice</th><th>Nome</th><th>Descrizione</th><th>Immagine</th><th>Stato</th></tr></thead>
+    <tbody>${rows}</tbody></table>`,
+    `<button class="btn btn-red btn-sm" onclick="nuovaRiga('serie',{codice:'NUOVA',nome:'Nuova serie',attiva:true},'adminSerie')">+ Aggiungi serie</button>`);
+}
+
+// MODELLI
 async function adminModelli(){
-  const {data:modelli} = await sb.from('modelli').select('*,prezzi_modello(listino,prezzo_base,prezzo_vetro,vetro_incluso,ha_extra_incisioni,prezzo_extra_incisioni)').eq('codice_serie','TAM').order('codice');
-  const rows = (modelli||[]).map(m=>{
-    const pa = m.prezzi_modello?.find(p=>p.listino==='A');
-    const pp = m.prezzi_modello?.find(p=>p.listino==='P');
-    const vetroIncluso = pa?.vetro_incluso;
+  const {data:serie} = await sb.from('serie').select('codice,nome').order('nome');
+  const {data:modelli} = await sb.from('modelli').select('*,prezzi_modello(listino,prezzo_base,prezzo_vetro)').order('codice_serie').order('nome');
+  const serieOpts=(serie||[]).map(s=>`<option value="${s.codice}">${s.codice} — ${s.nome}</option>`).join('');
+
+  const rows=(modelli||[]).map(m=>{
+    const pa=m.prezzi_modello?.find(p=>p.listino==='A');
+    const pp=m.prezzi_modello?.find(p=>p.listino==='P');
+    const flags=['ha_vetro','ha_pannello_o_bugna','ha_inserto_alluminio','ha_inserto_pietra','ha_pantografatura'];
+    const flagHtml=flags.map(f=>`<span title="${f}" style="display:inline-block;width:14px;height:14px;border-radius:2px;margin-right:2px;cursor:pointer;background:${m[f]?'var(--green-bg)':'var(--border)'};border:0.5px solid ${m[f]?'var(--green-tx)':'var(--mid)'};color:${m[f]?'var(--green-tx)':'var(--mid)'};font-size:8px;text-align:center;line-height:14px" onclick="toggleCampo('modelli','${m.id}','${f}',${m[f]})">${f[3].toUpperCase()}</span>`).join('');
     return `<tr>
-      <td><strong>${m.codice}</strong></td>
-      <td>${m.nome}</td>
-      <td><input type="number" value="${pa?.prezzo_base||''}" step="0.01" style="width:80px;padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px" onchange="salvaPrezzo('${m.codice}','A','prezzo_base',this.value)"></td>
-      <td><input type="number" value="${pp?.prezzo_base||''}" step="0.01" style="width:80px;padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px" onchange="salvaPrezzo('${m.codice}','P','prezzo_base',this.value)"></td>
-      <td>${m.ha_vetro ? `<input type="number" value="${vetroIncluso?'INCL':pa?.prezzo_vetro||''}" placeholder="${vetroIncluso?'incluso':''}" step="0.01" style="width:80px;padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px" onchange="salvaPrezzo('${m.codice}','A','prezzo_vetro',this.value)">` : '—'}</td>
-      <td>${m.ha_vetro ? `<input type="number" value="${vetroIncluso?'INCL':pp?.prezzo_vetro||''}" placeholder="${vetroIncluso?'incluso':''}" step="0.01" style="width:80px;padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px" onchange="salvaPrezzo('${m.codice}','P','prezzo_vetro',this.value)">` : '—'}</td>
-      <td>${pa?.ha_extra_incisioni ? `<input type="number" value="${pa?.prezzo_extra_incisioni||''}" step="0.01" style="width:80px;padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px" onchange="salvaPrezzo('${m.codice}','A','prezzo_extra_incisioni',this.value)">` : '—'}</td>
-      <td><span class="badge ${m.attivo?'bg':'br'}" style="cursor:pointer" onclick="toggleModello('${m.id}',${m.attivo})">${m.attivo?'Attivo':'Inattivo'}</span></td>
+      <td>${inlineInput(m.codice,`adminSalva('modelli','${m.id}','codice',this.value)`,'70px','text')}</td>
+      <td>${inlineInput(m.nome,`adminSalva('modelli','${m.id}','nome',this.value)`,'140px','text')}</td>
+      <td><select onchange="adminSalva('modelli','${m.id}','codice_serie',this.value)" style="padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px">${(serie||[]).map(s=>`<option value="${s.codice}" ${s.codice===m.codice_serie?'selected':''}>${s.codice}</option>`).join('')}</select></td>
+      <td style="font-size:11px">${flagHtml}</td>
+      <td>${inlineInput(pa?.prezzo_base||'',`salvaPrezzo('${m.codice}','A','prezzo_base',this.value)`,'70px')}</td>
+      <td>${inlineInput(pp?.prezzo_base||'',`salvaPrezzo('${m.codice}','P','prezzo_base',this.value)`,'70px')}</td>
+      <td>${inlineInput(pa?.prezzo_vetro||'',`salvaPrezzo('${m.codice}','A','prezzo_vetro',this.value)`,'70px')}</td>
+      <td>
+        ${m.immagine_url?`<img src="${m.immagine_url}" style="width:36px;height:36px;object-fit:cover;border-radius:4px;margin-right:4px">`:''}
+        <label style="cursor:pointer"><input type="file" accept="image/*" style="display:none" onchange="uploadImmagine('modelli','${m.id}',this)"><span style="font-size:11px;cursor:pointer;color:var(--red)">📷</span></label>
+      </td>
+      <td>${adminToggle(m.attivo,`toggleCampo('modelli','${m.id}','attivo',${m.attivo})`)}</td>
     </tr>`;
   }).join('');
-  document.getElementById('admin-content').innerHTML=`
+  document.getElementById('admin-sub').innerHTML=adminCard('Modelli',`
+    <div style="font-size:11px;color:var(--mid);margin-bottom:8px">Flag: <b>V</b>=vetro <b>P</b>=pannello/bugna <b>A</b>=inserto alluminio <b>I</b>=inserto pietra <b>T</b>=pantografatura — clicca per attivare/disattivare</div>
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>Codice</th><th>Nome</th><th>Serie</th><th>Flag</th><th>Prezzo A</th><th>Prezzo P</th><th>Vetro A</th><th>Img</th><th>Stato</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`,
+    `<button class="btn btn-red btn-sm" onclick="nuovoModello()">+ Aggiungi modello</button>`);
+}
+
+async function nuovoModello(){
+  const {data:serie} = await sb.from('serie').select('codice,nome').order('nome');
+  const opts=(serie||[]).map(s=>`<option value="${s.codice}">${s.codice} — ${s.nome}</option>`).join('');
+  const cod=prompt('Codice modello (es. TAM-048):'); if(!cod) return;
+  const nome=prompt('Nome modello:'); if(!nome) return;
+  const serieEl=document.createElement('select');
+  serieEl.innerHTML=opts;
+  const serie_cod = prompt('Codice serie ('+( serie||[]).map(s=>s.codice).join('/')+'):');
+  if(!serie_cod) return;
+  const {error}=await sb.from('modelli').insert([{codice:cod.toUpperCase(),nome,codice_serie:serie_cod.toUpperCase(),attivo:true}]);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Modello '+cod+' aggiunto','ok'); adminModelli();
+}
+
+// FINITURE
+async function adminFiniture(){
+  const {data:serie} = await sb.from('serie').select('codice').order('codice');
+  const serieFilter = document.getElementById('admin-serie-filter')?.value || 'TAM';
+
+  const {data} = await sb.from('finiture').select('*').eq('codice_serie',serieFilter).order('nome_finitura');
+  const serieOpts=(serie||[]).map(s=>`<option value="${s.codice}" ${s.codice===serieFilter?'selected':''}>${s.codice}</option>`).join('');
+
+  const rows=(data||[]).map(f=>`<tr>
+    <td>${inlineInput(f.codice_finitura,`adminSalva('finiture','${f.id}','codice_finitura',this.value)`,'60px','text')}</td>
+    <td>${inlineInput(f.nome_finitura,`adminSalva('finiture','${f.id}','nome_finitura',this.value)`,'150px','text')}</td>
+    <td style="font-size:11px;color:var(--mid)">${f.codice_modello||'Tutte'}</td>
+    <td>${inlineInput(f.sovrapprezzo_A??0,`adminSalva('finiture','${f.id}','sovrapprezzo_A',this.value)`,'65px')}</td>
+    <td>${inlineInput(f.sovrapprezzo_P??0,`adminSalva('finiture','${f.id}','sovrapprezzo_P',this.value)`,'65px')}</td>
+    <td><span class="badge ${f.consente_bugna?'bg':'br'}" style="cursor:pointer" onclick="toggleCampo('finiture','${f.id}','consente_bugna',${f.consente_bugna})">${f.consente_bugna?'Sì':'No'}</span></td>
+    <td>${inlineInput(f.sovrapprezzo_bugna_A??0,`adminSalva('finiture','${f.id}','sovrapprezzo_bugna_A',this.value)`,'65px')}</td>
+    <td>${inlineInput(f.sovrapprezzo_bugna_P??0,`adminSalva('finiture','${f.id}','sovrapprezzo_bugna_P',this.value)`,'65px')}</td>
+    <td>${adminToggle(f.attiva,`toggleCampo('finiture','${f.id}','attiva',${f.attiva})`)}</td>
+  </tr>`).join('');
+
+  document.getElementById('admin-sub').innerHTML=`
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+    <label style="font-size:12px;color:var(--mid)">Serie:</label>
+    <select id="admin-serie-filter" onchange="adminFiniture()" style="padding:5px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit">${serieOpts}</select>
+    <button class="btn btn-red btn-sm" onclick="nuovaFinitura('${serieFilter}')">+ Aggiungi finitura</button>
+  </div>
+  ${adminCard('Finiture',`<div style="overflow-x:auto"><table>
+    <thead><tr><th>Codice</th><th>Nome</th><th>Modello</th><th>Sovr.A</th><th>Sovr.P</th><th>Bugna</th><th>Bugna A</th><th>Bugna P</th><th>Stato</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div>`)}`;
+}
+
+async function nuovaFinitura(serieFilter){
+  const cod=prompt('Codice finitura:'); if(!cod) return;
+  const nome=prompt('Nome finitura:'); if(!nome) return;
+  const {error}=await sb.from('finiture').insert([{codice_serie:serieFilter,codice_finitura:cod.toUpperCase(),nome_finitura:nome,attiva:true}]);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Finitura aggiunta','ok'); adminFiniture();
+}
+
+// APERTURE E SENSI
+async function adminAperture(){
+  const [{data:ap},{data:sensi}] = await Promise.all([
+    sb.from('tipologie_apertura').select('*').order('famiglia').order('codice'),
+    sb.from('sensi_apertura').select('*').order('codice_apertura').order('ordine'),
+  ]);
+
+  const rows=(ap||[]).map(a=>{
+    const sensiAp=(sensi||[]).filter(s=>s.codice_apertura===a.codice);
+    const sensiHtml=sensiAp.map(s=>`<span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;background:var(--blue-bg);color:var(--blue-tx);margin:1px">${s.codice_senso}</span>`).join('');
+    const sp = a.logica_prezzo==='fisso'?inlineInput(a.sovrapprezzo_A??'',`adminSalva('tipologie_apertura','${a.id}','sovrapprezzo_A',this.value)`,'65px'):
+              a.logica_prezzo==='percentuale'?inlineInput(a.maggiorazione_pct??'',`adminSalva('tipologie_apertura','${a.id}','maggiorazione_pct',this.value)`,'55px')+'%':'variabile';
+    const spP = a.logica_prezzo==='fisso'?inlineInput(a.sovrapprezzo_P??'',`adminSalva('tipologie_apertura','${a.id}','sovrapprezzo_P',this.value)`,'65px'):'—';
+    return `<tr>
+      <td>${inlineInput(a.codice,`adminSalva('tipologie_apertura','${a.id}','codice',this.value)`,'80px','text')}</td>
+      <td>${inlineInput(a.nome,`adminSalva('tipologie_apertura','${a.id}','nome',this.value)`,'200px','text')}</td>
+      <td><select onchange="adminSalva('tipologie_apertura','${a.id}','famiglia',this.value)" style="padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:11px">
+        ${['BAT','CS','SI','SE','FM','COM','ROTO','LIBRO','SALOON','ROTOTRASLANTI','SPECIALI','PASSATE'].map(f=>`<option value="${f}" ${f===a.famiglia?'selected':''}>${f}</option>`).join('')}
+      </select></td>
+      <td><select onchange="adminSalva('tipologie_apertura','${a.id}','logica_prezzo',this.value)" style="padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:11px">
+        ${['fisso','spessore','percentuale','doppio'].map(l=>`<option value="${l}" ${l===a.logica_prezzo?'selected':''}>${l}</option>`).join('')}
+      </select></td>
+      <td>${sp}</td><td>${spP}</td>
+      <td style="max-width:120px">${sensiHtml||'<span style="font-size:11px;color:var(--mid)">Nessuno</span>'}</td>
+      <td>${adminToggle(a.attiva,`toggleCampo('tipologie_apertura','${a.id}','attiva',${a.attiva})`)}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('admin-sub').innerHTML=adminCard('Tipologie apertura e sensi disponibili',`
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>Codice</th><th>Nome completo</th><th>Famiglia</th><th>Logica prezzo</th><th>Sovr.A / %</th><th>Sovr.P</th><th>Sensi</th><th>Stato</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`,
+    `<button class="btn btn-red btn-sm" onclick="nuovaApertura()">+ Aggiungi tipologia</button>`);
+}
+
+async function nuovaApertura(){
+  const cod=prompt('Codice apertura (es. BAT-NEW):'); if(!cod) return;
+  const nome=prompt('Nome completo:'); if(!nome) return;
+  const famiglia=prompt('Famiglia (BAT/SI/SE/FM/COM/ROTO/LIBRO/SALOON):'); if(!famiglia) return;
+  const {error}=await sb.from('tipologie_apertura').insert([{codice:cod,nome,famiglia,logica_prezzo:'fisso',attiva:true}]);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Apertura aggiunta','ok'); adminAperture();
+}
+
+// FERRAMENTA
+async function adminFerramenta(){
+  const {data} = await sb.from('ferramenta').select('*').order('nome');
+  const rows=(data||[]).map(f=>`<tr>
+    <td>${inlineInput(f.codice,`adminSalva('ferramenta','${f.id}','codice',this.value)`,'70px','text')}</td>
+    <td>${inlineInput(f.nome,`adminSalva('ferramenta','${f.id}','nome',this.value)`,'160px','text')}</td>
+    <td>
+      ${f.colore_hex?`<div style="width:24px;height:24px;border-radius:4px;background:#${f.colore_hex};border:0.5px solid var(--border);display:inline-block;vertical-align:middle;margin-right:6px"></div>`:''}
+      ${inlineInput(f.colore_hex||'',`adminSalva('ferramenta','${f.id}','colore_hex',this.value)`,'80px','text','es. 1A1A1A')}
+    </td>
+    <td>${inlineInput(f.sovrapprezzo_A??0,`adminSalva('ferramenta','${f.id}','sovrapprezzo_A',this.value)`,'65px')}</td>
+    <td>${inlineInput(f.sovrapprezzo_P??0,`adminSalva('ferramenta','${f.id}','sovrapprezzo_P',this.value)`,'65px')}</td>
+    <td>${adminToggle(f.attivo,`toggleCampo('ferramenta','${f.id}','attivo',${f.attivo})`)}</td>
+  </tr>`).join('');
+  document.getElementById('admin-sub').innerHTML=adminCard('Ferramenta',`
+    <table><thead><tr><th>Codice</th><th>Nome</th><th>Colore hex</th><th>Sovr.A (€)</th><th>Sovr.P (€)</th><th>Stato</th></tr></thead>
+    <tbody>${rows}</tbody></table>`,
+    `<button class="btn btn-red btn-sm" onclick="nuovaRiga('ferramenta',{codice:'NEW',nome:'Nuovo colore',attivo:true},'adminFerramenta')">+ Aggiungi colore</button>`);
+}
+
+// MANIGLIE
+async function adminManiglie(){
+  const {data} = await sb.from('maniglie').select('*').order('nome');
+  const rows=(data||[]).map(m=>`<tr>
+    <td>${inlineInput(m.codice,`adminSalva('maniglie','${m.id}','codice',this.value)`,'70px','text')}</td>
+    <td>${inlineInput(m.nome,`adminSalva('maniglie','${m.id}','nome',this.value)`,'160px','text')}</td>
+    <td>${inlineInput(m.serie_compatibili||'',`adminSalva('maniglie','${m.id}','serie_compatibili',this.value)`,'100px','text','Tutte')}</td>
+    <td>${inlineInput(m.prezzo_A??0,`adminSalva('maniglie','${m.id}','prezzo_A',this.value)`,'65px')}</td>
+    <td>${inlineInput(m.prezzo_P??0,`adminSalva('maniglie','${m.id}','prezzo_P',this.value)`,'65px')}</td>
+    <td>
+      ${m.immagine_url?`<img src="${m.immagine_url}" style="width:32px;height:32px;object-fit:cover;border-radius:4px;margin-right:4px">`:''}
+      <label style="cursor:pointer"><input type="file" accept="image/*" style="display:none" onchange="uploadImmagine('maniglie','${m.id}',this)"><span style="font-size:11px;cursor:pointer;color:var(--red)">📷</span></label>
+    </td>
+    <td>${adminToggle(m.attivo,`toggleCampo('maniglie','${m.id}','attivo',${m.attivo})`)}</td>
+  </tr>`).join('');
+  document.getElementById('admin-sub').innerHTML=adminCard('Maniglie',`
+    <table><thead><tr><th>Codice</th><th>Nome</th><th>Serie compatibili</th><th>Prezzo A</th><th>Prezzo P</th><th>Immagine</th><th>Stato</th></tr></thead>
+    <tbody>${rows}</tbody></table>`,
+    `<button class="btn btn-red btn-sm" onclick="nuovaRiga('maniglie',{codice:'MAN-NEW',nome:'Nuova maniglia',attivo:true,prezzo_A:0,prezzo_P:0},'adminManiglie')">+ Aggiungi maniglia</button>`);
+}
+
+// ══════════════════════════════════════════════════════
+// PREZZI E LISTINI
+// ══════════════════════════════════════════════════════
+function adminPrezzi(){
+  const tabs=[{id:'listini',label:'Listini A e P'},{id:'colori_extra',label:'Vetro e inserti'},{id:'scontistiche',label:'Scontistiche'}];
+  document.getElementById('admin-main').innerHTML=adminSubTabs(tabs,'listini','switchAdminPrezzi')+'<div id="admin-sub"></div>';
+  switchAdminPrezzi('listini');
+}
+function switchAdminPrezzi(sub){
+  adminSub=sub;
+  document.querySelectorAll('#admin-main [onclick^="switchAdminPrezzi"]').forEach(t=>{
+    const isActive=t.getAttribute('onclick').includes(`'${sub}'`);
+    t.style.borderBottom=isActive?'2px solid var(--red)':'2px solid transparent';
+    t.style.color=isActive?'var(--red)':'var(--mid)'; t.style.fontWeight=isActive?'500':'400';
+  });
+  if(sub==='listini') adminListini();
+  else if(sub==='colori_extra') adminColoriExtra();
+  else if(sub==='scontistiche') adminScontistiche();
+}
+
+async function adminListini(){
+  const {data:modelli} = await sb.from('modelli').select('*,prezzi_modello(listino,prezzo_base,prezzo_vetro,vetro_incluso,ha_extra_incisioni,prezzo_extra_incisioni)').order('codice_serie').order('nome');
+  const rows=(modelli||[]).map(m=>{
+    const pa=m.prezzi_modello?.find(p=>p.listino==='A');
+    const pp=m.prezzi_modello?.find(p=>p.listino==='P');
+    return `<tr>
+      <td><span class="tag" style="font-size:10px">${m.codice_serie}</span></td>
+      <td><strong style="font-size:12px">${m.codice}</strong></td>
+      <td style="font-size:12px">${m.nome}</td>
+      <td>${inlineInput(pa?.prezzo_base||'',`salvaPrezzo('${m.codice}','A','prezzo_base',this.value)`,'75px')}</td>
+      <td>${inlineInput(pp?.prezzo_base||'',`salvaPrezzo('${m.codice}','P','prezzo_base',this.value)`,'75px')}</td>
+      <td>${m.ha_vetro&&!pa?.vetro_incluso?inlineInput(pa?.prezzo_vetro||'',`salvaPrezzo('${m.codice}','A','prezzo_vetro',this.value)`,'70px'):m.ha_vetro?'<span class="badge bg" style="font-size:10px">Incl.</span>':'—'}</td>
+      <td>${m.ha_vetro&&!pp?.vetro_incluso?inlineInput(pp?.prezzo_vetro||'',`salvaPrezzo('${m.codice}','P','prezzo_vetro',this.value)`,'70px'):'—'}</td>
+      <td>${pa?.ha_extra_incisioni?inlineInput(pa?.prezzo_extra_incisioni||'',`salvaPrezzo('${m.codice}','A','prezzo_extra_incisioni',this.value)`,'70px'):'—'}</td>
+      <td>${adminToggle(m.attivo,`toggleCampo('modelli','${m.id}','attivo',${m.attivo})`)}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('admin-sub').innerHTML=adminCard('Listini A e P — prezzi base e vetro',`
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>Serie</th><th>Codice</th><th>Modello</th><th>Base A (€)</th><th>Base P (€)</th><th>Vetro A</th><th>Vetro P</th><th>Incis. A</th><th>Stato</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`);
+}
+
+async function adminColoriExtra(){
+  const [{data:tv},{data:alu},{data:pietra}] = await Promise.all([
+    sb.from('tipi_vetro').select('*').order('nome'),
+    sb.from('colori_inserto_alluminio').select('*').order('nome'),
+    sb.from('colori_pietra').select('*').order('nome'),
+  ]);
+  const rowsV=(tv||[]).map(v=>`<tr>
+    <td>${inlineInput(v.codice,`adminSalva('tipi_vetro','${v.id}','codice',this.value)`,'70px','text')}</td>
+    <td>${inlineInput(v.nome,`adminSalva('tipi_vetro','${v.id}','nome',this.value)`,'150px','text')}</td>
+    <td>${inlineInput(v.sovrapprezzo_A??0,`adminSalva('tipi_vetro','${v.id}','sovrapprezzo_A',this.value)`,'65px')}</td>
+    <td>${inlineInput(v.sovrapprezzo_P??0,`adminSalva('tipi_vetro','${v.id}','sovrapprezzo_P',this.value)`,'65px')}</td>
+    <td>${adminToggle(v.attivo,`toggleCampo('tipi_vetro','${v.id}','attivo',${v.attivo})`)}</td>
+  </tr>`).join('');
+  const rowsA=(alu||[]).map(a=>`<tr>
+    <td>${inlineInput(a.codice,`adminSalva('colori_inserto_alluminio','${a.id}','codice',this.value)`,'70px','text')}</td>
+    <td>${inlineInput(a.nome,`adminSalva('colori_inserto_alluminio','${a.id}','nome',this.value)`,'150px','text')}</td>
+    <td><span class="badge ${a.incluso?'bg':'ba'}" style="cursor:pointer;font-size:10px" onclick="toggleCampo('colori_inserto_alluminio','${a.id}','incluso',${a.incluso})">${a.incluso?'Incluso':'A pagamento'}</span></td>
+    <td>${inlineInput(a.sovrapprezzo_A??'',`adminSalva('colori_inserto_alluminio','${a.id}','sovrapprezzo_A',this.value)`,'65px','number','0')}</td>
+    <td>${inlineInput(a.sovrapprezzo_P??'',`adminSalva('colori_inserto_alluminio','${a.id}','sovrapprezzo_P',this.value)`,'65px','number','0')}</td>
+  </tr>`).join('');
+  const rowsP=(pietra||[]).map(p=>`<tr>
+    <td>${inlineInput(p.codice,`adminSalva('colori_pietra','${p.id}','codice',this.value)`,'70px','text')}</td>
+    <td>${inlineInput(p.nome,`adminSalva('colori_pietra','${p.id}','nome',this.value)`,'150px','text')}</td>
+    <td>${inlineInput(p.sovrapprezzo_A??0,`adminSalva('colori_pietra','${p.id}','sovrapprezzo_A',this.value)`,'65px')}</td>
+    <td>${inlineInput(p.sovrapprezzo_P??0,`adminSalva('colori_pietra','${p.id}','sovrapprezzo_P',this.value)`,'65px')}</td>
+  </tr>`).join('');
+  document.getElementById('admin-sub').innerHTML=`
+  <div class="card" style="margin-bottom:12px">
+    <div class="card-header"><span class="card-title">Tipi vetro</span><button class="btn btn-red btn-sm" onclick="nuovaRiga('tipi_vetro',{codice:'VET',nome:'Nuovo vetro',sovrapprezzo_A:0,sovrapprezzo_P:0,attivo:true},'adminColoriExtra')">+</button></div>
+    <table><thead><tr><th>Codice</th><th>Nome</th><th>Sovr.A</th><th>Sovr.P</th><th>Stato</th></tr></thead><tbody>${rowsV||'<tr><td colspan="5" style="text-align:center;color:var(--mid);padding:12px">Nessuno</td></tr>'}</tbody></table>
+  </div>
+  <div class="card" style="margin-bottom:12px">
+    <div class="card-header"><span class="card-title">Colori inserto alluminio</span><button class="btn btn-red btn-sm" onclick="nuovaRiga('colori_inserto_alluminio',{codice:'ALU',nome:'Nuovo colore',incluso:false},'adminColoriExtra')">+</button></div>
+    <table><thead><tr><th>Codice</th><th>Nome</th><th>Incluso</th><th>Sovr.A</th><th>Sovr.P</th></tr></thead><tbody>${rowsA||'<tr><td colspan="5" style="text-align:center;color:var(--mid);padding:12px">Nessuno</td></tr>'}</tbody></table>
+  </div>
   <div class="card">
-    <div class="card-header"><span class="card-title">Modelli — prezzi listino A e P</span><span style="font-size:11px;color:var(--mid)">Modifica i prezzi direttamente nelle celle — si salvano automaticamente</span></div>
-    <div style="overflow-x:auto">
-    <table>
-      <thead><tr><th>Codice</th><th>Nome</th><th>Prezzo A</th><th>Prezzo P</th><th>Vetro A</th><th>Vetro P</th><th>Extra incis.</th><th>Stato</th></tr></thead>
-      <tbody>${rows||'<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--mid)">Nessun modello trovato</td></tr>'}</tbody>
-    </table>
-    </div>
+    <div class="card-header"><span class="card-title">Colori pietra</span><button class="btn btn-red btn-sm" onclick="nuovaRiga('colori_pietra',{codice:'PIE',nome:'Nuovo colore',sovrapprezzo_A:0,sovrapprezzo_P:0},'adminColoriExtra')">+</button></div>
+    <table><thead><tr><th>Codice</th><th>Nome</th><th>Sovr.A</th><th>Sovr.P</th></tr></thead><tbody>${rowsP||'<tr><td colspan="4" style="text-align:center;color:var(--mid);padding:12px">Nessun colore pietra — aggiungilo qui</td></tr>'}</tbody></table>
   </div>`;
+}
+
+async function adminScontistiche(){
+  const {data} = await sb.from('scontistiche').select('*').order('canale');
+  const canali=['rivenditore','architetto','impresa','privato'];
+  const rows=(data||[]).map(s=>`<tr>
+    <td><select onchange="adminSalva('scontistiche','${s.id}','canale',this.value)" style="padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px">
+      ${canali.map(c=>`<option value="${c}" ${c===s.canale?'selected':''}>${c}</option>`).join('')}
+    </select></td>
+    <td><span class="tag">${s.listino||'—'}</span></td>
+    <td>${inlineInput(s.sconto_base_pct??'',`adminSalva('scontistiche','${s.id}','sconto_base_pct',this.value)`,'60px')} %</td>
+    <td>${inlineInput(s.sconto_max_pct??'',`adminSalva('scontistiche','${s.id}','sconto_max_pct',this.value)`,'60px')} %</td>
+    <td style="font-size:12px;color:var(--mid);max-width:200px">${s.note||''}</td>
+    <td>${adminToggle(s.attivo!==false,`toggleCampo('scontistiche','${s.id}','attivo',${s.attivo!==false})`)}</td>
+  </tr>`).join('');
+  document.getElementById('admin-sub').innerHTML=adminCard('Scontistiche per canale',`
+    <table><thead><tr><th>Canale</th><th>Listino</th><th>Sconto base %</th><th>Sconto max %</th><th>Note</th><th>Stato</th></tr></thead>
+    <tbody>${rows||'<tr><td colspan="6" style="text-align:center;color:var(--mid);padding:12px">Nessuna scontistica</td></tr>'}</tbody></table>`);
+}
+
+// ══════════════════════════════════════════════════════
+// TELAIO E COMPONENTI
+// ══════════════════════════════════════════════════════
+function adminTelaioPanel(){
+  const tabs=[{id:'spalle',label:'Spalle telaio'},{id:'regole',label:'Regole spessore'},
+    {id:'scorrevoli_ext',label:'Scorrevoli esterni'},{id:'scorrevoli_int',label:'Scorrevoli interni'}];
+  document.getElementById('admin-main').innerHTML=adminSubTabs(tabs,'spalle','switchAdminTelaio')+'<div id="admin-sub"></div>';
+  switchAdminTelaio('spalle');
+}
+function switchAdminTelaio(sub){
+  adminSub=sub;
+  document.querySelectorAll('#admin-main [onclick^="switchAdminTelaio"]').forEach(t=>{
+    const isActive=t.getAttribute('onclick').includes(`'${sub}'`);
+    t.style.borderBottom=isActive?'2px solid var(--red)':'2px solid transparent';
+    t.style.color=isActive?'var(--red)':'var(--mid)'; t.style.fontWeight=isActive?'500':'400';
+  });
+  if(sub==='spalle') adminSpalle();
+  else if(sub==='regole') adminRegole();
+  else if(sub==='scorrevoli_ext') adminScorExt();
+  else if(sub==='scorrevoli_int') adminScorInt();
+}
+
+async function adminSpalle(){
+  const {data} = await sb.from('telai_spalle').select('*').order('famiglia_apertura').order('spalla_cm');
+  const rows=(data||[]).map(s=>`<tr>
+    <td>${inlineInput(s.codice,`adminSalva('telai_spalle','${s.id}','codice',this.value)`,'90px','text')}</td>
+    <td>${inlineInput(s.spalla_cm,`adminSalva('telai_spalle','${s.id}','spalla_cm',this.value)`,'60px')} cm</td>
+    <td><span class="tag" style="font-size:10px">${s.famiglia_apertura}</span></td>
+    <td style="font-size:11px;color:var(--mid);max-width:160px">${s.descrizione||''}</td>
+    <td>${inlineInput(s.prezzo_A??'',`adminSalva('telai_spalle','${s.id}','prezzo_A',this.value)`,'70px','number','€')}</td>
+    <td>${inlineInput(s.prezzo_P??'',`adminSalva('telai_spalle','${s.id}','prezzo_P',this.value)`,'70px','number','€')}</td>
+  </tr>`).join('');
+  document.getElementById('admin-sub').innerHTML=adminCard('Spalle telaio a magazzino',`
+    <table><thead><tr><th>Codice</th><th>Spalla</th><th>Famiglia</th><th>Descrizione</th><th>Prezzo A (€)</th><th>Prezzo P (€)</th></tr></thead>
+    <tbody>${rows}</tbody></table>`);
+}
+
+async function adminRegole(){
+  const {data} = await sb.from('regole_telaio').select('*').order('famiglia_apertura').order('spessore_da_cm');
+  const rows=(data||[]).map(r=>`<tr>
+    <td><span class="tag" style="font-size:10px">${r.famiglia_apertura}</span></td>
+    <td style="font-size:12px">${r.spessore_da_cm} – ${r.spessore_a_cm} cm</td>
+    <td><strong style="font-size:12px">${r.codice_spalla}</strong></td>
+    <td style="font-size:12px">${r.tipo_accessorio||'—'}</td>
+    <td style="font-size:12px">${r.cm_accessorio||'—'}</td>
+    <td>${inlineInput(r.prezzo_access_A??'',`adminSalva('regole_telaio','${r.id}','prezzo_access_A',this.value)`,'70px','number','€')}</td>
+    <td>${inlineInput(r.prezzo_access_P??'',`adminSalva('regole_telaio','${r.id}','prezzo_access_P',this.value)`,'70px','number','€')}</td>
+    <td style="font-size:11px;color:var(--mid);max-width:160px">${r.note||''}</td>
+  </tr>`).join('');
+  document.getElementById('admin-sub').innerHTML=adminCard('Regole abbinamento spessore → telaio',`
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>Famiglia</th><th>Spessore</th><th>Spalla</th><th>Accessorio</th><th>Cm</th><th>Costo A (€)</th><th>Costo P (€)</th><th>Note</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`);
+}
+
+async function adminScorExt(){
+  const {data} = await sb.from('scorrevoli_esterni').select('*').order('codice_apertura').order('spessore_da_cm');
+  const rows=(data||[]).map(s=>`<tr>
+    <td><strong style="font-size:12px">${s.codice_apertura}</strong></td>
+    <td style="font-size:12px">${s.spessore_da_cm}–${s.spessore_a_cm} cm</td>
+    <td style="font-size:11px">${s.tipo_accessorio||'—'} ${s.cm_accessorio?s.cm_accessorio+'cm':''}</td>
+    <td>${inlineInput(s.prezzo_A??'',`adminSalva('scorrevoli_esterni','${s.id}','prezzo_A',this.value)`,'75px','number','€')}</td>
+    <td>${inlineInput(s.prezzo_P??'',`adminSalva('scorrevoli_esterni','${s.id}','prezzo_P',this.value)`,'75px','number','€')}</td>
+  </tr>`).join('');
+  document.getElementById('admin-sub').innerHTML=adminCard('Scorrevoli esterni — prezzi per fascia spessore',`
+    <table><thead><tr><th>Tipologia</th><th>Spessore muro</th><th>Accessorio</th><th>Prezzo A (€)</th><th>Prezzo P (€)</th></tr></thead>
+    <tbody>${rows}</tbody></table>`);
+}
+
+async function adminScorInt(){
+  const {data} = await sb.from('scorrevoli_interni').select('*').order('codice_apertura').order('spalla_cassone_cm');
+  const rows=(data||[]).map(s=>`<tr>
+    <td><strong style="font-size:12px">${s.codice_apertura}</strong></td>
+    <td style="font-size:12px">${s.codice_cassone}</td>
+    <td style="font-size:12px">${s.spalla_cassone_cm} cm</td>
+    <td><strong style="font-size:12px">${s.kit_telaio_codice}</strong></td>
+    <td>${inlineInput(s.prezzo_A??'',`adminSalva('scorrevoli_interni','${s.id}','prezzo_A',this.value)`,'75px','number','€')}</td>
+    <td>${inlineInput(s.prezzo_P??'',`adminSalva('scorrevoli_interni','${s.id}','prezzo_P',this.value)`,'75px','number','€')}</td>
+  </tr>`).join('');
+  document.getElementById('admin-sub').innerHTML=adminCard('Scorrevoli interni — kit cassone',`
+    <table><thead><tr><th>Tipologia</th><th>Cassone</th><th>Spalla</th><th>Kit telaio</th><th>Prezzo A (€)</th><th>Prezzo P (€)</th></tr></thead>
+    <tbody>${rows}</tbody></table>`);
+}
+
+// ══════════════════════════════════════════════════════
+// DISTINTE BASE
+// ══════════════════════════════════════════════════════
+async function adminDistinte(){
+  const [{data:modelli},{data:serie}] = await Promise.all([
+    sb.from('modelli').select('codice,nome,codice_serie').eq('attivo',true).order('codice_serie').order('nome'),
+    sb.from('serie').select('codice,nome').order('nome'),
+  ]);
+  const filtroSerie = document.getElementById('db-serie-filter')?.value||'TAM';
+  const filtroModello = document.getElementById('db-modello-filter')?.value||modelli?.[0]?.codice||'';
+  const serieOpts=(serie||[]).map(s=>`<option value="${s.codice}" ${s.codice===filtroSerie?'selected':''}>${s.codice}</option>`).join('');
+  const modelliSerie=(modelli||[]).filter(m=>m.codice_serie===filtroSerie);
+  const modelloOpts=modelliSerie.map(m=>`<option value="${m.codice}" ${m.codice===filtroModello?'selected':''}>${m.codice} — ${m.nome}</option>`).join('');
+
+  let rowsDB='';
+  if(filtroModello){
+    const {data:db} = await sb.from('distinte_base').select('*').eq('codice_modello',filtroModello).eq('attivo',true).order('categoria').order('descrizione_componente');
+    const catColors={legno:'bb',accessorio:'bg',ferramenta:'ba',vetro:'bb',imballaggio:'bgr'};
+    rowsDB=(db||[]).map(r=>`<tr>
+      <td>${inlineInput(r.codice_componente,`adminSalva('distinte_base','${r.id}','codice_componente',this.value)`,'90px','text')}</td>
+      <td>${inlineInput(r.descrizione_componente,`adminSalva('distinte_base','${r.id}','descrizione_componente',this.value)`,'200px','text')}</td>
+      <td><select onchange="adminSalva('distinte_base','${r.id}','categoria',this.value)" style="padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:11px">
+        ${['legno','accessorio','ferramenta','vetro','imballaggio'].map(c=>`<option value="${c}" ${c===r.categoria?'selected':''}>${c}</option>`).join('')}
+      </select></td>
+      <td>${inlineInput(r.quantita??1,`adminSalva('distinte_base','${r.id}','quantita',this.value)`,'55px')}</td>
+      <td>${inlineInput(r.unita_misura||'pz',`adminSalva('distinte_base','${r.id}','unita_misura',this.value)`,'50px','text')}</td>
+      <td>${inlineInput(r.note||'',`adminSalva('distinte_base','${r.id}','note',this.value)`,'120px','text','')}</td>
+      <td><button onclick="eliminaDistinta('${r.id}')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
+    </tr>`).join('');
+    if(!rowsDB) rowsDB='<tr><td colspan="7" style="text-align:center;color:var(--mid);padding:20px;font-style:italic">Nessun componente ancora — aggiungi il primo</td></tr>';
+  }
+
+  document.getElementById('admin-main').innerHTML=`
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+    <label style="font-size:12px;color:var(--mid)">Serie:</label>
+    <select id="db-serie-filter" onchange="adminDistinte()" style="padding:5px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit">${serieOpts}</select>
+    <label style="font-size:12px;color:var(--mid)">Modello:</label>
+    <select id="db-modello-filter" onchange="adminDistinte()" style="padding:5px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit;min-width:220px">${modelloOpts}</select>
+    ${filtroModello?`<button class="btn btn-red btn-sm" onclick="nuovoComponenteDB('${filtroModello}')">+ Aggiungi componente</button>`:''}
+  </div>
+  ${filtroModello?adminCard(`Distinta base — ${filtroModello}`,`
+    <div style="background:var(--blue-bg);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--blue-tx);margin-bottom:10px">
+      Inserisci tutti i componenti necessari per produrre questo modello. Sarà la base per il magazzino e il ciclo produttivo.
+    </div>
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>Codice componente</th><th>Descrizione</th><th>Categoria</th><th>Q.tà</th><th>Unità</th><th>Note</th><th></th></tr></thead>
+      <tbody>${rowsDB}</tbody>
+    </table></div>`):'<div class="card"><p style="color:var(--mid);padding:20px;text-align:center">Seleziona una serie e un modello per gestire la distinta base</p></div>'}`;
+}
+
+async function nuovoComponenteDB(codModello){
+  const {error}=await sb.from('distinte_base').insert([{codice_modello:codModello,codice_componente:'COD',descrizione_componente:'Nuovo componente',categoria:'accessorio',quantita:1,unita_misura:'pz'}]);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Componente aggiunto','ok'); adminDistinte();
+}
+
+async function eliminaDistinta(id){
+  if(!confirm('Eliminare questo componente dalla distinta?')) return;
+  await sb.from('distinte_base').update({attivo:false}).eq('id',id);
+  adminDistinte();
+}
+
+// ══════════════════════════════════════════════════════
+// AGENTI
+// ══════════════════════════════════════════════════════
+async function adminAgenti(){
+  const {data} = await sb.from('agenti').select('*').order('cognome');
+  const rows=(data||[]).map(a=>`<tr>
+    <td>${inlineInput(a.nome,`adminSalva('agenti','${a.id}','nome',this.value)`,'100px','text')}</td>
+    <td>${inlineInput(a.cognome,`adminSalva('agenti','${a.id}','cognome',this.value)`,'120px','text')}</td>
+    <td>${inlineInput(a.email||'',`adminSalva('agenti','${a.id}','email',this.value)`,'160px','text','email')}</td>
+    <td>${inlineInput(a.telefono||'',`adminSalva('agenti','${a.id}','telefono',this.value)`,'120px','text')}</td>
+    <td>${inlineInput(a.zona||'',`adminSalva('agenti','${a.id}','zona',this.value)`,'100px','text','es. Piemonte')}</td>
+    <td>${inlineInput(a.percentuale_provvigione??0,`adminSalva('agenti','${a.id}','percentuale_provvigione',this.value)`,'55px')} %</td>
+    <td>${adminToggle(a.attivo,`toggleCampo('agenti','${a.id}','attivo',${a.attivo})`)}</td>
+  </tr>`).join('');
+  document.getElementById('admin-main').innerHTML=adminCard('Agenti Max Porte',`
+    <table><thead><tr><th>Nome</th><th>Cognome</th><th>Email</th><th>Telefono</th><th>Zona</th><th>Provvigione</th><th>Stato</th></tr></thead>
+    <tbody>${rows||'<tr><td colspan="7" style="text-align:center;color:var(--mid);padding:20px">Nessun agente ancora</td></tr>'}</tbody></table>`,
+    `<button class="btn btn-red btn-sm" onclick="nuovoAgente()">+ Aggiungi agente</button>`);
+}
+
+async function nuovoAgente(){
+  const nome=prompt('Nome:'); if(!nome) return;
+  const cognome=prompt('Cognome:'); if(!cognome) return;
+  const {error}=await sb.from('agenti').insert([{nome,cognome,attivo:true,percentuale_provvigione:0}]);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Agente aggiunto','ok'); adminAgenti();
+}
+
+// ══════════════════════════════════════════════════════
+// IMPOSTAZIONI
+// ══════════════════════════════════════════════════════
+function adminImpostazioni(){
+  document.getElementById('admin-main').innerHTML=`
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">Numerazione documenti</div>
+      <div style="font-size:13px;color:var(--mid);margin-bottom:12px">Le sequenze numeriche vengono gestite automaticamente da Supabase. I prefissi sono configurati nel codice.</div>
+      <table style="font-size:13px">
+        <tr><td style="color:var(--mid);padding:4px 0">Formato preventivi</td><td><strong>PRV-YYYY-NNNN</strong></td></tr>
+        <tr><td style="color:var(--mid);padding:4px 0">Formato ordini</td><td><strong>ORD-YYYY-NNNN</strong></td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <div class="card-title">Supabase Storage</div>
+      <div style="font-size:13px;color:var(--mid);margin-bottom:10px">Bucket per le immagini del catalogo</div>
+      <div style="background:var(--green-bg);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--green-tx)">
+        Bucket <strong>catalogo_immagini</strong> configurato e attivo
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">Gestione utenti e ruoli</div>
+    <div id="utenti-content"><div class="loading"><div class="spinner"></div></div></div>
+  </div>`;
+  renderUtentiInline();
+}
+
+async function renderUtentiInline(){
+  const {data} = await sb.from('utenti_ruoli').select('*');
+  const rows=(data||[]).map(u=>`<tr>
+    <td style="font-size:11px;color:var(--mid);font-family:monospace">${u.user_id.slice(0,16)}...</td>
+    <td><select style="padding:4px 8px;border:0.5px solid var(--border);border-radius:4px;font-size:13px;font-family:inherit" onchange="aggiornaRuolo('${u.id}',this.value)">
+      ${['super_admin','admin','resp_commerciale','resp_tecnico','agente','magazzino','sola_lettura'].map(r=>`<option value="${r}" ${r===u.ruolo?'selected':''}>${RUOLI_LABEL[r]||r}</option>`).join('')}
+    </select></td>
+    <td style="font-size:12px;color:var(--mid)">${new Date(u.created_at).toLocaleDateString('it-IT')}</td>
+    <td><button onclick="eliminaUtente('${u.id}')" style="background:none;border:none;color:var(--mid);cursor:pointer">×</button></td>
+  </tr>`).join('');
+  document.getElementById('utenti-content').innerHTML=`
+  <table style="margin-bottom:14px">
+    <thead><tr><th>User ID</th><th>Ruolo</th><th>Creato il</th><th></th></tr></thead>
+    <tbody>${rows||'<tr><td colspan="4" style="text-align:center;color:var(--mid);padding:16px">Nessun utente</td></tr>'}</tbody>
+  </table>
+  <div style="display:flex;gap:8px">
+    <input type="text" id="new-user-id" placeholder="Incolla user_id..." style="flex:1;padding:7px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit">
+    <select id="new-user-ruolo" style="padding:7px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit">
+      ${['agente','resp_commerciale','resp_tecnico','admin','magazzino','sola_lettura'].map(r=>`<option value="${r}">${RUOLI_LABEL[r]}</option>`).join('')}
+    </select>
+    <button class="btn btn-red" onclick="aggiungiUtente()">Aggiungi</button>
+  </div>`;
+}
+
+async function eliminaUtente(id){
+  if(!confirm('Rimuovere questo utente?')) return;
+  await sb.from('utenti_ruoli').delete().eq('id',id);
+  toast('Utente rimosso','ok'); renderUtentiInline();
+}
+
+// ══════════════════════════════════════════════════════
+// FUNZIONI GENERICHE ADMIN
+// ══════════════════════════════════════════════════════
+async function adminSalva(tabella, id, campo, valore){
+  let val = valore;
+  // Numeric fields
+  const numericFields=['sovrapprezzo_A','sovrapprezzo_P','prezzo_A','prezzo_P','prezzo_base',
+    'prezzo_vetro','prezzo_extra_incisioni','sovrapprezzo_bugna_A','sovrapprezzo_bugna_P',
+    'maggiorazione_pct','spalla_cm','spessore_da_cm','spessore_a_cm','cm_accessorio',
+    'prezzo_access_A','prezzo_access_P','spalla_cassone_cm','quantita',
+    'percentuale_provvigione','sconto_base_pct','sconto_max_pct'];
+  if(numericFields.includes(campo)){
+    val = parseFloat(valore);
+    if(isNaN(val)) return;
+  }
+  const {error} = await sb.from(tabella).update({[campo]:val}).eq('id',id);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Salvato','ok');
 }
 
 async function salvaPrezzo(codModello, listino, campo, valore){
   const val = parseFloat(valore);
   if(isNaN(val)) return;
   const {error} = await sb.from('prezzi_modello').update({[campo]:val}).eq('codice_modello',codModello).eq('listino',listino);
-  if(error){ toast('Errore salvataggio: '+error.message,'err'); return; }
-  toast(`${codModello} / Listino ${listino} — ${campo} aggiornato`,'ok');
+  if(error){
+    // Se non esiste ancora la riga, creala
+    await sb.from('prezzi_modello').insert([{codice_modello:codModello,listino,[campo]:val}]);
+  }
+  toast(`Prezzo aggiornato`,'ok');
 }
 
-async function toggleModello(id, attivo){
-  await sb.from('modelli').update({attivo:!attivo}).eq('id',id);
-  toast(attivo?'Modello disattivato':'Modello attivato','ok');
-  adminModelli();
+async function toggleCampo(tabella, id, campo, attualeStr){
+  const attuale = attualeStr===true||attualeStr==='true';
+  const {error} = await sb.from(tabella).update({[campo]:!attuale}).eq('id',id);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast(!attuale?'Attivato':'Disattivato','ok');
+  // Refresh current view
+  loadAdminSection();
 }
 
-async function adminVetro(){
-  const [{data:tipiVetro},{data:colAlu},{data:colPietra}] = await Promise.all([
-    sb.from('tipi_vetro').select('*').order('codice'),
-    sb.from('colori_inserto_alluminio').select('*').order('codice'),
-    sb.from('colori_pietra').select('*').order('codice'),
-  ]);
-
-  const rowsVetro=(tipiVetro||[]).map(v=>`<tr>
-    <td><strong>${v.codice}</strong></td><td>${v.nome}</td>
-    <td><input type="number" value="${v.sovrapprezzo_A??''}" step="0.01" style="width:75px;padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px" onchange="salvaRiga('tipi_vetro','${v.id}','sovrapprezzo_A',this.value)"></td>
-    <td><input type="number" value="${v.sovrapprezzo_P??''}" step="0.01" style="width:75px;padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px" onchange="salvaRiga('tipi_vetro','${v.id}','sovrapprezzo_P',this.value)"></td>
-    <td><span class="badge ${v.attivo?'bg':'br'}" style="cursor:pointer" onclick="toggleRiga('tipi_vetro','${v.id}',${v.attivo},'adminVetro')">${v.attivo?'Attivo':'Inattivo'}</span></td>
-  </tr>`).join('');
-
-  const rowsAlu=(colAlu||[]).map(c=>`<tr>
-    <td><strong>${c.codice}</strong></td><td>${c.nome}</td>
-    <td style="text-align:center">${c.incluso?'<span class="badge bg">Incluso</span>':'<span class="badge ba">No</span>'}</td>
-    <td><input type="number" value="${c.sovrapprezzo_A??''}" placeholder="${c.incluso?'incluso':''}" step="0.01" style="width:75px;padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px" onchange="salvaRiga('colori_inserto_alluminio','${c.id}','sovrapprezzo_A',this.value)"></td>
-    <td><input type="number" value="${c.sovrapprezzo_P??''}" placeholder="${c.incluso?'incluso':''}" step="0.01" style="width:75px;padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px" onchange="salvaRiga('colori_inserto_alluminio','${c.id}','sovrapprezzo_P',this.value)"></td>
-  </tr>`).join('');
-
-  const rowsPietra=(colPietra||[]).map(c=>`<tr>
-    <td><strong>${c.codice}</strong></td><td>${c.nome}</td>
-    <td><input type="number" value="${c.sovrapprezzo_A??''}" step="0.01" style="width:75px;padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px" onchange="salvaRiga('colori_pietra','${c.id}','sovrapprezzo_A',this.value)"></td>
-    <td><input type="number" value="${c.sovrapprezzo_P??''}" step="0.01" style="width:75px;padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px" onchange="salvaRiga('colori_pietra','${c.id}','sovrapprezzo_P',this.value)"></td>
-  </tr>`).join('');
-
-  document.getElementById('admin-content').innerHTML=`
-  <div class="card" style="margin-bottom:14px">
-    <div class="card-header">
-      <span class="card-title">Tipi vetro — sovrapprezzi</span>
-      <button class="btn btn-red btn-sm" onclick="nuovaRigaVetro()">+ Aggiungi tipo vetro</button>
-    </div>
-    <table><thead><tr><th>Codice</th><th>Nome</th><th>Sovr. A (€)</th><th>Sovr. P (€)</th><th>Stato</th></tr></thead>
-    <tbody>${rowsVetro||'<tr><td colspan="5" style="text-align:center;padding:16px;color:var(--mid)">Nessun tipo vetro</td></tr>'}</tbody></table>
-  </div>
-  <div class="card" style="margin-bottom:14px">
-    <div class="card-header">
-      <span class="card-title">Colori inserto alluminio</span>
-      <button class="btn btn-red btn-sm" onclick="nuovaRigaAlu()">+ Aggiungi colore</button>
-    </div>
-    <table><thead><tr><th>Codice</th><th>Nome</th><th>Incluso</th><th>Sovr. A (€)</th><th>Sovr. P (€)</th></tr></thead>
-    <tbody>${rowsAlu||'<tr><td colspan="5" style="text-align:center;padding:16px;color:var(--mid)">Nessun colore</td></tr>'}</tbody></table>
-  </div>
-  <div class="card">
-    <div class="card-header">
-      <span class="card-title">Colori pietra</span>
-      <button class="btn btn-red btn-sm" onclick="nuovaRigaPietra()">+ Aggiungi colore pietra</button>
-    </div>
-    <table><thead><tr><th>Codice</th><th>Nome</th><th>Sovr. A (€)</th><th>Sovr. P (€)</th></tr></thead>
-    <tbody>${rowsPietra||'<tr><td colspan="4" style="text-align:center;padding:16px;color:var(--mid)">Nessun colore pietra — aggiungi il primo</td></tr>'}</tbody></table>
-  </div>`;
-}
-
-async function adminTelaio(){
-  const [{data:spalle},{data:regole}] = await Promise.all([
-    sb.from('telai_spalle').select('*').order('famiglia_apertura').order('spalla_cm'),
-    sb.from('regole_telaio').select('*').order('famiglia_apertura').order('spessore_da_cm'),
-  ]);
-  const rowsSpalle=(spalle||[]).map(s=>`<tr>
-    <td><strong>${s.codice}</strong></td>
-    <td>${s.spalla_cm} cm</td>
-    <td><span class="tag">${s.famiglia_apertura}</span></td>
-    <td style="font-size:12px;color:var(--mid)">${s.descrizione||'—'}</td>
-    <td><input type="number" value="${s.prezzo_A??''}" step="0.01" style="width:75px;padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px" onchange="salvaRiga('telai_spalle','${s.id}','prezzo_A',this.value)"></td>
-    <td><input type="number" value="${s.prezzo_P??''}" step="0.01" style="width:75px;padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px" onchange="salvaRiga('telai_spalle','${s.id}','prezzo_P',this.value)"></td>
-  </tr>`).join('');
-
-  const rowsRegole=(regole||[]).map(r=>`<tr>
-    <td><span class="tag">${r.famiglia_apertura}</span></td>
-    <td style="font-size:12px">${r.spessore_da_cm}–${r.spessore_a_cm} cm</td>
-    <td><strong>${r.codice_spalla}</strong></td>
-    <td>${r.tipo_accessorio||'—'}</td>
-    <td>${r.cm_accessorio||'—'}</td>
-    <td><input type="number" value="${r.prezzo_access_A??''}" step="0.01" style="width:75px;padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px" onchange="salvaRiga('regole_telaio','${r.id}','prezzo_access_A',this.value)"></td>
-    <td><input type="number" value="${r.prezzo_access_P??''}" step="0.01" style="width:75px;padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px" onchange="salvaRiga('regole_telaio','${r.id}','prezzo_access_P',this.value)"></td>
-    <td style="font-size:11px;color:var(--mid);max-width:160px">${r.note||''}</td>
-  </tr>`).join('');
-
-  document.getElementById('admin-content').innerHTML=`
-  <div class="card" style="margin-bottom:14px">
-    <div class="card-header"><span class="card-title">Spalle telaio a magazzino — prezzi</span></div>
-    <div style="overflow-x:auto"><table>
-      <thead><tr><th>Codice</th><th>Spalla</th><th>Famiglia</th><th>Descrizione</th><th>Prezzo A (€)</th><th>Prezzo P (€)</th></tr></thead>
-      <tbody>${rowsSpalle}</tbody>
-    </table></div>
-  </div>
-  <div class="card">
-    <div class="card-header"><span class="card-title">Regole abbinamento spessore → telaio — costi accessori</span></div>
-    <div style="overflow-x:auto"><table>
-      <thead><tr><th>Famiglia</th><th>Spessore</th><th>Spalla</th><th>Accessorio</th><th>Cm</th><th>Costo A (€)</th><th>Costo P (€)</th><th>Note</th></tr></thead>
-      <tbody>${rowsRegole}</tbody>
-    </table></div>
-  </div>`;
-}
-
-async function adminScorrevoli(){
-  const [{data:ext},{data:int_}] = await Promise.all([
-    sb.from('scorrevoli_esterni').select('*').order('codice_apertura').order('spessore_da_cm'),
-    sb.from('scorrevoli_interni').select('*').order('codice_apertura').order('spalla_cassone_cm'),
-  ]);
-  const rowsExt=(ext||[]).map(s=>`<tr>
-    <td><strong>${s.codice_apertura}</strong></td>
-    <td style="font-size:12px">${s.spessore_da_cm}–${s.spessore_a_cm} cm</td>
-    <td>${s.tipo_accessorio||'—'}</td>
-    <td>${s.cm_accessorio||'—'}</td>
-    <td><input type="number" value="${s.prezzo_A??''}" step="0.01" style="width:80px;padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px" onchange="salvaRiga('scorrevoli_esterni','${s.id}','prezzo_A',this.value)"></td>
-    <td><input type="number" value="${s.prezzo_P??''}" step="0.01" style="width:80px;padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px" onchange="salvaRiga('scorrevoli_esterni','${s.id}','prezzo_P',this.value)"></td>
-  </tr>`).join('');
-
-  const rowsInt=(int_||[]).map(s=>`<tr>
-    <td><strong>${s.codice_apertura}</strong></td>
-    <td>${s.codice_cassone}</td>
-    <td>${s.spalla_cassone_cm} cm</td>
-    <td><strong>${s.kit_telaio_codice}</strong></td>
-    <td><input type="number" value="${s.prezzo_A??''}" step="0.01" style="width:80px;padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px" onchange="salvaRiga('scorrevoli_interni','${s.id}','prezzo_A',this.value)"></td>
-    <td><input type="number" value="${s.prezzo_P??''}" step="0.01" style="width:80px;padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px" onchange="salvaRiga('scorrevoli_interni','${s.id}','prezzo_P',this.value)"></td>
-  </tr>`).join('');
-
-  document.getElementById('admin-content').innerHTML=`
-  <div class="card" style="margin-bottom:14px">
-    <div class="card-header"><span class="card-title">Scorrevoli esterni — prezzi per fascia di spessore</span></div>
-    <div style="overflow-x:auto"><table>
-      <thead><tr><th>Tipologia</th><th>Spessore muro</th><th>Accessorio</th><th>Cm</th><th>Prezzo A (€)</th><th>Prezzo P (€)</th></tr></thead>
-      <tbody>${rowsExt}</tbody>
-    </table></div>
-  </div>
-  <div class="card">
-    <div class="card-header"><span class="card-title">Scorrevoli interni — abbinamento cassone → kit telaio</span></div>
-    <div style="overflow-x:auto"><table>
-      <thead><tr><th>Tipologia</th><th>Cassone</th><th>Spalla</th><th>Kit telaio</th><th>Prezzo A (€)</th><th>Prezzo P (€)</th></tr></thead>
-      <tbody>${rowsInt}</tbody>
-    </table></div>
-  </div>`;
-}
-
-async function adminFiniture(){
-  const {data:fin} = await sb.from('finiture').select('*').eq('codice_serie','TAM').order('codice_finitura');
-  const rows=(fin||[]).map(f=>`<tr>
-    <td><strong>${f.codice_finitura}</strong></td>
-    <td>${f.nome_finitura}</td>
-    <td style="font-size:12px;color:var(--mid)">${f.codice_modello||'Tutti'}</td>
-    <td><input type="number" value="${f.sovrapprezzo_A??0}" step="0.01" style="width:70px;padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px" onchange="salvaRiga('finiture','${f.id}','sovrapprezzo_A',this.value)"></td>
-    <td><input type="number" value="${f.sovrapprezzo_P??0}" step="0.01" style="width:70px;padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px" onchange="salvaRiga('finiture','${f.id}','sovrapprezzo_P',this.value)"></td>
-    <td style="text-align:center"><span class="badge ${f.consente_bugna?'bg':'br'}" style="cursor:pointer" onclick="toggleBugna('${f.id}',${f.consente_bugna})">${f.consente_bugna?'Sì':'No'}</span></td>
-    <td><input type="number" value="${f.sovrapprezzo_bugna_A??0}" step="0.01" style="width:70px;padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px" onchange="salvaRiga('finiture','${f.id}','sovrapprezzo_bugna_A',this.value)"></td>
-    <td><input type="number" value="${f.sovrapprezzo_bugna_P??0}" step="0.01" style="width:70px;padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px" onchange="salvaRiga('finiture','${f.id}','sovrapprezzo_bugna_P',this.value)"></td>
-    <td><span class="badge ${f.attiva?'bg':'br'}" style="cursor:pointer" onclick="toggleRiga('finiture','${f.id}',${f.attiva},'adminFiniture')">${f.attiva?'Attiva':'Inattiva'}</span></td>
-  </tr>`).join('');
-  document.getElementById('admin-content').innerHTML=`
-  <div class="card">
-    <div class="card-header"><span class="card-title">Finiture Tamburate — sovrapprezzi e bugna</span></div>
-    <div style="overflow-x:auto"><table>
-      <thead><tr><th>Codice</th><th>Nome</th><th>Modello</th><th>Sovr.A(€)</th><th>Sovr.P(€)</th><th>Bugna</th><th>Bugna A(€)</th><th>Bugna P(€)</th><th>Stato</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table></div>
-  </div>`;
-}
-
-async function toggleBugna(id, attuale){
-  await sb.from('finiture').update({consente_bugna:!attuale}).eq('id',id);
-  adminFiniture();
-}
-
-async function adminAperture(){
-  const {data:ap} = await sb.from('tipologie_apertura').select('*').order('famiglia').order('codice');
-  const rows=(ap||[]).map(a=>`<tr>
-    <td><strong>${a.codice}</strong></td>
-    <td style="font-size:12px">${a.nome}</td>
-    <td><span class="tag">${a.famiglia||'—'}</span></td>
-    <td><span class="badge bb" style="font-size:10px">${a.logica_prezzo}</span></td>
-    <td><input type="number" value="${a.sovrapprezzo_A??''}" step="0.01" style="width:75px;padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px" onchange="salvaRiga('tipologie_apertura','${a.id}','sovrapprezzo_A',this.value)"></td>
-    <td><input type="number" value="${a.sovrapprezzo_P??''}" step="0.01" style="width:75px;padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px" onchange="salvaRiga('tipologie_apertura','${a.id}','sovrapprezzo_P',this.value)"></td>
-    <td><input type="number" value="${a.maggiorazione_pct??''}" step="1" style="width:60px;padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px" placeholder="%" onchange="salvaRiga('tipologie_apertura','${a.id}','maggiorazione_pct',this.value)"></td>
-    <td><span class="badge ${a.attiva?'bg':'br'}" style="cursor:pointer" onclick="toggleRiga('tipologie_apertura','${a.id}',${a.attiva},'adminAperture')">${a.attiva?'Attiva':'Inattiva'}</span></td>
-  </tr>`).join('');
-  document.getElementById('admin-content').innerHTML=`
-  <div class="card">
-    <div class="card-header"><span class="card-title">Tipologie apertura — prezzi e logiche</span></div>
-    <div style="overflow-x:auto"><table>
-      <thead><tr><th>Codice</th><th>Nome</th><th>Famiglia</th><th>Logica</th><th>Sovr.A(€)</th><th>Sovr.P(€)</th><th>Magg.%</th><th>Stato</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table></div>
-  </div>`;
-}
-
-// Funzioni generiche admin
-async function salvaRiga(tabella, id, campo, valore){
-  const val = parseFloat(valore);
-  if(isNaN(val)) return;
-  const {error} = await sb.from(tabella).update({[campo]:val}).eq('id',id);
-  if(error){ toast('Errore: '+error.message,'err'); return; }
-  toast('Valore aggiornato','ok');
-}
-
-async function toggleRiga(tabella, id, attuale, callback){
-  await sb.from(tabella).update({attivo:!attuale}).eq('id',id);
-  toast(attuale?'Disattivato':'Attivato','ok');
+async function nuovaRiga(tabella, defaultData, callback){
+  const {error} = await sb.from(tabella).insert([defaultData]);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Riga aggiunta','ok');
   if(callback && window[callback]) window[callback]();
 }
 
-async function nuovaRigaVetro(){
-  const codice = prompt('Codice vetro (es. SAT-B):'); if(!codice) return;
-  const nome = prompt('Nome vetro:'); if(!nome) return;
-  const {error} = await sb.from('tipi_vetro').insert([{codice:codice.toUpperCase(),nome,sovrapprezzo_A:0,sovrapprezzo_P:0}]);
-  if(error){ toast('Errore: '+error.message,'err'); return; }
-  toast('Tipo vetro aggiunto','ok'); adminVetro();
-}
-async function nuovaRigaAlu(){
-  const codice = prompt('Codice colore alluminio:'); if(!codice) return;
-  const nome = prompt('Nome colore:'); if(!nome) return;
-  const incluso = confirm('È incluso nel prezzo porta?');
-  const {error} = await sb.from('colori_inserto_alluminio').insert([{codice:codice.toUpperCase(),nome,incluso}]);
-  if(error){ toast('Errore: '+error.message,'err'); return; }
-  toast('Colore alluminio aggiunto','ok'); adminVetro();
-}
-async function nuovaRigaPietra(){
-  const codice = prompt('Codice colore pietra:'); if(!codice) return;
-  const nome = prompt('Nome colore pietra:'); if(!nome) return;
-  const {error} = await sb.from('colori_pietra').insert([{codice:codice.toUpperCase(),nome,sovrapprezzo_A:0,sovrapprezzo_P:0}]);
-  if(error){ toast('Errore: '+error.message,'err'); return; }
-  toast('Colore pietra aggiunto','ok'); adminVetro();
+async function uploadImmagine(tabella, id, input){
+  const file = input.files[0];
+  if(!file) return;
+  const ext = file.name.split('.').pop();
+  const path = `${tabella}/${id}.${ext}`;
+  toast('Caricamento in corso...','ok');
+  const {error:upErr} = await sb.storage.from('catalogo_immagini').upload(path, file, {upsert:true});
+  if(upErr){toast('Errore upload: '+upErr.message,'err');return;}
+  const {data:urlData} = sb.storage.from('catalogo_immagini').getPublicUrl(path);
+  const url = urlData?.publicUrl;
+  if(url){
+    await sb.from(tabella).update({immagine_url:url}).eq('id',id);
+    toast('Immagine caricata','ok');
+    loadAdminSection();
+  }
 }
 
-// ── UTENTI E RUOLI (solo super_admin) ─────────────────
+// ── UTENTI E RUOLI ─────────────────────────────────────
 async function renderUtenti(){
-  if(!isSuperAdmin()){document.getElementById('main-content').innerHTML='<div class="card"><p style="color:var(--red)">Accesso riservato al Super Admin.</p></div>';return;}
-  const {data:utenti} = await sb.from('utenti_ruoli').select('*');
-  // Fetch email da auth non disponibile lato client — mostriamo user_id
-  const rows=(utenti||[]).map(u=>`<tr>
-    <td style="font-size:11px;color:var(--mid);font-family:monospace">${u.user_id}</td>
-    <td>
-      <select style="padding:4px 8px;border:0.5px solid var(--border);border-radius:4px;font-size:13px;font-family:inherit" onchange="aggiornaRuolo('${u.id}',this.value)">
-        ${['super_admin','admin','resp_commerciale','resp_tecnico','agente','magazzino','sola_lettura'].map(r=>`<option value="${r}" ${r===u.ruolo?'selected':''}>${RUOLI_LABEL[r]||r}</option>`).join('')}
-      </select>
-    </td>
-    <td style="font-size:12px;color:var(--mid)">${new Date(u.created_at).toLocaleDateString('it-IT')}</td>
-  </tr>`).join('');
-  document.getElementById('main-content').innerHTML=`
-  <div class="card">
-    <div class="card-header">
-      <span class="card-title">Utenti registrati e ruoli</span>
-      <span style="font-size:11px;color:var(--mid)">Aggiungi utenti da Supabase Authentication → Users</span>
-    </div>
-    <div style="background:var(--amber-bg);border-radius:var(--radius);padding:10px 14px;font-size:12px;color:var(--amber-tx);margin-bottom:14px">
-      Dopo aver creato un nuovo utente su Supabase, incolla il suo user_id qui sotto per assegnargli un ruolo.
-    </div>
-    <table>
-      <thead><tr><th>User ID</th><th>Ruolo</th><th>Creato il</th></tr></thead>
-      <tbody>${rows||'<tr><td colspan="3" style="text-align:center;padding:20px;color:var(--mid)">Nessun utente trovato</td></tr>'}</tbody>
-    </table>
-    <div style="margin-top:14px;display:flex;gap:10px">
-      <input type="text" id="new-user-id" placeholder="Incolla user_id del nuovo utente..." style="flex:1;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit">
-      <select id="new-user-ruolo" style="padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit">
-        ${['agente','resp_commerciale','resp_tecnico','admin','magazzino','sola_lettura'].map(r=>`<option value="${r}">${RUOLI_LABEL[r]}</option>`).join('')}
-      </select>
-      <button class="btn btn-red" onclick="aggiungiUtente()">Aggiungi</button>
-    </div>
-  </div>`;
+  // Redirect to impostazioni
+  adminSection='impostazioni';
+  renderAdmin();
 }
 
 async function aggiornaRuolo(id, ruolo){
   const {error} = await sb.from('utenti_ruoli').update({ruolo}).eq('id',id);
-  if(error){ toast('Errore: '+error.message,'err'); return; }
+  if(error){toast('Errore: '+error.message,'err');return;}
   toast('Ruolo aggiornato','ok');
 }
 
 async function aggiungiUtente(){
   const userId = document.getElementById('new-user-id').value.trim();
   const ruolo = document.getElementById('new-user-ruolo').value;
-  if(!userId){ toast('Inserisci un user_id valido','err'); return; }
-  const {error} = await sb.from('utenti_ruoli').insert([{user_id:userId, ruolo}]);
-  if(error){ toast('Errore: '+error.message,'err'); return; }
+  if(!userId){toast('Inserisci un user_id valido','err');return;}
+  const {error} = await sb.from('utenti_ruoli').insert([{user_id:userId,ruolo}]);
+  if(error){toast('Errore: '+error.message,'err');return;}
   toast('Utente aggiunto con ruolo '+RUOLI_LABEL[ruolo],'ok');
-  renderUtenti();
+  renderUtentiInline();
 }
+
 </script>
 </body>
 </html>
