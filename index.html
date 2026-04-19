@@ -1782,14 +1782,6 @@ async function cfgMisure(){
       <div style="font-size:11px;color:var(--mid);margin-bottom:4px">Altezza custom (cm)</div>
       <input type="number" id="cfg-alt-custom" placeholder="es. 215" min="100" max="400" style="width:100%;padding:7px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit" oninput="selAltezzaCustom(this.value)">
     </div>
-    <div>
-      <div style="font-size:11px;color:var(--mid);margin-bottom:4px">Senso apertura</div>
-      <select id="cfg-senso" onchange="CFG.senso=this.value" style="width:100%;padding:7px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit">
-        <option value="">Seleziona...</option>
-        <option value="DX" ${CFG.senso==='DX'?'selected':''}>Destra (DX)</option>
-        <option value="SX" ${CFG.senso==='SX'?'selected':''}>Sinistra (SX)</option>
-      </select>
-    </div>
   </div>
   ${CFG.misura_custom?'<div style="background:var(--red-bg);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--red-tx);margin-bottom:12px">⚠ Misura custom — richiederà approvazione tecnica</div>':''}
   <div style="display:flex;justify-content:flex-end">
@@ -1803,9 +1795,7 @@ function selAltezza(v){ CFG.altezza=v; CFG.misura_custom=false; cfgMisure(); }
 function selLarghezzaCustom(v){ if(v){ CFG.larghezza=parseFloat(v); CFG.misura_custom=true; } }
 function selAltezzaCustom(v){ if(v){ CFG.altezza=parseFloat(v); CFG.misura_custom=true; } }
 function avanzaASpessore(){
-  CFG.senso = document.getElementById('cfg-senso')?.value || CFG.senso;
   if(!CFG.larghezza||!CFG.altezza){ toast('Seleziona larghezza e altezza','err'); return; }
-  if(!CFG.senso){ toast('Seleziona il senso di apertura','err'); return; }
   renderCfgStep('spessore');
 }
 
@@ -2144,7 +2134,7 @@ async function renderPreventivi(){
 async function nuovoPreventivo(){
   // Carica clienti e agenti
   const [{data:clienti},{data:agenti}] = await Promise.all([
-    sb.from('anagrafiche').select('id,ragione_sociale,listino,sconto_dedicato_A,sconto_dedicato_P,indirizzo,cap,citta,provincia').order('ragione_sociale'),
+    sb.from('anagrafiche').select('*').order('ragione_sociale'),
     sb.from('agenti').select('*').eq('attivo',true).order('cognome'),
   ]);
   CFG_RIGHE=[];
@@ -2430,7 +2420,7 @@ async function renderOrdiniDiretti(){
 
 async function nuovoOrdineDiretto(){
   const [{data:clienti},{data:agenti}] = await Promise.all([
-    sb.from('anagrafiche').select('id,ragione_sociale,listino,sconto_dedicato_A,sconto_dedicato_P,indirizzo,cap,citta,provincia').order('ragione_sociale'),
+    sb.from('anagrafiche').select('*').order('ragione_sociale'),
     sb.from('agenti').select('*').eq('attivo',true).order('cognome'),
   ]);
   CFG_RIGHE=[];
