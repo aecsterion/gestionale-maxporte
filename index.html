@@ -790,7 +790,7 @@ async function doLogin() {
     entraNellApp(currentUser.email);
   } catch(e) {
     btn.textContent='Accedi'; btn.disabled=false;
-    err.textContent='Errore di connessione: '+e.message;
+    err.textContent='Errore: '+e.message;
     err.style.display='block';
   }
 }
@@ -800,38 +800,34 @@ function entraNellApp(email){
   try {
     document.getElementById('login-screen').style.display='none';
     document.getElementById('app').classList.add('visible');
-    const emailEl = document.getElementById('sb-user-email');
+    const emailEl=document.getElementById('sb-user-email');
     if(emailEl) emailEl.textContent=email||'';
     loadSection('dashboard');
-  } catch(e) {
+  } catch(e){
     console.error('Errore entraNellApp:',e);
   }
 }
 
 async function doLogout(){
-  try {
-    await sb.auth.signOut();
-  } catch(e){}
+  try { await sb.auth.signOut(); } catch(e){}
   currentRuolo=null; currentUser=null;
   document.getElementById('login-screen').style.display='flex';
   document.getElementById('app').classList.remove('visible');
 }
 
-sb.auth.onAuthStateChange(async (event,session)=>{
+// Controlla sessione esistente al caricamento pagina (senza onAuthStateChange)
+(async ()=>{
   try {
-    if(event==='SIGNED_IN' && session?.user){
+    const {data:{session}} = await sb.auth.getSession();
+    if(session?.user){
       currentUser=session.user;
       await loadRuolo(currentUser.id);
       entraNellApp(currentUser.email);
-    } else if(event==='SIGNED_OUT'){
-      currentUser=null; currentRuolo=null;
-      document.getElementById('login-screen').style.display='flex';
-      document.getElementById('app').classList.remove('visible');
     }
   } catch(e){
-    console.error('Errore onAuthStateChange:',e);
+    console.error('Errore getSession:',e);
   }
-});
+})();
 
 // ── NAVIGATION ────────────────────────────────────────
 const pageInfo = {
