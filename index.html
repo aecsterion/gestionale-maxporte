@@ -2644,16 +2644,17 @@ async function adminSerie(){
   const {data} = await sb.from('serie').select('*').order('nome');
   const rows=(data||[]).map(s=>`<tr>
     <td>${inlineInput(s.codice,`adminSalva('serie','${s.id}','codice',this.value)`,'70px','text')}</td>
-    <td>${inlineInput(s.nome,`adminSalva('serie','${s.id}','nome',this.value)`,'120px','text')}</td>
-    <td>${inlineInput(s.descrizione||'',`adminSalva('serie','${s.id}','descrizione',this.value)`,'200px','text','Descrizione')}</td>
+    <td>${inlineInput(s.nome,`adminSalva('serie','${s.id}','nome',this.value)`,'140px','text')}</td>
+    <td>${inlineInput(s.descrizione||'',`adminSalva('serie','${s.id}','descrizione',this.value)`,'220px','text','Descrizione')}</td>
     <td>
       ${s.immagine_url?`<img src="${s.immagine_url}" style="width:40px;height:40px;object-fit:cover;border-radius:4px;margin-right:6px">`:'<span style="font-size:11px;color:var(--mid)">Nessuna</span>'}
-      <label style="cursor:pointer"><input type="file" accept="image/*" style="display:none" onchange="uploadImmagine('serie','${s.id}',this)"><span class="btn btn-sm" style="font-size:11px">Carica</span></label>
+      <label style="cursor:pointer"><input type="file" accept="image/*" style="display:none" onchange="uploadImmagine('serie','${s.id}',this)"><span class="btn btn-sm" style="font-size:11px">📷 Carica</span></label>
     </td>
     <td>${adminToggle(s.attiva,`toggleCampo('serie','${s.id}','attiva',${s.attiva})`)}</td>
+    <td><button onclick="eliminaRigaAdmin('serie','${s.id}','adminSerie')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px" title="Elimina">×</button></td>
   </tr>`).join('');
   document.getElementById('admin-sub').innerHTML=adminCard('Serie',`
-    <table><thead><tr><th>Codice</th><th>Nome</th><th>Descrizione</th><th>Immagine</th><th>Stato</th></tr></thead>
+    <table><thead><tr><th>Codice</th><th>Nome</th><th>Descrizione</th><th>Immagine</th><th>Stato</th><th></th></tr></thead>
     <tbody>${rows}</tbody></table>`,
     `<button class="btn btn-red btn-sm" onclick="nuovaRiga('serie',{codice:'NUOVA',nome:'Nuova serie',attiva:true},'adminSerie')">+ Aggiungi serie</button>`);
 }
@@ -2661,36 +2662,59 @@ async function adminSerie(){
 // MODELLI
 async function adminModelli(){
   const {data:serie} = await sb.from('serie').select('codice,nome').order('nome');
-  const {data:modelli} = await sb.from('modelli').select('*,prezzi_modello(listino,prezzo_base,prezzo_vetro)').order('codice_serie').order('nome');
-  const serieOpts=(serie||[]).map(s=>`<option value="${s.codice}">${s.codice} — ${s.nome}</option>`).join('');
+  const {data:modelli} = await sb.from('modelli').select('*,prezzi_modello(listino,prezzo_base,prezzo_vetro,vetro_incluso,ha_extra_incisioni,prezzo_extra_incisioni)').order('codice_serie').order('nome');
 
   const rows=(modelli||[]).map(m=>{
     const pa=m.prezzi_modello?.find(p=>p.listino==='A');
     const pp=m.prezzi_modello?.find(p=>p.listino==='P');
     const flags=['ha_vetro','ha_pannello_o_bugna','ha_inserto_alluminio','ha_inserto_pietra','ha_pantografatura'];
-    const flagHtml=flags.map(f=>`<span title="${f}" style="display:inline-block;width:14px;height:14px;border-radius:2px;margin-right:2px;cursor:pointer;background:${m[f]?'var(--green-bg)':'var(--border)'};border:0.5px solid ${m[f]?'var(--green-tx)':'var(--mid)'};color:${m[f]?'var(--green-tx)':'var(--mid)'};font-size:8px;text-align:center;line-height:14px" onclick="toggleCampo('modelli','${m.id}','${f}',${m[f]})">${f[3].toUpperCase()}</span>`).join('');
+    const flagLabels={ha_vetro:'V',ha_pannello_o_bugna:'P',ha_inserto_alluminio:'A',ha_inserto_pietra:'I',ha_pantografatura:'T'};
+    const flagHtml=flags.map(f=>`<span title="${f.replace(/_/g,' ')}" style="display:inline-block;width:16px;height:16px;border-radius:3px;margin-right:2px;cursor:pointer;
+      background:${m[f]?'var(--green-bg)':'var(--border)'};border:0.5px solid ${m[f]?'var(--green-tx)':'var(--mid)'};
+      color:${m[f]?'var(--green-tx)':'var(--mid)'};font-size:9px;text-align:center;line-height:16px;font-weight:500"
+      onclick="toggleCampo('modelli','${m.id}','${f}',${m[f]})">${flagLabels[f]}</span>`).join('');
     return `<tr>
       <td>${inlineInput(m.codice,`adminSalva('modelli','${m.id}','codice',this.value)`,'70px','text')}</td>
-      <td>${inlineInput(m.nome,`adminSalva('modelli','${m.id}','nome',this.value)`,'140px','text')}</td>
-      <td><select onchange="adminSalva('modelli','${m.id}','codice_serie',this.value)" style="padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px">${(serie||[]).map(s=>`<option value="${s.codice}" ${s.codice===m.codice_serie?'selected':''}>${s.codice}</option>`).join('')}</select></td>
-      <td style="font-size:11px">${flagHtml}</td>
+      <td>${inlineInput(m.nome,`adminSalva('modelli','${m.id}','nome',this.value)`,'150px','text')}</td>
+      <td><select onchange="adminSalva('modelli','${m.id}','codice_serie',this.value)" style="padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px">
+        ${(serie||[]).map(s=>`<option value="${s.codice}" ${s.codice===m.codice_serie?'selected':''}>${s.codice}</option>`).join('')}
+      </select></td>
+      <td><select onchange="adminSalva('modelli','${m.id}','tipo_variante',this.value)" style="padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:11px">
+        <option value="" ${!m.tipo_variante?'selected':''}>—</option>
+        <option value="PERSONALIZZATA" ${m.tipo_variante==='PERSONALIZZATA'?'selected':''}>Personalizzata</option>
+        <option value="STANDARD" ${m.tipo_variante==='STANDARD'?'selected':''}>Standard</option>
+      </select></td>
+      <td>${flagHtml}</td>
       <td>${inlineInput(pa?.prezzo_base||'',`salvaPrezzo('${m.codice}','A','prezzo_base',this.value)`,'70px')}</td>
       <td>${inlineInput(pp?.prezzo_base||'',`salvaPrezzo('${m.codice}','P','prezzo_base',this.value)`,'70px')}</td>
-      <td>${inlineInput(pa?.prezzo_vetro||'',`salvaPrezzo('${m.codice}','A','prezzo_vetro',this.value)`,'70px')}</td>
+      <td>${m.ha_vetro?`
+        <div style="display:flex;align-items:center;gap:4px">
+          ${inlineInput(pa?.vetro_incluso?'INCL':pa?.prezzo_vetro||'',`salvaPrezzo('${m.codice}','A','prezzo_vetro',this.value)`,'60px')}
+          <span title="Vetro incluso nel prezzo porta" style="cursor:pointer;font-size:10px;color:${pa?.vetro_incluso?'var(--green-tx)':'var(--mid)'}" onclick="toggleVetroIncluso('${m.codice}',${!!pa?.vetro_incluso})">${pa?.vetro_incluso?'✓incl':'libero'}</span>
+        </div>`:'—'}</td>
+      <td>${pa?.ha_extra_incisioni?inlineInput(pa?.prezzo_extra_incisioni||'',`salvaPrezzo('${m.codice}','A','prezzo_extra_incisioni',this.value)`,'65px'):'<span style="font-size:11px;color:var(--mid)">No</span>'}</td>
       <td>
-        ${m.immagine_url?`<img src="${m.immagine_url}" style="width:36px;height:36px;object-fit:cover;border-radius:4px;margin-right:4px">`:''}
+        ${m.immagine_url?`<img src="${m.immagine_url}" style="width:32px;height:32px;object-fit:cover;border-radius:4px;margin-right:4px">`:''}
         <label style="cursor:pointer"><input type="file" accept="image/*" style="display:none" onchange="uploadImmagine('modelli','${m.id}',this)"><span style="font-size:11px;cursor:pointer;color:var(--red)">📷</span></label>
       </td>
       <td>${adminToggle(m.attivo,`toggleCampo('modelli','${m.id}','attivo',${m.attivo})`)}</td>
+      <td><button onclick="eliminaRigaAdmin('modelli','${m.id}','adminModelli')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px" title="Elimina">×</button></td>
     </tr>`;
   }).join('');
+
   document.getElementById('admin-sub').innerHTML=adminCard('Modelli',`
-    <div style="font-size:11px;color:var(--mid);margin-bottom:8px">Flag: <b>V</b>=vetro <b>P</b>=pannello/bugna <b>A</b>=inserto alluminio <b>I</b>=inserto pietra <b>T</b>=pantografatura — clicca per attivare/disattivare</div>
+    <div style="font-size:11px;color:var(--mid);margin-bottom:8px">Flag cliccabili: <b>V</b>=vetro <b>P</b>=pannello/bugna <b>A</b>=inserto alluminio <b>I</b>=inserto pietra <b>T</b>=pantografatura</div>
     <div style="overflow-x:auto"><table>
-      <thead><tr><th>Codice</th><th>Nome</th><th>Serie</th><th>Flag</th><th>Prezzo A</th><th>Prezzo P</th><th>Vetro A</th><th>Img</th><th>Stato</th></tr></thead>
+      <thead><tr><th>Codice</th><th>Nome</th><th>Serie</th><th>Variante</th><th>Flag</th><th>Prezzo A</th><th>Prezzo P</th><th>Vetro A</th><th>Extra incis.</th><th>Img</th><th>Stato</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>`,
     `<button class="btn btn-red btn-sm" onclick="nuovoModello()">+ Aggiungi modello</button>`);
+}
+
+async function toggleVetroIncluso(codModello, attualeIncluso){
+  await sb.from('prezzi_modello').update({vetro_incluso:!attualeIncluso}).eq('codice_modello',codModello);
+  toast(!attualeIncluso?'Vetro ora incluso nel prezzo':'Vetro ora separato','ok');
+  adminModelli();
 }
 
 async function nuovoModello(){
@@ -2718,13 +2742,14 @@ async function adminFiniture(){
   const rows=(data||[]).map(f=>`<tr>
     <td>${inlineInput(f.codice_finitura,`adminSalva('finiture','${f.id}','codice_finitura',this.value)`,'60px','text')}</td>
     <td>${inlineInput(f.nome_finitura,`adminSalva('finiture','${f.id}','nome_finitura',this.value)`,'150px','text')}</td>
-    <td style="font-size:11px;color:var(--mid)">${f.codice_modello||'Tutte'}</td>
+    <td>${inlineInput(f.codice_modello||'',`adminSalva('finiture','${f.id}','codice_modello',this.value)`,'70px','text','Tutti')}</td>
     <td>${inlineInput(f.sovrapprezzo_A??0,`adminSalva('finiture','${f.id}','sovrapprezzo_A',this.value)`,'65px')}</td>
     <td>${inlineInput(f.sovrapprezzo_P??0,`adminSalva('finiture','${f.id}','sovrapprezzo_P',this.value)`,'65px')}</td>
     <td><span class="badge ${f.consente_bugna?'bg':'br'}" style="cursor:pointer" onclick="toggleCampo('finiture','${f.id}','consente_bugna',${f.consente_bugna})">${f.consente_bugna?'Sì':'No'}</span></td>
     <td>${inlineInput(f.sovrapprezzo_bugna_A??0,`adminSalva('finiture','${f.id}','sovrapprezzo_bugna_A',this.value)`,'65px')}</td>
     <td>${inlineInput(f.sovrapprezzo_bugna_P??0,`adminSalva('finiture','${f.id}','sovrapprezzo_bugna_P',this.value)`,'65px')}</td>
     <td>${adminToggle(f.attiva,`toggleCampo('finiture','${f.id}','attiva',${f.attiva})`)}</td>
+    <td><button onclick="eliminaRigaAdmin('finiture','${f.id}','adminFiniture')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px" title="Elimina">×</button></td>
   </tr>`).join('');
 
   document.getElementById('admin-sub').innerHTML=`
@@ -2734,7 +2759,7 @@ async function adminFiniture(){
     <button class="btn btn-red btn-sm" onclick="nuovaFinitura('${serieFilter}')">+ Aggiungi finitura</button>
   </div>
   ${adminCard('Finiture',`<div style="overflow-x:auto"><table>
-    <thead><tr><th>Codice</th><th>Nome</th><th>Modello</th><th>Sovr.A</th><th>Sovr.P</th><th>Bugna</th><th>Bugna A</th><th>Bugna P</th><th>Stato</th></tr></thead>
+    <thead><tr><th>Codice</th><th>Nome</th><th>Modello</th><th>Sovr.A</th><th>Sovr.P</th><th>Bugna</th><th>Bugna A</th><th>Bugna P</th><th>Stato</th><th></th></tr></thead>
     <tbody>${rows}</tbody>
   </table></div>`)}`;
 }
@@ -2756,13 +2781,17 @@ async function adminAperture(){
 
   const rows=(ap||[]).map(a=>{
     const sensiAp=(sensi||[]).filter(s=>s.codice_apertura===a.codice);
-    const sensiHtml=sensiAp.map(s=>`<span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;background:var(--blue-bg);color:var(--blue-tx);margin:1px">${s.codice_senso}</span>`).join('');
+    const sensiHtml=sensiAp.map(s=>`
+      <span style="display:inline-flex;align-items:center;gap:2px;padding:1px 6px;border-radius:3px;font-size:10px;background:var(--blue-bg);color:var(--blue-tx);margin:1px">
+        ${s.codice_senso}
+        <span onclick="eliminaSenso('${s.id}','${a.codice}')" style="cursor:pointer;color:var(--mid);margin-left:2px;font-size:11px" title="Rimuovi">×</span>
+      </span>`).join('');
     const sp = a.logica_prezzo==='fisso'?inlineInput(a.sovrapprezzo_A??'',`adminSalva('tipologie_apertura','${a.id}','sovrapprezzo_A',this.value)`,'65px'):
               a.logica_prezzo==='percentuale'?inlineInput(a.maggiorazione_pct??'',`adminSalva('tipologie_apertura','${a.id}','maggiorazione_pct',this.value)`,'55px')+'%':'variabile';
     const spP = a.logica_prezzo==='fisso'?inlineInput(a.sovrapprezzo_P??'',`adminSalva('tipologie_apertura','${a.id}','sovrapprezzo_P',this.value)`,'65px'):'—';
     return `<tr>
       <td>${inlineInput(a.codice,`adminSalva('tipologie_apertura','${a.id}','codice',this.value)`,'80px','text')}</td>
-      <td>${inlineInput(a.nome,`adminSalva('tipologie_apertura','${a.id}','nome',this.value)`,'200px','text')}</td>
+      <td>${inlineInput(a.nome||'',`adminSalva('tipologie_apertura','${a.id}','nome',this.value)`,'180px','text')}</td>
       <td><select onchange="adminSalva('tipologie_apertura','${a.id}','famiglia',this.value)" style="padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:11px">
         ${['BAT','CS','SI','SE','FM','COM','ROTO','LIBRO','SALOON','ROTOTRASLANTI','SPECIALI','PASSATE'].map(f=>`<option value="${f}" ${f===a.famiglia?'selected':''}>${f}</option>`).join('')}
       </select></td>
@@ -2770,17 +2799,39 @@ async function adminAperture(){
         ${['fisso','spessore','percentuale','doppio'].map(l=>`<option value="${l}" ${l===a.logica_prezzo?'selected':''}>${l}</option>`).join('')}
       </select></td>
       <td>${sp}</td><td>${spP}</td>
-      <td style="max-width:120px">${sensiHtml||'<span style="font-size:11px;color:var(--mid)">Nessuno</span>'}</td>
+      <td style="max-width:160px">
+        ${sensiHtml||'<span style="font-size:11px;color:var(--mid)">Nessuno</span>'}
+        <button onclick="aggiungiSenso('${a.codice}')" style="background:none;border:0.5px solid var(--border);border-radius:3px;color:var(--red);cursor:pointer;font-size:10px;padding:1px 5px;margin-left:3px">+</button>
+      </td>
       <td>${adminToggle(a.attiva,`toggleCampo('tipologie_apertura','${a.id}','attiva',${a.attiva})`)}</td>
+      <td><button onclick="eliminaRigaAdmin('tipologie_apertura','${a.id}','adminAperture')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
     </tr>`;
   }).join('');
 
-  document.getElementById('admin-sub').innerHTML=adminCard('Tipologie apertura e sensi disponibili',`
+  document.getElementById('admin-sub').innerHTML=adminCard('Tipologie apertura e sensi',`
     <div style="overflow-x:auto"><table>
-      <thead><tr><th>Codice</th><th>Nome completo</th><th>Famiglia</th><th>Logica prezzo</th><th>Sovr.A / %</th><th>Sovr.P</th><th>Sensi</th><th>Stato</th></tr></thead>
+      <thead><tr><th>Codice</th><th>Nome completo</th><th>Famiglia</th><th>Logica prezzo</th><th>Sovr.A</th><th>Sovr.P</th><th>Sensi (× per rimuovere, + per aggiungere)</th><th>Stato</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>`,
     `<button class="btn btn-red btn-sm" onclick="nuovaApertura()">+ Aggiungi tipologia</button>`);
+}
+
+async function aggiungiSenso(codApertura){
+  const cod=prompt(`Codice senso per ${codApertura} (DX, SX, T.DX, T.SX, BIDIREZIONALE, X, NESSUNO):`);
+  if(!cod) return;
+  const desc=prompt('Descrizione (es. Apertura SPINGERE DX):');
+  const {error}=await sb.from('sensi_apertura').insert([{
+    codice_apertura:codApertura, codice_senso:cod.toUpperCase(),
+    famiglia:'BAT', descrizione_senso:desc||'', attivo:true, ordine:99
+  }]);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Senso aggiunto','ok'); adminAperture();
+}
+
+async function eliminaSenso(id, codApertura){
+  if(!confirm('Rimuovere questo senso?')) return;
+  await sb.from('sensi_apertura').delete().eq('id',id);
+  toast('Senso rimosso','ok'); adminAperture();
 }
 
 async function nuovaApertura(){
@@ -2798,18 +2849,26 @@ async function adminFerramenta(){
   const rows=(data||[]).map(f=>`<tr>
     <td>${inlineInput(f.codice,`adminSalva('ferramenta','${f.id}','codice',this.value)`,'70px','text')}</td>
     <td>${inlineInput(f.nome,`adminSalva('ferramenta','${f.id}','nome',this.value)`,'160px','text')}</td>
-    <td>
-      ${f.colore_hex?`<div style="width:24px;height:24px;border-radius:4px;background:#${f.colore_hex};border:0.5px solid var(--border);display:inline-block;vertical-align:middle;margin-right:6px"></div>`:''}
-      ${inlineInput(f.colore_hex||'',`adminSalva('ferramenta','${f.id}','colore_hex',this.value)`,'80px','text','es. 1A1A1A')}
+    <td style="display:flex;align-items:center;gap:6px">
+      ${f.colore_hex?`<div style="width:24px;height:24px;border-radius:4px;background:#${f.colore_hex};border:0.5px solid var(--border);flex-shrink:0"></div>`:''}
+      ${inlineInput(f.colore_hex||'',`adminSalvaFerramenta('${f.id}','colore_hex',this.value,this)`,'80px','text','es. C0C0C0')}
     </td>
     <td>${inlineInput(f.sovrapprezzo_A??0,`adminSalva('ferramenta','${f.id}','sovrapprezzo_A',this.value)`,'65px')}</td>
     <td>${inlineInput(f.sovrapprezzo_P??0,`adminSalva('ferramenta','${f.id}','sovrapprezzo_P',this.value)`,'65px')}</td>
     <td>${adminToggle(f.attivo,`toggleCampo('ferramenta','${f.id}','attivo',${f.attivo})`)}</td>
+    <td><button onclick="eliminaRigaAdmin('ferramenta','${f.id}','adminFerramenta')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
   </tr>`).join('');
   document.getElementById('admin-sub').innerHTML=adminCard('Ferramenta',`
-    <table><thead><tr><th>Codice</th><th>Nome</th><th>Colore hex</th><th>Sovr.A (€)</th><th>Sovr.P (€)</th><th>Stato</th></tr></thead>
+    <table><thead><tr><th>Codice</th><th>Nome</th><th>Colore hex</th><th>Sovr.A (€)</th><th>Sovr.P (€)</th><th>Stato</th><th></th></tr></thead>
     <tbody>${rows}</tbody></table>`,
-    `<button class="btn btn-red btn-sm" onclick="nuovaRiga('ferramenta',{codice:'NEW',nome:'Nuovo colore',attivo:true},'adminFerramenta')">+ Aggiungi colore</button>`);
+    `<button class="btn btn-red btn-sm" onclick="nuovaRiga('ferramenta',{codice:'NEW',nome:'Nuovo colore',attivo:true,sovrapprezzo_A:0,sovrapprezzo_P:0},'adminFerramenta')">+ Aggiungi colore</button>`);
+}
+
+async function adminSalvaFerramenta(id, campo, valore, el){
+  await adminSalva('ferramenta', id, campo, valore);
+  // Aggiorna il pallino colore inline senza ricaricare tutta la tabella
+  const preview = el.parentElement.querySelector('div[style*="border-radius:4px"]');
+  if(preview && valore) preview.style.background='#'+valore;
 }
 
 // MANIGLIE
@@ -2819,6 +2878,7 @@ async function adminManiglie(){
     <td>${inlineInput(m.codice,`adminSalva('maniglie','${m.id}','codice',this.value)`,'70px','text')}</td>
     <td>${inlineInput(m.nome,`adminSalva('maniglie','${m.id}','nome',this.value)`,'160px','text')}</td>
     <td>${inlineInput(m.serie_compatibili||'',`adminSalva('maniglie','${m.id}','serie_compatibili',this.value)`,'100px','text','Tutte')}</td>
+    <td>${inlineInput(m.descrizione||'',`adminSalva('maniglie','${m.id}','descrizione',this.value)`,'150px','text','Descrizione')}</td>
     <td>${inlineInput(m.prezzo_A??0,`adminSalva('maniglie','${m.id}','prezzo_A',this.value)`,'65px')}</td>
     <td>${inlineInput(m.prezzo_P??0,`adminSalva('maniglie','${m.id}','prezzo_P',this.value)`,'65px')}</td>
     <td>
@@ -2826,11 +2886,21 @@ async function adminManiglie(){
       <label style="cursor:pointer"><input type="file" accept="image/*" style="display:none" onchange="uploadImmagine('maniglie','${m.id}',this)"><span style="font-size:11px;cursor:pointer;color:var(--red)">📷</span></label>
     </td>
     <td>${adminToggle(m.attivo,`toggleCampo('maniglie','${m.id}','attivo',${m.attivo})`)}</td>
+    <td><button onclick="eliminaRigaAdmin('maniglie','${m.id}','adminManiglie')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
   </tr>`).join('');
   document.getElementById('admin-sub').innerHTML=adminCard('Maniglie',`
-    <table><thead><tr><th>Codice</th><th>Nome</th><th>Serie compatibili</th><th>Prezzo A</th><th>Prezzo P</th><th>Immagine</th><th>Stato</th></tr></thead>
-    <tbody>${rows}</tbody></table>`,
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>Codice</th><th>Nome</th><th>Serie compatibili</th><th>Descrizione</th><th>Prezzo A</th><th>Prezzo P</th><th>Immagine</th><th>Stato</th><th></th></tr></thead>
+      <tbody>${rows}</tbody></table></div>`,
     `<button class="btn btn-red btn-sm" onclick="nuovaRiga('maniglie',{codice:'MAN-NEW',nome:'Nuova maniglia',attivo:true,prezzo_A:0,prezzo_P:0},'adminManiglie')">+ Aggiungi maniglia</button>`);
+}
+
+async function eliminaRigaAdmin(tabella, id, callback){
+  if(!confirm('Eliminare questa riga? L\'operazione non è reversibile.')) return;
+  const {error} = await sb.from(tabella).delete().eq('id',id);
+  if(error){toast('Errore eliminazione: '+error.message,'err');return;}
+  toast('Eliminato','ok');
+  if(callback && window[callback]) window[callback]();
 }
 
 // ══════════════════════════════════════════════════════
