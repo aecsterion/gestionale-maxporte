@@ -1,0 +1,12 @@
+{
+  "name": "gestionale-maxporte",
+  "version": "1.0.0",
+  "description": "Gestionale Max Porte",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
