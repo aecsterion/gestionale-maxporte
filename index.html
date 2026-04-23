@@ -152,6 +152,30 @@ tr.data-row:hover td{background:var(--beige);cursor:pointer}
 /* PBAR */
 .pbar{height:4px;background:var(--beige);border-radius:2px;overflow:hidden;min-width:60px}
 .pfill{height:100%;border-radius:2px;background:var(--red)}
+
+/* RESPONSIVE — ottimizzazione viewport */
+.sidebar{overflow-y:auto}
+.sidebar::-webkit-scrollbar{width:3px}
+.sidebar::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.15);border-radius:3px}
+.content{height:calc(100vh - 50px);overflow-y:auto}
+/* Admin panel full height */
+#admin-main{height:calc(100vh - 110px);overflow-y:auto}
+/* Table scroll */
+.overflow-x-auto{overflow-x:auto;-webkit-overflow-scrolling:touch}
+/* Modal max height adaptive */
+.form-modal{max-height:calc(100vh - 40px)}
+#cfg-body{max-height:calc(100vh - 160px);overflow-y:auto}
+/* Grid responsive */
+@media(max-width:1200px){
+  .grid-4{grid-template-columns:repeat(2,1fr)}
+}
+@media(max-width:900px){
+  .grid-2{grid-template-columns:1fr}
+  .grid-4{grid-template-columns:1fr 1fr}
+  .sidebar{width:180px;min-width:180px}
+}
+/* Card content max-height */
+.card table{width:100%}
 </style>
 </head>
 <body>
@@ -1514,7 +1538,7 @@ async function cfgModello(){
       <div style="font-size:13px;font-weight:500">Seleziona il modello <span style="color:var(--mid);font-weight:400">— Serie ${CFG.nome_serie}</span></div>
       <button class="btn btn-sm" onclick="renderCfgStep('serie')">← Cambia serie</button>
     </div>
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;max-height:380px;overflow-y:auto">${cards}</div>`;
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;max-height:calc(60vh);overflow-y:auto">${cards}</div>`;
 }
 
 async function selModello(cod, nome, prezzo, vetroIncluso, haExtraIncisioni){
@@ -1526,17 +1550,46 @@ async function selModello(cod, nome, prezzo, vetroIncluso, haExtraIncisioni){
   await renderCfgStep('finitura');
 }
 
-// Helper: filtra opzioni in base a regole compatibilità
+// ── SISTEMA UNIVERSALE COMPATIBILITÀ ─────────────────
+// Carica tutte le esclusioni per le scelte correnti del configuratore
+// Logica CUMULATIVA: un'opzione viene esclusa se ALMENO UNA delle scelte precedenti la esclude
+let _compatCache = null; // cache per evitare query ripetute nello stesso step
+
+async function caricaEsclusioni(){
+  // Costruisce lista di tutte le entità già scelte
+  const scelte = [];
+  if(CFG.serie)    scelte.push({tipo:'serie',    codice:CFG.serie});
+  if(CFG.modello)  scelte.push({tipo:'modello',  codice:CFG.modello});
+  if(CFG.finitura) scelte.push({tipo:'finitura', codice:CFG.finitura});
+  if(CFG.apertura) scelte.push({tipo:'apertura', codice:CFG.apertura});
+  if(CFG.ferramenta) scelte.push({tipo:'ferramenta', codice:CFG.ferramenta});
+  if(CFG.colore_alu) scelte.push({tipo:'inserto_alu', codice:CFG.colore_alu});
+  if(CFG.colore_pietra) scelte.push({tipo:'inserto_pietra', codice:CFG.colore_pietra});
+  if(CFG.tipo_vetro) scelte.push({tipo:'vetro', codice:CFG.tipo_vetro});
+  if(scelte.length===0) return new Set();
+
+  // Query: trova tutte le regole dove entita_a è una delle scelte correnti
+  const {data:regole} = await sb.from('regole_compatibilita')
+    .select('entita_b_tipo,entita_b_codice')
+    .in('entita_a_tipo', scelte.map(s=>s.tipo))
+    .filter('entita_a_codice','in',`(${scelte.map(s=>"'"+s.codice.replace(/'/g,"''")+"'").join(',')})`);
+
+  // Filtra solo le regole dove entita_a_codice corrisponde alle scelte effettive
+  const scelteMap = {};
+  scelte.forEach(s=>{ if(!scelteMap[s.tipo]) scelteMap[s.tipo]=new Set(); scelteMap[s.tipo].add(s.codice); });
+  
+  // Costruisce set di esclusi: "tipo:codice"
+  const esclusi = new Set();
+  (regole||[]).forEach(r=>{
+    esclusi.add(r.entita_b_tipo+':'+r.entita_b_codice);
+  });
+  return esclusi;
+}
+
 async function filtraPerCompatibilita(opzioni, categoria, codiceChiave){
-  // Cerca regole per modello prima, poi per serie come fallback
-  const [{data:regMod},{data:regSer}] = await Promise.all([
-    sb.from('modello_opzioni').select('codice_opzione,disponibile').eq('codice_modello',CFG.modello).eq('categoria',categoria),
-    sb.from('serie_opzioni').select('codice_opzione,disponibile').eq('codice_serie',CFG.serie).eq('categoria',categoria),
-  ]);
-  const regole = (regMod&&regMod.length>0) ? regMod : (regSer||[]);
-  if(regole.length===0) return opzioni; // nessuna regola → mostra tutto
-  const disponibili = new Set(regole.filter(r=>r.disponibile).map(r=>r.codice_opzione));
-  return opzioni.filter(op=>disponibili.has(op[codiceChiave]));
+  const esclusi = await caricaEsclusioni();
+  if(esclusi.size===0) return opzioni;
+  return opzioni.filter(op=>!esclusi.has(categoria+':'+op[codiceChiave]));
 }
 
 async function cfgFinitura(){
@@ -1565,7 +1618,7 @@ async function cfgFinitura(){
       <div style="font-size:13px;font-weight:500">Seleziona la finitura <span style="color:var(--mid);font-weight:400">— ${CFG.nome_modello}</span></div>
       <button class="btn btn-sm" onclick="renderCfgStep('modello')">← Cambia modello</button>
     </div>
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;max-height:380px;overflow-y:auto">${cards}</div>`;
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;max-height:calc(60vh);overflow-y:auto">${cards}</div>`;
 }
 
 async function selFinitura(cod, nome, sovr, consenteBugna){
@@ -3361,119 +3414,157 @@ async function calcolaProvvigione(agenteId, scontoEffettivoPct){
 // COMPATIBILITÀ OPZIONI
 // ══════════════════════════════════════════════════════
 async function adminCompatibilita(){
-  // Questa funzione viene chiamata da una tab dedicata
-  const [{data:serie},{data:modelli}] = await Promise.all([
+  // Carica tutte le entità disponibili per i menu
+  const [
+    {data:serie},{data:modelli},{data:finiture},{data:aperture},
+    {data:ferramenta},{data:maniglie},{data:vetri},{data:alu},{data:pietra},
+    {data:regole}
+  ] = await Promise.all([
     sb.from('serie').select('codice,nome').eq('attiva',true).order('nome'),
-    sb.from('modelli').select('codice,nome,codice_serie').eq('attivo',true).order('codice_serie').order('nome'),
+    sb.from('modelli').select('codice,nome').eq('attivo',true).order('nome'),
+    sb.from('finiture').select('codice_finitura as codice,nome_finitura as nome').eq('attiva',true).order('nome_finitura'),
+    sb.from('tipologie_apertura').select('codice,nome').eq('attiva',true).order('codice'),
+    sb.from('ferramenta').select('codice,nome').eq('attivo',true).order('nome'),
+    sb.from('maniglie').select('codice,nome').eq('attivo',true).order('nome'),
+    sb.from('tipi_vetro').select('codice,nome').eq('attivo',true).order('nome'),
+    sb.from('colori_inserto_alluminio').select('codice,nome').order('nome'),
+    sb.from('colori_pietra').select('codice,nome').order('nome'),
+    sb.from('regole_compatibilita').select('*').order('entita_a_tipo').order('entita_a_codice').limit(200),
   ]);
 
-  const filtroTipo = document.getElementById('compat-tipo')?.value||'modello';
-  const filtroCodice = document.getElementById('compat-codice')?.value||modelli?.[0]?.codice||'';
-  const filtroCateg = document.getElementById('compat-categ')?.value||'finitura';
+  const ENTITA = {
+    serie:    {label:'Serie',      items:serie||[],   codKey:'codice',nameKey:'nome'},
+    modello:  {label:'Modello',    items:modelli||[],  codKey:'codice',nameKey:'nome'},
+    finitura: {label:'Finitura',   items:finiture||[], codKey:'codice',nameKey:'nome'},
+    apertura: {label:'Apertura',   items:aperture||[], codKey:'codice',nameKey:'nome'},
+    ferramenta:{label:'Ferramenta',items:ferramenta||[],codKey:'codice',nameKey:'nome'},
+    maniglia: {label:'Maniglia',   items:maniglie||[], codKey:'codice',nameKey:'nome'},
+    vetro:    {label:'Vetro',      items:vetri||[],    codKey:'codice',nameKey:'nome'},
+    inserto_alu:{label:'Inserto alluminio',items:alu||[],codKey:'codice',nameKey:'nome'},
+    inserto_pietra:{label:'Inserto pietra',items:pietra||[],codKey:'codice',nameKey:'nome'},
+  };
 
-  const serieOpts=(serie||[]).map(s=>`<option value="${s.codice}" ${s.codice===filtroCodice&&filtroTipo==='serie'?'selected':''}>${s.codice} — ${s.nome}</option>`).join('');
-  const modelliOpts=(modelli||[]).map(m=>`<option value="${m.codice}" ${m.codice===filtroCodice&&filtroTipo==='modello'?'selected':''}>${m.codice} — ${m.nome}</option>`).join('');
+  // Stato filtri correnti
+  const aTipo = document.getElementById('compat-a-tipo')?.value||'serie';
+  const aCodice = document.getElementById('compat-a-codice')?.value||'';
+  const bTipo = document.getElementById('compat-b-tipo')?.value||'finitura';
 
-  const categorie=['finitura','apertura','vetro','ferramenta','maniglia','inserto_alu','inserto_pietra'];
-  const catLabels={finitura:'Finiture',apertura:'Tipologie apertura',vetro:'Tipi vetro',ferramenta:'Ferramenta',maniglia:'Maniglie',inserto_alu:'Inserto alluminio',inserto_pietra:'Inserto pietra'};
+  const aItems = ENTITA[aTipo]?.items||[];
+  const bItems = ENTITA[bTipo]?.items||[];
 
-  // Carica opzioni disponibili per la categoria scelta
-  let opzioniAll=[];
-  if(filtroCateg==='finitura'){
-    const {data}=await sb.from('finiture').select('codice_finitura as codice,nome_finitura as nome').eq('attivo',true).order('nome_finitura');
-    opzioniAll=data||[];
-  } else if(filtroCateg==='apertura'){
-    const {data}=await sb.from('tipologie_apertura').select('codice,nome').eq('attiva',true).order('codice');
-    opzioniAll=data||[];
-  } else if(filtroCateg==='vetro'){
-    const {data}=await sb.from('tipi_vetro').select('codice,nome').eq('attivo',true).order('nome');
-    opzioniAll=data||[];
-  } else if(filtroCateg==='ferramenta'){
-    const {data}=await sb.from('ferramenta').select('codice,nome').eq('attivo',true).order('nome');
-    opzioniAll=data||[];
-  } else if(filtroCateg==='maniglia'){
-    const {data}=await sb.from('maniglie').select('codice,nome').eq('attivo',true).order('nome');
-    opzioniAll=data||[];
-  } else if(filtroCateg==='inserto_alu'){
-    const {data}=await sb.from('colori_inserto_alluminio').select('codice,nome').order('nome');
-    opzioniAll=data||[];
-  } else if(filtroCateg==='inserto_pietra'){
-    const {data}=await sb.from('colori_pietra').select('codice,nome').order('nome');
-    opzioniAll=data||[];
-  }
+  // Opzioni per i select
+  const tipiOpts = Object.entries(ENTITA).map(([k,v])=>`<option value="${k}">${v.label}</option>`).join('');
 
-  // Carica regole già definite
-  const tabella = filtroTipo==='modello'?'modello_opzioni':'serie_opzioni';
-  const fkCol = filtroTipo==='modello'?'codice_modello':'codice_serie';
-  const {data:regole} = await sb.from(tabella).select('*').eq(fkCol,filtroCodice).eq('categoria',filtroCateg);
-  const regoleMap = {};
-  (regole||[]).forEach(r=>{ regoleMap[r.codice_opzione]=r; });
+  const aCodsOpts = aItems.map(i=>`<option value="${i.codice||i[ENTITA[aTipo].codKey]}" ${(i.codice||i[ENTITA[aTipo].codKey])===aCodice?'selected':''}>${i.codice||i[ENTITA[aTipo].codKey]} — ${i.nome||i[ENTITA[aTipo].nameKey]}</option>`).join('');
 
-  const hasRegole = opzioniAll.length>0 && Object.keys(regoleMap).length>0;
+  // Filtra regole per A selezionato
+  const regoleFiltrate = (regole||[]).filter(r=> (!aCodice || (r.entita_a_tipo===aTipo && r.entita_a_codice===aCodice)));
+  const esclusiB = new Set(regoleFiltrate.filter(r=>r.entita_b_tipo===bTipo).map(r=>r.entita_b_codice));
 
-  const opzioniHtml=opzioniAll.map(op=>{
-    const regola=regoleMap[op.codice];
-    const disponibile=regola?regola.disponibile:null; // null = nessuna regola (mostra tutto)
-    const stato=disponibile===null?'default':disponibile?'si':'no';
-    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border-bottom:0.5px solid var(--border)">
-      <div>
-        <span style="font-size:12px;font-weight:500">${op.codice}</span>
-        <span style="font-size:12px;color:var(--mid);margin-left:8px">${op.nome}</span>
+  // Lista opzioni B con stato
+  const opzioniHtml = bItems.map(op=>{
+    const cod = op.codice||op[ENTITA[bTipo].codKey];
+    const nome = op.nome||op[ENTITA[bTipo].nameKey];
+    const escluso = esclusiB.has(cod);
+    const regola = regoleFiltrate.find(r=>r.entita_b_tipo===bTipo&&r.entita_b_codice===cod);
+    const aNome = aItems.find(i=>(i.codice||i[ENTITA[aTipo].codKey])===aCodice)?.nome||aCodice;
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border-bottom:0.5px solid var(--border);background:${escluso?'var(--red-bg)':'transparent'}">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:13px">${escluso?'🚫':'✓'}</span>
+        <span style="font-size:12px;font-weight:500;color:${escluso?'var(--red-tx)':'var(--dark)'}">${cod}</span>
+        <span style="font-size:12px;color:${escluso?'var(--red-tx)':'var(--mid)'}">${nome}</span>
       </div>
-      <div style="display:flex;gap:6px">
-        <button onclick="setCompat('${tabella}','${fkCol}','${filtroCodice}','${filtroCateg}','${op.codice}',true${regola?`,'${regola.id}'`:''})" style="padding:3px 10px;border-radius:4px;border:0.5px solid;font-size:11px;cursor:pointer;font-family:inherit;
-          background:${stato==='si'?'var(--green-bg)':'var(--white)'};color:${stato==='si'?'var(--green-tx)':'var(--mid)'};border-color:${stato==='si'?'var(--green-tx)':'var(--border)'}">✓ Disponibile</button>
-        <button onclick="setCompat('${tabella}','${fkCol}','${filtroCodice}','${filtroCateg}','${op.codice}',false${regola?`,'${regola.id}'`:''})" style="padding:3px 10px;border-radius:4px;border:0.5px solid;font-size:11px;cursor:pointer;font-family:inherit;
-          background:${stato==='no'?'var(--red-bg)':'var(--white)'};color:${stato==='no'?'var(--red-tx)':'var(--mid)'};border-color:${stato==='no'?'var(--red)':'var(--border)'}">✗ Non disponibile</button>
-        ${regola?`<button onclick="rimuoviCompat('${tabella}','${regola.id}')" style="padding:3px 8px;border-radius:4px;border:0.5px solid var(--border);font-size:11px;cursor:pointer;background:none;color:var(--mid);font-family:inherit" title="Rimuovi regola (torna a default)">↺</button>`:''}
-      </div>
+      ${aCodice
+        ? escluso
+          ? `<button onclick="rimuoviRegola('${regola?.id}')" style="padding:3px 12px;border-radius:4px;border:0.5px solid var(--green-tx);font-size:11px;cursor:pointer;background:var(--green-bg);color:var(--green-tx);font-family:inherit">↺ Riabilita</button>`
+          : `<button onclick="aggiungiRegola('${aTipo}','${aCodice}','${aNome.replace(/'/g,"\'")}','${bTipo}','${cod}','${nome.replace(/'/g,"\'")}');" style="padding:3px 12px;border-radius:4px;border:0.5px solid var(--border);font-size:11px;cursor:pointer;background:none;color:var(--mid);font-family:inherit">🚫 Escludi</button>`
+        : '<span style="font-size:11px;color:var(--mid)">Seleziona un valore A</span>'
+      }
     </div>`;
   }).join('');
 
+  // Lista tutte le regole esistenti
+  const tutteRegole = (regole||[]).map(r=>`<tr style="font-size:12px">
+    <td style="padding:5px 8px"><span class="tag" style="font-size:10px">${ENTITA[r.entita_a_tipo]?.label||r.entita_a_tipo}</span></td>
+    <td style="padding:5px 8px;font-weight:500">${r.entita_a_codice}</td>
+    <td style="padding:5px 8px;color:var(--mid)">${r.entita_a_nome||''}</td>
+    <td style="padding:5px 8px;color:var(--mid)">→ esclude</td>
+    <td style="padding:5px 8px"><span class="tag" style="font-size:10px;background:var(--red-bg);color:var(--red-tx)">${ENTITA[r.entita_b_tipo]?.label||r.entita_b_tipo}</span></td>
+    <td style="padding:5px 8px;font-weight:500;color:var(--red-tx)">${r.entita_b_codice}</td>
+    <td style="padding:5px 8px;color:var(--mid)">${r.entita_b_nome||''}</td>
+    <td style="padding:5px 8px"><button onclick="rimuoviRegola('${r.id}')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
+  </tr>`).join('');
+
   document.getElementById('admin-main').innerHTML=`
-  <div style="background:var(--amber-bg);border-radius:var(--radius);padding:10px 14px;font-size:12px;color:var(--amber-tx);margin-bottom:14px">
-    <strong>Come funziona:</strong> se non imposti nessuna regola per una categoria, il configuratore mostra tutte le opzioni disponibili (comportamento attuale).
-    Una volta che definisci almeno una regola per una combinazione, solo le opzioni marcate "Disponibile" verranno mostrate nel configuratore.
-    Il pulsante ↺ rimuove la regola e torna al comportamento default.
-  </div>
-  <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
-    <div style="display:flex;align-items:center;gap:6px">
-      <label style="font-size:12px;color:var(--mid)">Filtra per:</label>
-      <select id="compat-tipo" onchange="adminCompatibilita()" style="padding:5px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit">
-        <option value="modello" ${filtroTipo==='modello'?'selected':''}>Modello</option>
-        <option value="serie" ${filtroTipo==='serie'?'selected':''}>Serie</option>
-      </select>
+  <div style="display:flex;gap:14px;height:calc(100vh - 110px);overflow:hidden">
+
+    <!-- Pannello sinistro: crea nuove regole -->
+    <div style="width:420px;min-width:420px;display:flex;flex-direction:column;gap:10px">
+      ${adminCard('Aggiungi regola di esclusione',`
+        <div style="background:var(--green-bg);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--green-tx);margin-bottom:12px">
+          Tutto è disponibile per default. Definisci solo le esclusioni: <em>"Se si sceglie A → escludi B"</em>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+          <div>
+            <div style="font-size:11px;color:var(--mid);margin-bottom:4px;font-weight:500">SE SI SCEGLIE...</div>
+            <select id="compat-a-tipo" onchange="adminCompatibilita()" style="width:100%;padding:6px 8px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:12px;font-family:inherit;margin-bottom:6px">
+              ${Object.entries(ENTITA).map(([k,v])=>`<option value="${k}" ${k===aTipo?'selected':''}>${v.label}</option>`).join('')}
+            </select>
+            <select id="compat-a-codice" onchange="adminCompatibilita()" style="width:100%;padding:6px 8px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:12px;font-family:inherit">
+              <option value="">— Seleziona —</option>
+              ${aCodsOpts}
+            </select>
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--mid);margin-bottom:4px;font-weight:500">...ESCLUDI QUESTA OPZIONE</div>
+            <select id="compat-b-tipo" onchange="adminCompatibilita()" style="width:100%;padding:6px 8px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:12px;font-family:inherit;margin-bottom:6px">
+              ${Object.entries(ENTITA).map(([k,v])=>`<option value="${k}" ${k===bTipo?'selected':''}>${v.label}</option>`).join('')}
+            </select>
+            <div style="font-size:11px;color:var(--mid)">${bItems.length} opzioni disponibili</div>
+          </div>
+        </div>
+        <div style="max-height:calc(100vh - 380px);overflow-y:auto;border:0.5px solid var(--border);border-radius:var(--radius)">
+          ${aCodice
+            ? opzioniHtml||'<div style="padding:16px;text-align:center;color:var(--mid);font-size:12px">Nessuna opzione B per questa categoria</div>'
+            : '<div style="padding:20px;text-align:center;color:var(--mid);font-size:12px">Seleziona prima un valore A per vedere le opzioni</div>'}
+        </div>
+      `)}
     </div>
-    <select id="compat-codice" onchange="adminCompatibilita()" style="padding:5px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit;min-width:200px">
-      ${filtroTipo==='modello'?modelliOpts:serieOpts}
-    </select>
-    <div style="display:flex;align-items:center;gap:6px">
-      <label style="font-size:12px;color:var(--mid)">Categoria:</label>
-      <select id="compat-categ" onchange="adminCompatibilita()" style="padding:5px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit">
-        ${categorie.map(c=>`<option value="${c}" ${c===filtroCateg?'selected':''}>${catLabels[c]}</option>`).join('')}
-      </select>
+
+    <!-- Pannello destro: elenco tutte le regole -->
+    <div style="flex:1;overflow-y:auto">
+      ${adminCard(`Tutte le regole attive (${regole?.length||0})`,`
+        ${tutteRegole
+          ? `<div style="overflow-x:auto"><table style="width:100%">
+              <thead><tr><th>Se tipo A</th><th>Codice A</th><th>Nome A</th><th></th><th>Esclude B</th><th>Codice B</th><th>Nome B</th><th></th></tr></thead>
+              <tbody>${tutteRegole}</tbody>
+            </table></div>`
+          : '<div style="padding:20px;text-align:center;color:var(--mid);font-style:italic">Nessuna regola ancora — tutte le combinazioni sono disponibili</div>'}
+      `)}
     </div>
-  </div>
-  ${adminCard(`${catLabels[filtroCateg]} disponibili per ${filtroCodice}`,`
-    ${!hasRegole?'<div style="background:var(--green-bg);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--green-tx);margin-bottom:10px">Nessuna regola definita — il configuratore mostra tutte le opzioni. Imposta le regole qui sotto per filtrare.</div>':''}
-    <div style="max-height:500px;overflow-y:auto">${opzioniHtml||'<div style="padding:20px;text-align:center;color:var(--mid)">Nessuna opzione disponibile per questa categoria</div>'}</div>`)}`;
+  </div>`;
 }
 
-async function setCompat(tabella, fkCol, codice, categoria, codiceOpzione, disponibile, esistenteId){
-  if(esistenteId){
-    await sb.from(tabella).update({disponibile}).eq('id',esistenteId);
-  } else {
-    await sb.from(tabella).insert([{[fkCol]:codice,categoria,codice_opzione:codiceOpzione,disponibile}]);
-  }
-  toast(disponibile?'Opzione abilitata':'Opzione disabilitata','ok');
+async function aggiungiRegola(aTipo, aCodice, aNome, bTipo, bCodice, bNome){
+  const {error}=await sb.from('regole_compatibilita').insert([{
+    entita_a_tipo:aTipo, entita_a_codice:aCodice, entita_a_nome:aNome,
+    entita_b_tipo:bTipo, entita_b_codice:bCodice, entita_b_nome:bNome,
+    creato_da:currentUser?.id
+  }]);
+  if(error){toast('Già esiste o errore: '+error.message,'err');return;}
+  toast('Regola aggiunta','ok');
   adminCompatibilita();
 }
 
-async function rimuoviCompat(tabella, id){
-  await sb.from(tabella).delete().eq('id',id);
-  toast('Regola rimossa — torna al default','ok');
+async function rimuoviRegola(id){
+  await sb.from('regole_compatibilita').delete().eq('id',id);
+  toast('Regola rimossa','ok');
   adminCompatibilita();
 }
+
+// compatibilità legacy (usata dal vecchio sistema)
+async function setCompatEscludi(){ adminCompatibilita(); }
+async function rimuoviCompat(t,id){ await rimuoviRegola(id); }
 
 // ══════════════════════════════════════════════════════
 // IMPOSTAZIONI
