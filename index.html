@@ -1526,13 +1526,30 @@ async function selModello(cod, nome, prezzo, vetroIncluso, haExtraIncisioni){
   await renderCfgStep('finitura');
 }
 
+// Helper: filtra opzioni in base a regole compatibilità
+async function filtraPerCompatibilita(opzioni, categoria, codiceChiave){
+  // Cerca regole per modello prima, poi per serie come fallback
+  const [{data:regMod},{data:regSer}] = await Promise.all([
+    sb.from('modello_opzioni').select('codice_opzione,disponibile').eq('codice_modello',CFG.modello).eq('categoria',categoria),
+    sb.from('serie_opzioni').select('codice_opzione,disponibile').eq('codice_serie',CFG.serie).eq('categoria',categoria),
+  ]);
+  const regole = (regMod&&regMod.length>0) ? regMod : (regSer||[]);
+  if(regole.length===0) return opzioni; // nessuna regola → mostra tutto
+  const disponibili = new Set(regole.filter(r=>r.disponibile).map(r=>r.codice_opzione));
+  return opzioni.filter(op=>disponibili.has(op[codiceChiave]));
+}
+
 async function cfgFinitura(){
-  const {data} = await sb.from('finiture')
+  const {data:tutteFiniture} = await sb.from('finiture')
     .select('*')
     .eq('codice_serie',CFG.serie)
     .or(`codice_modello.is.null,codice_modello.eq.${CFG.modello}`)
     .eq('attiva',true)
     .order('nome_finitura');
+
+  // Applica filtro compatibilità
+  const data = await filtraPerCompatibilita(tutteFiniture||[], 'finitura', 'codice_finitura');
+
   const cards=(data||[]).map(f=>{
     const sp = f[`sovrapprezzo_${listino()}`]||0;
     return `<div onclick="selFinitura('${f.codice_finitura}','${f.nome_finitura.replace(/'/g,"\\'")}',${sp},${!!f.consente_bugna})"
@@ -1958,10 +1975,14 @@ function avanzaAFerramenta(){
 }
 
 async function cfgFerramenta(){
-  const [{data:ferr},{data:man}] = await Promise.all([
+  const [{data:tuttaFerr},{data:tutteMan}] = await Promise.all([
     sb.from('ferramenta').select('*').eq('attivo',true).order('nome'),
     sb.from('maniglie').select('*').eq('attivo',true).order('nome'),
   ]);
+
+  // Applica filtro compatibilità
+  const ferr = await filtraPerCompatibilita(tuttaFerr||[], 'ferramenta', 'codice');
+  const man = await filtraPerCompatibilita(tutteMan||[], 'maniglia', 'codice');
 
   const rowsFerr=(ferr||[]).map(f=>{
     const sp=f[`sovrapprezzo_${listino()}`]||0;
@@ -2278,6 +2299,14 @@ async function salvaNuovoDoc(){
   const netto=imponibile*(1-(sc1/100))*(1-(sc2/100));
   const haCustom=CFG_RIGHE.some(r=>r.misura_custom);
 
+  // Calcola sconto effettivo e provvigione agente
+  const scontoEff = ((1-(1-sc1/100)*(1-sc2/100))*100);
+  let provvPct=0; let provvEuro=0;
+  if(agenteId){
+    provvPct = await calcolaProvvigione(agenteId, scontoEff);
+    provvEuro = Math.round(netto*(provvPct/100)*100)/100;
+  }
+
   const tabDoc = mode==='preventivo'?'preventivi':'ordini_vendita';
   const numSeq = await sb.rpc('nextval',{sequence_name:`seq_${mode==='preventivo'?'preventivi':'ordini'}`}).then(r=>r.data).catch(()=>Date.now());
   const numero = (mode==='preventivo'?'PRV':'ORD')+'-'+new Date().getFullYear()+'-'+(String(numSeq||Date.now()).slice(-4));
@@ -2289,6 +2318,7 @@ async function salvaNuovoDoc(){
     citta_destinazione:cit, provincia_destinazione:prv,
     trasporto, note,
     totale_imponibile:imponibile, totale_netto:netto,
+    provvigione_pct:provvPct, provvigione_euro:provvEuro,
     creato_da:currentUser?.id,
     ...(mode==='ordine'?{richiede_approvazione_tecnica:haCustom}:{})
   };
@@ -2573,6 +2603,7 @@ const ADMIN_SECTIONS = [
   {id:'prezzi',      label:'Prezzi e listini',  icon:'M8 1l2 5h5l-4 3 1.5 5L8 11l-4.5 3L5 9 1 6h5z'},
   {id:'telaio',      label:'Telaio e componenti',icon:'M2 8h12M8 2v12'},
   {id:'distinte',    label:'Distinte base',     icon:'M3 3h10v2H3zM3 7h10v2H3zM3 11h6v2H3z'},
+  {id:'compatibilita',label:'Compatibilità',    icon:'M2 8h5M9 8h5M8 2v5M8 9v5'},
   {id:'agenti',      label:'Agenti',            icon:'M8 5a3 3 0 100 6 3 3 0 000-6zM2 14c0-3 2-5 6-5s6 2 6 5'},
   {id:'impostazioni',label:'Impostazioni',      icon:'M8 5a3 3 0 100 6M8 1v2M8 13v2M1 8h2M13 8h2'},
 ];
@@ -2624,6 +2655,7 @@ function loadAdminSection(){
   else if(adminSection==='prezzi') adminPrezzi();
   else if(adminSection==='telaio') adminTelaioPanel();
   else if(adminSection==='distinte') adminDistinte();
+  else if(adminSection==='compatibilita') adminCompatibilita();
   else if(adminSection==='agenti') adminAgenti();
   else if(adminSection==='impostazioni') adminImpostazioni();
 }
@@ -3200,20 +3232,51 @@ async function eliminaDistinta(id){
 // AGENTI
 // ══════════════════════════════════════════════════════
 async function adminAgenti(){
-  const {data} = await sb.from('agenti').select('*').order('cognome');
-  const rows=(data||[]).map(a=>`<tr>
+  const [{data:agenti},{data:scala}] = await Promise.all([
+    sb.from('agenti').select('*').order('cognome'),
+    sb.from('provvigioni_scala').select('*').eq('attivo',true).order('sconto_da_pct'),
+  ]);
+
+  const rowsAgenti=(agenti||[]).map(a=>`<tr>
     <td>${inlineInput(a.nome,`adminSalva('agenti','${a.id}','nome',this.value)`,'100px','text')}</td>
     <td>${inlineInput(a.cognome,`adminSalva('agenti','${a.id}','cognome',this.value)`,'120px','text')}</td>
     <td>${inlineInput(a.email||'',`adminSalva('agenti','${a.id}','email',this.value)`,'160px','text','email')}</td>
     <td>${inlineInput(a.telefono||'',`adminSalva('agenti','${a.id}','telefono',this.value)`,'120px','text')}</td>
     <td>${inlineInput(a.zona||'',`adminSalva('agenti','${a.id}','zona',this.value)`,'100px','text','es. Piemonte')}</td>
-    <td>${inlineInput(a.percentuale_provvigione??0,`adminSalva('agenti','${a.id}','percentuale_provvigione',this.value)`,'55px')} %</td>
+    <td>
+      <button onclick="adminScalaAgente('${a.id}','${a.nome} ${a.cognome}')" class="btn btn-sm" style="font-size:11px">
+        Scala personalizzata
+      </button>
+    </td>
     <td>${adminToggle(a.attivo,`toggleCampo('agenti','${a.id}','attivo',${a.attivo})`)}</td>
+    <td><button onclick="eliminaRigaAdmin('agenti','${a.id}','adminAgenti')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
   </tr>`).join('');
-  document.getElementById('admin-main').innerHTML=adminCard('Agenti Max Porte',`
-    <table><thead><tr><th>Nome</th><th>Cognome</th><th>Email</th><th>Telefono</th><th>Zona</th><th>Provvigione</th><th>Stato</th></tr></thead>
-    <tbody>${rows||'<tr><td colspan="7" style="text-align:center;color:var(--mid);padding:20px">Nessun agente ancora</td></tr>'}</tbody></table>`,
-    `<button class="btn btn-red btn-sm" onclick="nuovoAgente()">+ Aggiungi agente</button>`);
+
+  const rowsScala=(scala||[]).map(s=>`<tr>
+    <td>${inlineInput(s.sconto_da_pct,`adminSalva('provvigioni_scala','${s.id}','sconto_da_pct',this.value)`,'55px')} %</td>
+    <td>${inlineInput(s.sconto_a_pct,`adminSalva('provvigioni_scala','${s.id}','sconto_a_pct',this.value)`,'55px')} %</td>
+    <td>${inlineInput(s.provvigione_pct,`adminSalva('provvigioni_scala','${s.id}','provvigione_pct',this.value)`,'55px')} %</td>
+    <td>${inlineInput(s.note||'',`adminSalva('provvigioni_scala','${s.id}','note',this.value)`,'200px','text','')}</td>
+    <td><button onclick="eliminaRigaAdmin('provvigioni_scala','${s.id}','adminAgenti')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
+  </tr>`).join('');
+
+  document.getElementById('admin-main').innerHTML=`
+  <div class="grid-2" style="gap:14px">
+    ${adminCard('Agenti Max Porte',`
+      <table><thead><tr><th>Nome</th><th>Cognome</th><th>Email</th><th>Telefono</th><th>Zona</th><th>Scala provv.</th><th>Stato</th><th></th></tr></thead>
+      <tbody>${rowsAgenti||'<tr><td colspan="8" style="text-align:center;color:var(--mid);padding:20px">Nessun agente ancora</td></tr>'}</tbody></table>`,
+      `<button class="btn btn-red btn-sm" onclick="nuovoAgente()">+ Aggiungi agente</button>`)}
+    ${adminCard('Scala provvigioni globale',`
+      <div style="background:var(--blue-bg);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--blue-tx);margin-bottom:10px">
+        All'abbassarsi dello sconto applicato al cliente, la provvigione dell'agente aumenta.<br>
+        Se un agente ha una scala personalizzata, questa globale viene ignorata per quell'agente.
+      </div>
+      <table>
+        <thead><tr><th>Sconto da %</th><th>Sconto a %</th><th>Provvigione %</th><th>Note</th><th></th></tr></thead>
+        <tbody>${rowsScala}</tbody>
+      </table>`,
+      `<button class="btn btn-red btn-sm" onclick="nuovaFasciaScala()">+ Aggiungi fascia</button>`)}
+  </div>`;
 }
 
 async function nuovoAgente(){
@@ -3222,6 +3285,194 @@ async function nuovoAgente(){
   const {error}=await sb.from('agenti').insert([{nome,cognome,attivo:true,percentuale_provvigione:0}]);
   if(error){toast('Errore: '+error.message,'err');return;}
   toast('Agente aggiunto','ok'); adminAgenti();
+}
+
+async function nuovaFasciaScala(){
+  const da=parseFloat(prompt('Sconto da % (incluso):')||'0');
+  const a=parseFloat(prompt('Sconto a % (incluso):')||'0');
+  const prov=parseFloat(prompt('Provvigione %:')||'0');
+  if(isNaN(da)||isNaN(a)||isNaN(prov)) return;
+  const {error}=await sb.from('provvigioni_scala').insert([{sconto_da_pct:da,sconto_a_pct:a,provvigione_pct:prov}]);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Fascia aggiunta','ok'); adminAgenti();
+}
+
+async function adminScalaAgente(agenteId, nomeAgente){
+  const {data:scala} = await sb.from('provvigioni_scala_agente').select('*').eq('agente_id',agenteId).order('sconto_da_pct');
+  const {data:globale} = await sb.from('provvigioni_scala').select('*').eq('attivo',true).order('sconto_da_pct');
+
+  const rows=(scala||[]).map(s=>`<tr>
+    <td>${inlineInput(s.sconto_da_pct,`adminSalva('provvigioni_scala_agente','${s.id}','sconto_da_pct',this.value)`,'55px')} %</td>
+    <td>${inlineInput(s.sconto_a_pct,`adminSalva('provvigioni_scala_agente','${s.id}','sconto_a_pct',this.value)`,'55px')} %</td>
+    <td>${inlineInput(s.provvigione_pct,`adminSalva('provvigioni_scala_agente','${s.id}','provvigione_pct',this.value)`,'55px')} %</td>
+    <td><button onclick="eliminaRigaAdmin('provvigioni_scala_agente','${s.id}','adminAgenti')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
+  </tr>`).join('');
+
+  const globaleHtml=(globale||[]).map(s=>`<span style="font-size:11px;color:var(--mid)">
+    ${s.sconto_da_pct}–${s.sconto_a_pct}% → ${s.provvigione_pct}%
+  </span>`).join(' | ');
+
+  document.getElementById('admin-main').innerHTML=`
+  <div style="margin-bottom:14px">
+    <button class="btn btn-sm" onclick="adminAgenti()">← Torna agli agenti</button>
+  </div>
+  <div class="card">
+    <div class="card-header"><span class="card-title">Scala provvigioni personalizzata — ${nomeAgente}</span>
+      <button class="btn btn-red btn-sm" onclick="nuovaFasciaScalaAgente('${agenteId}')">+ Aggiungi fascia</button>
+    </div>
+    ${rows?`<table><thead><tr><th>Sconto da %</th><th>Sconto a %</th><th>Provvigione %</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+    :'<div style="padding:16px;text-align:center;color:var(--mid);font-size:13px">Nessuna scala personalizzata — viene usata la scala globale:<br><br>'+globaleHtml+'</div>'}
+    ${rows?`<div style="margin-top:10px;font-size:12px;color:var(--mid)">Scala globale (ignorata): ${globaleHtml}</div>`:''}
+  </div>`;
+}
+
+async function nuovaFasciaScalaAgente(agenteId){
+  const da=parseFloat(prompt('Sconto da % (incluso):')||'0');
+  const a=parseFloat(prompt('Sconto a % (incluso):')||'0');
+  const prov=parseFloat(prompt('Provvigione %:')||'0');
+  if(isNaN(da)||isNaN(a)||isNaN(prov)) return;
+  const {error}=await sb.from('provvigioni_scala_agente').insert([{agente_id:agenteId,sconto_da_pct:da,sconto_a_pct:a,provvigione_pct:prov}]);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Fascia aggiunta','ok'); adminScalaAgente(agenteId,'');
+}
+
+// Calcola provvigione in base allo sconto effettivo
+async function calcolaProvvigione(agenteId, scontoEffettivoPct){
+  if(!agenteId) return 0;
+  // Prima cerca scala personalizzata
+  const {data:pers} = await sb.from('provvigioni_scala_agente')
+    .select('provvigione_pct')
+    .eq('agente_id',agenteId)
+    .lte('sconto_da_pct',scontoEffettivoPct)
+    .gte('sconto_a_pct',scontoEffettivoPct)
+    .single();
+  if(pers?.provvigione_pct!=null) return pers.provvigione_pct;
+  // Fallback scala globale
+  const {data:glob} = await sb.from('provvigioni_scala')
+    .select('provvigione_pct')
+    .eq('attivo',true)
+    .lte('sconto_da_pct',scontoEffettivoPct)
+    .gte('sconto_a_pct',scontoEffettivoPct)
+    .single();
+  return glob?.provvigione_pct || 0;
+}
+
+// ══════════════════════════════════════════════════════
+// COMPATIBILITÀ OPZIONI
+// ══════════════════════════════════════════════════════
+async function adminCompatibilita(){
+  // Questa funzione viene chiamata da una tab dedicata
+  const [{data:serie},{data:modelli}] = await Promise.all([
+    sb.from('serie').select('codice,nome').eq('attiva',true).order('nome'),
+    sb.from('modelli').select('codice,nome,codice_serie').eq('attivo',true).order('codice_serie').order('nome'),
+  ]);
+
+  const filtroTipo = document.getElementById('compat-tipo')?.value||'modello';
+  const filtroCodice = document.getElementById('compat-codice')?.value||modelli?.[0]?.codice||'';
+  const filtroCateg = document.getElementById('compat-categ')?.value||'finitura';
+
+  const serieOpts=(serie||[]).map(s=>`<option value="${s.codice}" ${s.codice===filtroCodice&&filtroTipo==='serie'?'selected':''}>${s.codice} — ${s.nome}</option>`).join('');
+  const modelliOpts=(modelli||[]).map(m=>`<option value="${m.codice}" ${m.codice===filtroCodice&&filtroTipo==='modello'?'selected':''}>${m.codice} — ${m.nome}</option>`).join('');
+
+  const categorie=['finitura','apertura','vetro','ferramenta','maniglia','inserto_alu','inserto_pietra'];
+  const catLabels={finitura:'Finiture',apertura:'Tipologie apertura',vetro:'Tipi vetro',ferramenta:'Ferramenta',maniglia:'Maniglie',inserto_alu:'Inserto alluminio',inserto_pietra:'Inserto pietra'};
+
+  // Carica opzioni disponibili per la categoria scelta
+  let opzioniAll=[];
+  if(filtroCateg==='finitura'){
+    const {data}=await sb.from('finiture').select('codice_finitura as codice,nome_finitura as nome').eq('attivo',true).order('nome_finitura');
+    opzioniAll=data||[];
+  } else if(filtroCateg==='apertura'){
+    const {data}=await sb.from('tipologie_apertura').select('codice,nome').eq('attiva',true).order('codice');
+    opzioniAll=data||[];
+  } else if(filtroCateg==='vetro'){
+    const {data}=await sb.from('tipi_vetro').select('codice,nome').eq('attivo',true).order('nome');
+    opzioniAll=data||[];
+  } else if(filtroCateg==='ferramenta'){
+    const {data}=await sb.from('ferramenta').select('codice,nome').eq('attivo',true).order('nome');
+    opzioniAll=data||[];
+  } else if(filtroCateg==='maniglia'){
+    const {data}=await sb.from('maniglie').select('codice,nome').eq('attivo',true).order('nome');
+    opzioniAll=data||[];
+  } else if(filtroCateg==='inserto_alu'){
+    const {data}=await sb.from('colori_inserto_alluminio').select('codice,nome').order('nome');
+    opzioniAll=data||[];
+  } else if(filtroCateg==='inserto_pietra'){
+    const {data}=await sb.from('colori_pietra').select('codice,nome').order('nome');
+    opzioniAll=data||[];
+  }
+
+  // Carica regole già definite
+  const tabella = filtroTipo==='modello'?'modello_opzioni':'serie_opzioni';
+  const fkCol = filtroTipo==='modello'?'codice_modello':'codice_serie';
+  const {data:regole} = await sb.from(tabella).select('*').eq(fkCol,filtroCodice).eq('categoria',filtroCateg);
+  const regoleMap = {};
+  (regole||[]).forEach(r=>{ regoleMap[r.codice_opzione]=r; });
+
+  const hasRegole = opzioniAll.length>0 && Object.keys(regoleMap).length>0;
+
+  const opzioniHtml=opzioniAll.map(op=>{
+    const regola=regoleMap[op.codice];
+    const disponibile=regola?regola.disponibile:null; // null = nessuna regola (mostra tutto)
+    const stato=disponibile===null?'default':disponibile?'si':'no';
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border-bottom:0.5px solid var(--border)">
+      <div>
+        <span style="font-size:12px;font-weight:500">${op.codice}</span>
+        <span style="font-size:12px;color:var(--mid);margin-left:8px">${op.nome}</span>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button onclick="setCompat('${tabella}','${fkCol}','${filtroCodice}','${filtroCateg}','${op.codice}',true${regola?`,'${regola.id}'`:''})" style="padding:3px 10px;border-radius:4px;border:0.5px solid;font-size:11px;cursor:pointer;font-family:inherit;
+          background:${stato==='si'?'var(--green-bg)':'var(--white)'};color:${stato==='si'?'var(--green-tx)':'var(--mid)'};border-color:${stato==='si'?'var(--green-tx)':'var(--border)'}">✓ Disponibile</button>
+        <button onclick="setCompat('${tabella}','${fkCol}','${filtroCodice}','${filtroCateg}','${op.codice}',false${regola?`,'${regola.id}'`:''})" style="padding:3px 10px;border-radius:4px;border:0.5px solid;font-size:11px;cursor:pointer;font-family:inherit;
+          background:${stato==='no'?'var(--red-bg)':'var(--white)'};color:${stato==='no'?'var(--red-tx)':'var(--mid)'};border-color:${stato==='no'?'var(--red)':'var(--border)'}">✗ Non disponibile</button>
+        ${regola?`<button onclick="rimuoviCompat('${tabella}','${regola.id}')" style="padding:3px 8px;border-radius:4px;border:0.5px solid var(--border);font-size:11px;cursor:pointer;background:none;color:var(--mid);font-family:inherit" title="Rimuovi regola (torna a default)">↺</button>`:''}
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('admin-main').innerHTML=`
+  <div style="background:var(--amber-bg);border-radius:var(--radius);padding:10px 14px;font-size:12px;color:var(--amber-tx);margin-bottom:14px">
+    <strong>Come funziona:</strong> se non imposti nessuna regola per una categoria, il configuratore mostra tutte le opzioni disponibili (comportamento attuale).
+    Una volta che definisci almeno una regola per una combinazione, solo le opzioni marcate "Disponibile" verranno mostrate nel configuratore.
+    Il pulsante ↺ rimuove la regola e torna al comportamento default.
+  </div>
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:6px">
+      <label style="font-size:12px;color:var(--mid)">Filtra per:</label>
+      <select id="compat-tipo" onchange="adminCompatibilita()" style="padding:5px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit">
+        <option value="modello" ${filtroTipo==='modello'?'selected':''}>Modello</option>
+        <option value="serie" ${filtroTipo==='serie'?'selected':''}>Serie</option>
+      </select>
+    </div>
+    <select id="compat-codice" onchange="adminCompatibilita()" style="padding:5px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit;min-width:200px">
+      ${filtroTipo==='modello'?modelliOpts:serieOpts}
+    </select>
+    <div style="display:flex;align-items:center;gap:6px">
+      <label style="font-size:12px;color:var(--mid)">Categoria:</label>
+      <select id="compat-categ" onchange="adminCompatibilita()" style="padding:5px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit">
+        ${categorie.map(c=>`<option value="${c}" ${c===filtroCateg?'selected':''}>${catLabels[c]}</option>`).join('')}
+      </select>
+    </div>
+  </div>
+  ${adminCard(`${catLabels[filtroCateg]} disponibili per ${filtroCodice}`,`
+    ${!hasRegole?'<div style="background:var(--green-bg);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--green-tx);margin-bottom:10px">Nessuna regola definita — il configuratore mostra tutte le opzioni. Imposta le regole qui sotto per filtrare.</div>':''}
+    <div style="max-height:500px;overflow-y:auto">${opzioniHtml||'<div style="padding:20px;text-align:center;color:var(--mid)">Nessuna opzione disponibile per questa categoria</div>'}</div>`)}`;
+}
+
+async function setCompat(tabella, fkCol, codice, categoria, codiceOpzione, disponibile, esistenteId){
+  if(esistenteId){
+    await sb.from(tabella).update({disponibile}).eq('id',esistenteId);
+  } else {
+    await sb.from(tabella).insert([{[fkCol]:codice,categoria,codice_opzione:codiceOpzione,disponibile}]);
+  }
+  toast(disponibile?'Opzione abilitata':'Opzione disabilitata','ok');
+  adminCompatibilita();
+}
+
+async function rimuoviCompat(tabella, id){
+  await sb.from(tabella).delete().eq('id',id);
+  toast('Regola rimossa — torna al default','ok');
+  adminCompatibilita();
 }
 
 // ══════════════════════════════════════════════════════
