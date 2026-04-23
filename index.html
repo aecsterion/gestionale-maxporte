@@ -286,7 +286,7 @@ tr.data-row:hover td{background:var(--beige);cursor:pointer}
         <div class="form-grid">
           <div class="form-field">
             <label>Tipo <span class="req">*</span></label>
-            <select id="ana-tipo">
+            <select id="ana-tipo" onchange="aggiornaCampiPerTipo(this.value)">
               <option value="">Seleziona...</option>
               <option value="cliente">Cliente</option>
               <option value="fornitore">Fornitore</option>
@@ -502,10 +502,13 @@ tr.data-row:hover td{background:var(--beige);cursor:pointer}
             <input type="number" id="ana-fido" placeholder="Es: 10000" min="0">
           </div>
           <div class="form-field">
-            <label>Agente di zona</label>
-            <input type="text" id="ana-agente" placeholder="Nome agente">
+            <label>Agente di riferimento Max Porte</label>
+            <select id="ana-agente-id">
+              <option value="">— Nessun agente —</option>
+            </select>
           </div>
         </div>
+        <div id="ana-section-fornitore">
         <div class="form-section">Solo fornitori</div>
         <div class="form-grid">
           <div class="form-field">
@@ -737,7 +740,9 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let currentSection = 'dashboard';
 let currentUser = null;
-let currentRuolo = null;
+let currentRuolo = null;      // ruolo principale
+let currentRuoli = [];        // tutti i ruoli dell'utente
+let currentPermessi = new Set();
 
 // ── DATE ──────────────────────────────────────────────
 document.getElementById('topbar-date').textContent = new Date().toLocaleDateString('it-IT',{day:'numeric',month:'long',year:'numeric'});
@@ -746,23 +751,32 @@ document.getElementById('topbar-date').textContent = new Date().toLocaleDateStri
 const RUOLI_LABEL = {
   super_admin:'Super Admin', admin:'Admin',
   resp_commerciale:'Resp. Commerciale', resp_tecnico:'Resp. Tecnico',
-  agente:'Agente', magazzino:'Magazzino', sola_lettura:'Sola lettura'
+  agente:'Agente', back_office:'Back Office',
+  magazzino:'Magazzino', sola_lettura:'Sola lettura'
 };
 
-function isAdmin(){ return currentRuolo==='admin'||currentRuolo==='super_admin'; }
-function isSuperAdmin(){ return currentRuolo==='super_admin'; }
+function haPerm(perm){ return isSuperAdmin() || currentPermessi.has(perm); }
+function isAdmin(){ return currentRuoli.includes('admin')||currentRuoli.includes('super_admin'); }
+function isSuperAdmin(){ return currentRuoli.includes('super_admin'); }
+function isRespComm(){ return isSuperAdmin()||currentRuoli.includes('resp_commerciale')||currentRuoli.includes('back_office'); }
+function isRespTec(){ return isSuperAdmin()||currentRuoli.includes('resp_tecnico'); }
+function puoVedereAgenti(){ return isAdmin()||isRespComm()||currentRuoli.includes('agente'); }
 
 async function loadRuolo(userId){
   try {
-    const {data, error} = await sb.from('utenti_ruoli').select('ruolo').eq('user_id',userId).single();
-    currentRuolo = data?.ruolo || 'agente';
+    const {data:ruoliUtente} = await sb.from('utenti_ruoli').select('codice_ruolo').eq('user_id',userId);
+    currentRuoli = (ruoliUtente||[]).map(r=>r.codice_ruolo);
+    if(currentRuoli.length===0) currentRuoli=['agente'];
+    currentRuolo = currentRuoli.includes('super_admin')?'super_admin':currentRuoli[0];
+    if(!isSuperAdmin() && currentRuoli.length>0){
+      const {data:perms} = await sb.from('ruoli_permessi').select('permesso').in('codice_ruolo',currentRuoli);
+      currentPermessi = new Set((perms||[]).map(p=>p.permesso));
+    }
   } catch(e) {
-    currentRuolo = 'agente';
+    currentRuoli=['agente']; currentRuolo='agente';
   }
-  // badge ruolo in sidebar
   const badge = document.getElementById('sb-ruolo-badge');
-  if(badge) badge.textContent = RUOLI_LABEL[currentRuolo] || currentRuolo;
-  // mostra/nascondi sezioni admin
+  if(badge) badge.textContent = currentRuoli.map(r=>RUOLI_LABEL[r]||r).join(', ');
   const adminSection = document.getElementById('sb-admin-section');
   if(adminSection) adminSection.style.display = isAdmin() ? 'block' : 'none';
   const utentiItem = document.getElementById('sb-item-utenti');
@@ -1017,9 +1031,17 @@ async function filterAna(val){
   document.querySelector('#main-content tbody').innerHTML = rows||'<tr><td colspan="7" style="text-align:center;color:var(--mid);padding:24px;font-style:italic">Nessun risultato</td></tr>';
 }
 
-function openFormAnagrafica(data){
+async function openFormAnagrafica(data){
   document.getElementById('form-ana-title').textContent = data?'Modifica anagrafica':'Nuova anagrafica';
   document.getElementById('ana-id').value = data?.id||'';
+
+  // Carica agenti per la select
+  const {data:agenti} = await sb.from('agenti').select('id,nome,cognome,percentuale_provvigione').eq('attivo',true).order('cognome');
+  const agentiSel = document.getElementById('ana-agente-id');
+  if(agentiSel){
+    agentiSel.innerHTML='<option value="">— Nessun agente —</option>'+(agenti||[]).map(a=>`<option value="${a.id}" ${a.id===data?.agente_id?'selected':''}>${a.cognome} ${a.nome} (${a.percentuale_provvigione}%)</option>`).join('');
+  }
+
   const fields={
     'ana-tipo':data?.tipo||'','ana-canale':data?.canale||'','ana-natura':data?.natura_giuridica||'',
     'ana-ragione':data?.ragione_sociale||'','ana-piva':data?.partita_iva||'','ana-cf':data?.codice_fiscale||'',
@@ -1029,7 +1051,7 @@ function openFormAnagrafica(data){
     'ana-sdi':data?.codice_sdi||'','ana-pec-fatt':data?.pec_fatturazione||'','ana-pec':data?.pec||'',
     'ana-iban':data?.iban||'','ana-bic':data?.bic_swift||'','ana-banca':data?.banca||'','ana-intestatario':data?.intestatario_conto||'',
     'ana-referente':data?.referente||'','ana-email':data?.email||'','ana-email-ordini':data?.email_ordini||'','ana-telefono':data?.telefono||'',
-    'ana-pagamento':data?.condizioni_pagamento||'','ana-fido':data?.fido_commerciale||'','ana-agente':data?.agente_zona||'',
+    'ana-pagamento':data?.condizioni_pagamento||'','ana-fido':data?.fido_commerciale||'',
     'ana-cat-forn':data?.categoria_fornitura||'','ana-leadtime':data?.lead_time_giorni||'','ana-valutazione':data?.valutazione||'',
     'ana-note':data?.note||''
   };
@@ -1040,8 +1062,29 @@ function openFormAnagrafica(data){
   if(data?.sede_op_indirizzo) document.getElementById('ana-so-indirizzo').value=data.sede_op_indirizzo;
   if(data?.sede_op_cap) document.getElementById('ana-so-cap').value=data.sede_op_cap;
   if(data?.sede_op_citta) document.getElementById('ana-so-citta').value=data.sede_op_citta;
+
+  // Aggiorna campi condizionali in base al tipo
+  aggiornaCampiPerTipo(data?.tipo||'');
   anaTab('generale', document.querySelector('.form-tab'));
   document.getElementById('form-anagrafica').classList.add('open');
+}
+
+function aggiornaCampiPerTipo(tipo){
+  // Sezioni che variano per tipo
+  const isCliente = tipo==='cliente'||tipo==='entrambi';
+  const isFornitore = tipo==='fornitore'||tipo==='entrambi';
+
+  // Sezione "Solo fornitori" nel tab commerciale
+  const fornSection = document.getElementById('ana-section-fornitore');
+  if(fornSection) fornSection.style.display = isFornitore ? 'block' : 'none';
+
+  // Sezione agente e sconti — solo per clienti
+  const clienteSection = document.getElementById('ana-section-cliente');
+  if(clienteSection) clienteSection.style.display = isCliente ? 'block' : 'none';
+
+  // SDI e fatturazione — sempre visibile ma etichetta cambia
+  const sdiLabel = document.getElementById('ana-sdi-label');
+  if(sdiLabel) sdiLabel.textContent = isFornitore&&!isCliente ? 'Codice SDI fornitore' : 'Codice SDI';
 }
 
 async function editAnagrafica(id){
@@ -1067,7 +1110,7 @@ async function saveAnagrafica(){
     split_payment:document.getElementById('ana-split').checked,
     iban:v('ana-iban')||null,bic_swift:v('ana-bic')||null,banca:v('ana-banca')||null,intestatario_conto:v('ana-intestatario')||null,
     referente:v('ana-referente')||null,email:v('ana-email')||null,email_ordini:v('ana-email-ordini')||null,telefono:v('ana-telefono')||null,
-    condizioni_pagamento:v('ana-pagamento')||null,fido_commerciale:v('ana-fido')||null,agente_zona:v('ana-agente')||null,
+    condizioni_pagamento:v('ana-pagamento')||null,fido_commerciale:v('ana-fido')||null,agente_id:v('ana-agente-id')||null,
     categoria_fornitura:v('ana-cat-forn')||null,lead_time_giorni:v('ana-leadtime')||null,
     valutazione:v('ana-valutazione')||null,note:v('ana-note')||null,stato:'attivo'
   };
@@ -2443,8 +2486,8 @@ async function renderOrdineDetail(id){
   CFG_TARGET_ID=id; CFG_MODE='ordine';
   window._prevListino=ord.listino;
 
-  const possoApprovareComm = ['resp_commerciale','super_admin','admin'].includes(currentRuolo);
-  const possoApprovaTec = ['resp_tecnico','super_admin','admin'].includes(currentRuolo);
+  const possoApprovareComm = isRespComm();
+  const possoApprovaTec = isRespTec();
 
   const rowsRighe=(righe||[]).map(r=>`
     <tr>
@@ -3211,32 +3254,68 @@ function adminImpostazioni(){
 }
 
 async function renderUtentiInline(){
-  const {data} = await sb.from('utenti_ruoli').select('*');
-  const rows=(data||[]).map(u=>`<tr>
-    <td style="font-size:11px;color:var(--mid);font-family:monospace">${u.user_id.slice(0,16)}...</td>
-    <td><select style="padding:4px 8px;border:0.5px solid var(--border);border-radius:4px;font-size:13px;font-family:inherit" onchange="aggiornaRuolo('${u.id}',this.value)">
-      ${['super_admin','admin','resp_commerciale','resp_tecnico','agente','magazzino','sola_lettura'].map(r=>`<option value="${r}" ${r===u.ruolo?'selected':''}>${RUOLI_LABEL[r]||r}</option>`).join('')}
-    </select></td>
-    <td style="font-size:12px;color:var(--mid)">${new Date(u.created_at).toLocaleDateString('it-IT')}</td>
-    <td><button onclick="eliminaUtente('${u.id}')" style="background:none;border:none;color:var(--mid);cursor:pointer">×</button></td>
-  </tr>`).join('');
+  // Raggruppa per user_id per mostrare ruoli multipli
+  const {data} = await sb.from('utenti_ruoli').select('*').order('user_id');
+  const {data:ruoliDisp} = await sb.from('ruoli').select('*').eq('attivo',true).order('nome');
+  const byUser = {};
+  (data||[]).forEach(r=>{ if(!byUser[r.user_id]) byUser[r.user_id]={ruoli:[],created_at:r.created_at}; byUser[r.user_id].ruoli.push(r); });
+  const ruoliOpts=(ruoliDisp||[]).map(r=>`<option value="${r.codice}">${r.nome}</option>`).join('');
+
+  const rows=Object.entries(byUser).map(([uid,info])=>{
+    const ruoliBadge=info.ruoli.map(r=>`
+      <span style="display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:99px;font-size:11px;background:var(--blue-bg);color:var(--blue-tx);margin:1px">
+        ${RUOLI_LABEL[r.codice_ruolo]||r.codice_ruolo}
+        <span onclick="rimuoviRuoloUtente('${r.id}')" style="cursor:pointer;color:var(--mid)" title="Rimuovi">×</span>
+      </span>`).join('');
+    return `<tr>
+      <td style="font-size:11px;color:var(--mid);font-family:monospace">${uid.slice(0,20)}...</td>
+      <td style="max-width:280px">
+        ${ruoliBadge}
+        <br><div style="display:flex;gap:4px;margin-top:4px">
+          <select id="add-role-${uid.replace(/-/g,'')}" style="padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:11px;font-family:inherit">${ruoliOpts}</select>
+          <button onclick="aggiungiRuoloUtente('${uid}','add-role-${uid.replace(/-/g,'')}')" class="btn btn-sm" style="font-size:11px;padding:3px 8px">+ Aggiungi ruolo</button>
+        </div>
+      </td>
+      <td style="font-size:12px;color:var(--mid)">${new Date(info.created_at).toLocaleDateString('it-IT')}</td>
+      <td><button onclick="eliminaUtente('${uid}')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px" title="Rimuovi utente">×</button></td>
+    </tr>`;
+  }).join('');
+
   document.getElementById('utenti-content').innerHTML=`
-  <table style="margin-bottom:14px">
-    <thead><tr><th>User ID</th><th>Ruolo</th><th>Creato il</th><th></th></tr></thead>
+  <div style="background:var(--blue-bg);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--blue-tx);margin-bottom:12px">
+    Ogni utente può avere più ruoli. I permessi vengono aggregati da tutti i ruoli assegnati. Il super_admin ha accesso completo a tutto.
+  </div>
+  <table style="margin-bottom:16px">
+    <thead><tr><th>User ID</th><th>Ruoli assegnati</th><th>Dal</th><th></th></tr></thead>
     <tbody>${rows||'<tr><td colspan="4" style="text-align:center;color:var(--mid);padding:16px">Nessun utente</td></tr>'}</tbody>
   </table>
-  <div style="display:flex;gap:8px">
-    <input type="text" id="new-user-id" placeholder="Incolla user_id..." style="flex:1;padding:7px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit">
-    <select id="new-user-ruolo" style="padding:7px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit">
-      ${['agente','resp_commerciale','resp_tecnico','admin','magazzino','sola_lettura'].map(r=>`<option value="${r}">${RUOLI_LABEL[r]}</option>`).join('')}
-    </select>
-    <button class="btn btn-red" onclick="aggiungiUtente()">Aggiungi</button>
+  <div style="border-top:0.5px solid var(--border);padding-top:14px">
+    <div style="font-size:12px;font-weight:500;margin-bottom:8px">Aggiungi nuovo utente</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <input type="text" id="new-user-id" placeholder="Incolla user_id da Supabase Auth..." style="flex:1;min-width:200px;padding:7px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit">
+      <select id="new-user-ruolo" style="padding:7px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit">${ruoliOpts}</select>
+      <button class="btn btn-red" onclick="aggiungiUtente()">Aggiungi</button>
+    </div>
   </div>`;
 }
 
-async function eliminaUtente(id){
-  if(!confirm('Rimuovere questo utente?')) return;
-  await sb.from('utenti_ruoli').delete().eq('id',id);
+async function aggiungiRuoloUtente(userId, selectId){
+  const ruolo = document.getElementById(selectId)?.value;
+  if(!ruolo) return;
+  const {error} = await sb.from('utenti_ruoli').insert([{user_id:userId, codice_ruolo:ruolo}]);
+  if(error){toast('Errore (ruolo già assegnato?): '+error.message,'err');return;}
+  toast('Ruolo aggiunto','ok'); renderUtentiInline();
+}
+
+async function rimuoviRuoloUtente(rigaId){
+  if(!confirm('Rimuovere questo ruolo dall'utente?')) return;
+  await sb.from('utenti_ruoli').delete().eq('id',rigaId);
+  toast('Ruolo rimosso','ok'); renderUtentiInline();
+}
+
+async function eliminaUtente(userId){
+  if(!confirm('Rimuovere TUTTI i ruoli di questo utente?')) return;
+  await sb.from('utenti_ruoli').delete().eq('user_id',userId);
   toast('Utente rimosso','ok'); renderUtentiInline();
 }
 
@@ -3311,8 +3390,9 @@ async function renderUtenti(){
   renderAdmin();
 }
 
+// aggiornaRuolo mantenuto per compatibilità (non più usato direttamente)
 async function aggiornaRuolo(id, ruolo){
-  const {error} = await sb.from('utenti_ruoli').update({ruolo}).eq('id',id);
+  const {error} = await sb.from('utenti_ruoli').update({codice_ruolo:ruolo}).eq('id',id);
   if(error){toast('Errore: '+error.message,'err');return;}
   toast('Ruolo aggiornato','ok');
 }
@@ -3321,7 +3401,16 @@ async function aggiungiUtente(){
   const userId = document.getElementById('new-user-id').value.trim();
   const ruolo = document.getElementById('new-user-ruolo').value;
   if(!userId){toast('Inserisci un user_id valido','err');return;}
-  const {error} = await sb.from('utenti_ruoli').insert([{user_id:userId,ruolo}]);
+  const {error} = await sb.from('utenti_ruoli').insert([{user_id:userId, codice_ruolo:ruolo}]);
+  if(error){toast('Errore (utente già presente con questo ruolo?): '+error.message,'err');return;}
+  toast('Utente aggiunto con ruolo '+RUOLI_LABEL[ruolo],'ok');
+  renderUtentiInline();
+}
+
+</script>
+</body>
+</html>
+
   if(error){toast('Errore: '+error.message,'err');return;}
   toast('Utente aggiunto con ruolo '+RUOLI_LABEL[ruolo],'ok');
   renderUtentiInline();
