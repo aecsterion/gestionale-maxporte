@@ -2211,9 +2211,11 @@ async function ricalcolaTotale(docId, mode){
 // PREVENTIVI
 // ══════════════════════════════════════════════════════
 async function renderPreventivi(){
-  const {data} = await sb.from('preventivi')
-    .select('*,anagrafiche(ragione_sociale),agenti(nome,cognome)')
-    .order('created_at',{ascending:false});
+  try {
+    const {data,error} = await sb.from('preventivi')
+      .select('*,anagrafiche(ragione_sociale),agenti(nome,cognome)')
+      .order('created_at',{ascending:false});
+    if(error) throw error;
 
   const stats={bozza:0,inviato:0,firmato:0,rifiutato:0};
   (data||[]).forEach(p=>{ if(stats[p.stato]!==undefined) stats[p.stato]++; });
@@ -2246,23 +2248,37 @@ async function renderPreventivi(){
       <tbody>${rows||'<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--mid);font-style:italic">Nessun preventivo ancora — clicca "+ Nuovo preventivo"</td></tr>'}</tbody>
     </table>
   </div>`;
+  } catch(e) {
+    console.error('renderPreventivi error:',e);
+    document.getElementById('main-content').innerHTML=`<div class="card">
+      <div style="padding:20px">
+        <p style="color:var(--red);margin-bottom:12px">Errore caricamento preventivi: ${e.message}</p>
+        <button class="btn btn-red btn-sm" onclick="nuovoPreventivo()">+ Nuovo preventivo</button>
+      </div>
+    </div>`;
+  }
 }
 
 async function nuovoPreventivo(){
-  // Carica clienti e agenti
-  const [{data:clienti},{data:agenti}] = await Promise.all([
-    sb.from('anagrafiche').select('*').order('ragione_sociale'),
-    sb.from('agenti').select('*').eq('attivo',true).order('cognome'),
-  ]);
-  CFG_RIGHE=[];
-  const modal = document.getElementById('modal-nuovo-doc');
-  modal.dataset.mode='preventivo';
-  document.getElementById('ndoc-title').textContent='Nuovo preventivo';
-  document.getElementById('ndoc-clienti').innerHTML='<option value="">Seleziona cliente...</option>'+(clienti||[]).map(c=>`<option value="${c.id}" data-listino="${c.listino||'A'}" data-sa="${c.sconto_dedicato_A||0}" data-sp="${c.sconto_dedicato_P||0}" data-ind="${c.indirizzo||''}" data-cap="${c.cap||''}" data-cit="${c.citta||''}" data-prv="${c.provincia||''}">${c.ragione_sociale}</option>`).join('');
-  document.getElementById('ndoc-agenti').innerHTML='<option value="">Nessun agente</option>'+(agenti||[]).map(a=>`<option value="${a.id}">${a.cognome} ${a.nome}</option>`).join('');
-  document.getElementById('ndoc-righe-list').innerHTML='<div style="text-align:center;padding:20px;color:var(--mid);font-size:13px;font-style:italic">Nessuna porta aggiunta ancora — clicca "+ Aggiungi porta"</div>';
-  document.getElementById('ndoc-totale').textContent='€ 0,00';
-  modal.classList.add('open');
+  try {
+    const [{data:clienti},{data:agenti}] = await Promise.all([
+      sb.from('anagrafiche').select('*').order('ragione_sociale'),
+      sb.from('agenti').select('*').eq('attivo',true).order('cognome'),
+    ]);
+    CFG_RIGHE=[];
+    const modal = document.getElementById('modal-nuovo-doc');
+    if(!modal){ toast('Errore: modal non trovato','err'); return; }
+    modal.dataset.mode='preventivo';
+    document.getElementById('ndoc-title').textContent='Nuovo preventivo';
+    document.getElementById('ndoc-clienti').innerHTML='<option value="">Seleziona cliente...</option>'+(clienti||[]).map(c=>`<option value="${c.id}" data-listino="${c.listino||'A'}" data-sa="${c.sconto_dedicato_A||0}" data-sp="${c.sconto_dedicato_P||0}" data-ind="${c.indirizzo||''}" data-cap="${c.cap||''}" data-cit="${c.citta||''}" data-prv="${c.provincia||''}">${c.ragione_sociale}</option>`).join('');
+    document.getElementById('ndoc-agenti').innerHTML='<option value="">Nessun agente</option>'+(agenti||[]).map(a=>`<option value="${a.id}">${a.cognome} ${a.nome}</option>`).join('');
+    document.getElementById('ndoc-righe-list').innerHTML='<div style="text-align:center;padding:20px;color:var(--mid);font-size:13px;font-style:italic">Nessuna porta aggiunta ancora — clicca "+ Aggiungi porta"</div>';
+    document.getElementById('ndoc-totale').textContent='€ 0,00';
+    modal.classList.add('open');
+  } catch(e) {
+    console.error('nuovoPreventivo error:', e);
+    toast('Errore apertura preventivo: '+e.message,'err');
+  }
 }
 
 function ndocClienteChange(sel){
@@ -2516,9 +2532,11 @@ async function firmaPreventivo(prevId){
 // ORDINI DIRETTI
 // ══════════════════════════════════════════════════════
 async function renderOrdiniDiretti(){
-  const {data} = await sb.from('ordini_vendita')
-    .select('*,anagrafiche(ragione_sociale),agenti(nome,cognome)')
-    .order('created_at',{ascending:false});
+  try {
+    const {data,error} = await sb.from('ordini_vendita')
+      .select('*,anagrafiche(ragione_sociale),agenti(nome,cognome)')
+      .order('created_at',{ascending:false});
+    if(error) throw error;
 
   const rows=(data||[]).map(o=>`<tr class="data-row" onclick="renderOrdineDetail('${o.id}')">
     <td><strong>${o.numero}</strong></td>
@@ -2542,22 +2560,37 @@ async function renderOrdiniDiretti(){
       <tbody>${rows||'<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--mid);font-style:italic">Nessun ordine ancora</td></tr>'}</tbody>
     </table>
   </div>`;
+  } catch(e) {
+    console.error('renderOrdiniDiretti error:',e);
+    document.getElementById('main-content').innerHTML=`<div class="card">
+      <div style="padding:20px">
+        <p style="color:var(--red);margin-bottom:12px">Errore caricamento ordini: ${e.message}</p>
+        <button class="btn btn-red btn-sm" onclick="nuovoOrdineDiretto()">+ Nuovo ordine diretto</button>
+      </div>
+    </div>`;
+  }
 }
 
 async function nuovoOrdineDiretto(){
-  const [{data:clienti},{data:agenti}] = await Promise.all([
-    sb.from('anagrafiche').select('*').order('ragione_sociale'),
-    sb.from('agenti').select('*').eq('attivo',true).order('cognome'),
-  ]);
-  CFG_RIGHE=[];
-  const modal=document.getElementById('modal-nuovo-doc');
-  modal.dataset.mode='ordine';
-  document.getElementById('ndoc-title').textContent='Nuovo ordine diretto';
-  document.getElementById('ndoc-clienti').innerHTML='<option value="">Seleziona cliente...</option>'+(clienti||[]).map(c=>`<option value="${c.id}" data-listino="${c.listino||'A'}" data-sa="${c.sconto_dedicato_A||0}" data-sp="${c.sconto_dedicato_P||0}" data-ind="${c.indirizzo||''}" data-cap="${c.cap||''}" data-cit="${c.citta||''}" data-prv="${c.provincia||''}">${c.ragione_sociale}</option>`).join('');
-  document.getElementById('ndoc-agenti').innerHTML='<option value="">Nessun agente</option>'+(agenti||[]).map(a=>`<option value="${a.id}">${a.cognome} ${a.nome}</option>`).join('');
-  document.getElementById('ndoc-righe-list').innerHTML='<div style="text-align:center;padding:20px;color:var(--mid);font-size:13px;font-style:italic">Nessuna porta ancora</div>';
-  document.getElementById('ndoc-totale').textContent='€ 0,00';
-  modal.classList.add('open');
+  try {
+    const [{data:clienti},{data:agenti}] = await Promise.all([
+      sb.from('anagrafiche').select('*').order('ragione_sociale'),
+      sb.from('agenti').select('*').eq('attivo',true).order('cognome'),
+    ]);
+    CFG_RIGHE=[];
+    const modal=document.getElementById('modal-nuovo-doc');
+    if(!modal){ toast('Errore: modal non trovato','err'); return; }
+    modal.dataset.mode='ordine';
+    document.getElementById('ndoc-title').textContent='Nuovo ordine diretto';
+    document.getElementById('ndoc-clienti').innerHTML='<option value="">Seleziona cliente...</option>'+(clienti||[]).map(c=>`<option value="${c.id}" data-listino="${c.listino||'A'}" data-sa="${c.sconto_dedicato_A||0}" data-sp="${c.sconto_dedicato_P||0}" data-ind="${c.indirizzo||''}" data-cap="${c.cap||''}" data-cit="${c.citta||''}" data-prv="${c.provincia||''}">${c.ragione_sociale}</option>`).join('');
+    document.getElementById('ndoc-agenti').innerHTML='<option value="">Nessun agente</option>'+(agenti||[]).map(a=>`<option value="${a.id}">${a.cognome} ${a.nome}</option>`).join('');
+    document.getElementById('ndoc-righe-list').innerHTML='<div style="text-align:center;padding:20px;color:var(--mid);font-size:13px;font-style:italic">Nessuna porta ancora</div>';
+    document.getElementById('ndoc-totale').textContent='€ 0,00';
+    modal.classList.add('open');
+  } catch(e) {
+    console.error('nuovoOrdineDiretto error:', e);
+    toast('Errore apertura ordine: '+e.message,'err');
+  }
 }
 
 async function renderOrdineDetail(id){
