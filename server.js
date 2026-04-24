@@ -3823,6 +3823,19 @@ async function aggiungiUtente(){
   </div>
 </div>
 
+
+<script>
+// Sposta i modal fuori da qualsiasi container al caricamento
+(function(){
+  var toMove = ['modal-cfg', 'modal-nuovo-doc'];
+  toMove.forEach(function(id){
+    var el = document.getElementById(id);
+    if(el && el.parentElement && el.parentElement.id !== 'body-root'){
+      document.body.appendChild(el);
+    }
+  });
+})();
+</script>
 </body>
 </html>
 `;
