@@ -3697,6 +3697,3046 @@ async function aggiungiUtente(){
 
 </script>
 
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+const SUPABASE_URL = 'https://tvfpekldunmegzdjpact.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2ZnBla2xkdW5tZWd6ZGpwYWN0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxOTEzMjcsImV4cCI6MjA5MTc2NzMyN30.278_jYjYF77AO5i_bX8RHhoezdOdjMXBMyNd1n2Xdo4';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let currentSection = 'dashboard';
+let currentUser = null;
+let currentRuolo = null;      // ruolo principale
+let currentRuoli = [];        // tutti i ruoli dell'utente
+let currentPermessi = new Set();
+
+// ── DATE ──────────────────────────────────────────────
+document.getElementById('topbar-date').textContent = new Date().toLocaleDateString('it-IT',{day:'numeric',month:'long',year:'numeric'});
+
+// ── RUOLI ─────────────────────────────────────────────
+const RUOLI_LABEL = {
+  super_admin:'Super Admin', admin:'Admin',
+  resp_commerciale:'Resp. Commerciale', resp_tecnico:'Resp. Tecnico',
+  agente:'Agente', back_office:'Back Office',
+  magazzino:'Magazzino', sola_lettura:'Sola lettura'
+};
+
+function haPerm(perm){ return isSuperAdmin() || currentPermessi.has(perm); }
+function isAdmin(){ return currentRuoli.includes('admin')||currentRuoli.includes('super_admin'); }
+function isSuperAdmin(){ return currentRuoli.includes('super_admin'); }
+function isRespComm(){ return isSuperAdmin()||currentRuoli.includes('resp_commerciale')||currentRuoli.includes('back_office'); }
+function isRespTec(){ return isSuperAdmin()||currentRuoli.includes('resp_tecnico'); }
+function puoVedereAgenti(){ return isAdmin()||isRespComm()||currentRuoli.includes('agente'); }
+
+async function loadRuolo(userId){
+  try {
+    const {data:ruoliUtente} = await sb.from('utenti_ruoli').select('codice_ruolo').eq('user_id',userId);
+    currentRuoli = (ruoliUtente||[]).map(r=>r.codice_ruolo);
+    if(currentRuoli.length===0) currentRuoli=['agente'];
+    currentRuolo = currentRuoli.includes('super_admin')?'super_admin':currentRuoli[0];
+    if(!isSuperAdmin() && currentRuoli.length>0){
+      const {data:perms} = await sb.from('ruoli_permessi').select('permesso').in('codice_ruolo',currentRuoli);
+      currentPermessi = new Set((perms||[]).map(p=>p.permesso));
+    }
+  } catch(e) {
+    currentRuoli=['agente']; currentRuolo='agente';
+  }
+  const badge = document.getElementById('sb-ruolo-badge');
+  if(badge) badge.textContent = currentRuoli.map(r=>RUOLI_LABEL[r]||r).join(', ');
+  const adminSection = document.getElementById('sb-admin-section');
+  if(adminSection) adminSection.style.display = isAdmin() ? 'block' : 'none';
+  const utentiItem = document.getElementById('sb-item-utenti');
+  if(utentiItem) utentiItem.style.display = isSuperAdmin() ? 'flex' : 'none';
+}
+
+// ── AUTH ──────────────────────────────────────────────
+async function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const pass  = document.getElementById('login-password').value;
+  const err   = document.getElementById('login-error');
+  const btn   = document.getElementById('login-btn');
+  err.style.display='none';
+  btn.textContent='Accesso in corso...'; btn.disabled=true;
+  try {
+    const {data,error} = await sb.auth.signInWithPassword({email,password:pass});
+    btn.textContent='Accedi'; btn.disabled=false;
+    if(error){
+      err.textContent=error.message==='Invalid login credentials'?'Email o password non corretti':error.message;
+      err.style.display='block';
+      return;
+    }
+    currentUser=data.user;
+    await loadRuolo(currentUser.id);
+    entraNellApp(currentUser.email);
+  } catch(e) {
+    btn.textContent='Accedi'; btn.disabled=false;
+    err.textContent='Errore: '+e.message;
+    err.style.display='block';
+  }
+}
+document.getElementById('login-password').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+
+function entraNellApp(email){
+  try {
+    document.getElementById('login-screen').style.display='none';
+    document.getElementById('app').classList.add('visible');
+    const emailEl=document.getElementById('sb-user-email');
+    if(emailEl) emailEl.textContent=email||'';
+    loadSection('dashboard');
+  } catch(e){
+    console.error('Errore entraNellApp:',e);
+  }
+}
+
+async function doLogout(){
+  try { await sb.auth.signOut(); } catch(e){}
+  currentRuolo=null; currentUser=null;
+  document.getElementById('login-screen').style.display='flex';
+  document.getElementById('app').classList.remove('visible');
+}
+
+// Controlla sessione esistente al caricamento pagina (senza onAuthStateChange)
+(async ()=>{
+  try {
+    const {data:{session}} = await sb.auth.getSession();
+    if(session?.user){
+      currentUser=session.user;
+      await loadRuolo(currentUser.id);
+      entraNellApp(currentUser.email);
+    }
+  } catch(e){
+    console.error('Errore getSession:',e);
+  }
+})();
+
+// ── NAVIGATION ────────────────────────────────────────
+const pageInfo = {
+  dashboard:{title:'Dashboard',bc:'Panoramica generale',action:false},
+  anagrafiche:{title:'Anagrafiche',bc:'Clienti e fornitori',action:true,label:'+ Nuova anagrafica'},
+  preventivi:{title:'Preventivi',bc:'Gestione offerte commerciali',action:true,label:'+ Nuovo preventivo'},
+  ordini_vendita:{title:'Ordini diretti',bc:'Ordini senza preventivo',action:true,label:'+ Nuovo ordine'},
+  fatture:{title:'Fatture',bc:'Ciclo attivo',action:false},
+  magazzino:{title:'Magazzino',bc:'Giacenze e componenti',action:false},
+  produzione:{title:'Produzione MRP',bc:'Ciclo produttivo',action:false},
+  dipendenti:{title:'Dipendenti',bc:'Organico',action:false},
+  admin:{title:'Catalogo prodotti',bc:'Configurazione e prezzi',action:false},
+  utenti:{title:'Utenti e ruoli',bc:'Gestione accessi',action:true,label:'+ Nuovo utente'},
+};
+
+function nav(section, el){
+  currentSection=section;
+  document.querySelectorAll('.sb-item').forEach(i=>i.classList.remove('active'));
+  el.classList.add('active');
+  const info=pageInfo[section]||{title:section,bc:'',action:false};
+  document.getElementById('topbar-title').textContent=info.title;
+  document.getElementById('topbar-bc').textContent=' · '+info.bc;
+  const btn=document.getElementById('topbar-action');
+  if(info.action){btn.style.display='block';btn.textContent=info.label||'+ Nuovo';}
+  else btn.style.display='none';
+  loadSection(section);
+}
+
+function openForm(){
+  if(currentSection==='anagrafiche') openFormAnagrafica();
+  else if(currentSection==='ordini') openFormOrdine();
+}
+
+function loadSection(s){
+  if((s==='admin'||s==='utenti') && !isAdmin()){
+    toast('Accesso non autorizzato','err'); return;
+  }
+  if(s==='utenti' && !isSuperAdmin()){
+    toast('Accesso riservato al Super Admin','err'); return;
+  }
+  // Chiudi tutti i modal aperti quando si cambia sezione
+  document.querySelectorAll('.form-overlay.open').forEach(m=>m.classList.remove('open'));
+  const c=document.getElementById('main-content');
+  c.innerHTML='<div class="loading"><div class="spinner"></div>Caricamento...</div>';
+  if(s==='dashboard') renderDashboard();
+  else if(s==='anagrafiche') renderAnagrafiche();
+  else if(s==='preventivi') renderPreventivi();
+  else if(s==='ordini_vendita') renderOrdiniDiretti();
+  else if(s==='ordini') renderOrdini();
+  else if(s==='fatture') renderFatture();
+  else if(s==='magazzino') renderMagazzino();
+  else if(s==='produzione') renderProduzione();
+  else if(s==='dipendenti') renderDipendenti();
+  else if(s==='admin') renderAdmin();
+  else if(s==='utenti') renderUtenti();
+}
+
+// ── TOAST ─────────────────────────────────────────────
+function toast(msg,type='ok'){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.className='toast '+type+' show';
+  setTimeout(()=>t.classList.remove('show'),3000);
+}
+
+// ── HELPERS ───────────────────────────────────────────
+function badgeStato(s){
+  const map={attivo:'bg',dormiente:'ba',prospect:'bb',nuovo:'bb',
+    confermato:'bb',in_produzione:'ba',spedito:'bg',ritardo:'br',annullato:'bgr',
+    emessa:'bb',pagata:'bg',scaduta:'br','in_scadenza':'ba',
+    presente:'bg',ferie:'ba',malattia:'br',
+    pianificato:'bb','in_corso':'ba',completato:'bg'};
+  const labels={attivo:'Attivo',dormiente:'Dormiente',prospect:'Prospect',nuovo:'Nuovo',
+    confermato:'Confermato',in_produzione:'In produzione',spedito:'Spedito',ritardo:'In ritardo',annullato:'Annullato',
+    emessa:'Emessa',pagata:'Pagata',scaduta:'Scaduta',in_scadenza:'In scadenza',
+    presente:'Presente',ferie:'Ferie',malattia:'Malattia',
+    pianificato:'Pianificato',in_corso:'In corso',completato:'Completato'};
+  return `<span class="badge ${map[s]||'bgr'}">${labels[s]||s}</span>`;
+}
+function fmtEuro(n){return n!=null?'€ '+Number(n).toLocaleString('it-IT',{minimumFractionDigits:2,maximumFractionDigits:2}):'—';}
+function fmtData(d){return d?new Date(d).toLocaleDateString('it-IT'):'—';}
+function pbar(v){return `<div class="pbar"><div class="pfill" style="width:${v||0}%"></div></div>`;}
+
+// ── DASHBOARD ─────────────────────────────────────────
+async function renderDashboard(){
+  const [anaRes,ordRes,fatRes,magRes] = await Promise.all([
+    sb.from('anagrafiche').select('tipo,stato'),
+    sb.from('ordini').select('stato,importo,created_at'),
+    sb.from('fatture').select('stato,importo,data_scadenza'),
+    sb.from('magazzino').select('giacenza,scorta_minima'),
+  ]);
+  const ana=anaRes.data||[]; const ord=ordRes.data||[];
+  const fat=fatRes.data||[]; const mag=magRes.data||[];
+  const clienti=ana.filter(a=>a.tipo==='cliente'||a.tipo==='entrambi').length;
+  const fornitori=ana.filter(a=>a.tipo==='fornitore'||a.tipo==='entrambi').length;
+  const ordAperti=ord.filter(o=>!['spedito','annullato'].includes(o.stato)).length;
+  const fatturato=ord.filter(o=>o.stato!=='annullato').reduce((s,o)=>s+Number(o.importo||0),0);
+  const sottoscorta=mag.filter(m=>Number(m.giacenza)<=Number(m.scorta_minima)).length;
+  const fatScadute=fat.filter(f=>f.stato==='scaduta').length;
+
+  document.getElementById('main-content').innerHTML=`
+  <div class="grid-4">
+    <div class="metric"><div class="metric-label">Clienti attivi</div><div class="metric-value">${clienti}</div></div>
+    <div class="metric"><div class="metric-label">Fornitori</div><div class="metric-value">${fornitori}</div></div>
+    <div class="metric"><div class="metric-label">Ordini aperti</div><div class="metric-value">${ordAperti}</div></div>
+    <div class="metric"><div class="metric-label">Fatturato totale</div><div class="metric-value" style="font-size:16px">${fmtEuro(fatturato)}</div></div>
+  </div>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-header"><span class="card-title">Ultimi ordini</span><button class="btn btn-sm" onclick="nav('ordini',document.querySelectorAll('.sb-item')[2])">Vedi tutti</button></div>
+      <div id="dash-ordini"><div class="loading"><div class="spinner"></div></div></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">Situazione</span></div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid var(--border)">
+          <span style="font-size:13px">Articoli sotto scorta minima</span>
+          <span class="badge ${sottoscorta>0?'br':'bg'}">${sottoscorta}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid var(--border)">
+          <span style="font-size:13px">Fatture scadute</span>
+          <span class="badge ${fatScadute>0?'br':'bg'}">${fatScadute}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0">
+          <span style="font-size:13px">Ordini in ritardo</span>
+          <span class="badge ${ord.filter(o=>o.stato==='ritardo').length>0?'br':'bg'}">${ord.filter(o=>o.stato==='ritardo').length}</span>
+        </div>
+      </div>
+    </div>
+  </div>`;
+  const ultOrd=await sb.from('ordini').select('numero,stato,importo,data_consegna,anagrafica_id,anagrafiche(ragione_sociale)').order('created_at',{ascending:false}).limit(5);
+  const rows=(ultOrd.data||[]).map(o=>`<tr class="data-row"><td><strong>${o.numero||'—'}</strong></td><td>${o.anagrafiche?.ragione_sociale||'—'}</td><td>${fmtEuro(o.importo)}</td><td>${fmtData(o.data_consegna)}</td><td>${badgeStato(o.stato)}</td></tr>`).join('');
+  document.getElementById('dash-ordini').innerHTML=`<table><thead><tr><th>N°</th><th>Cliente</th><th>Importo</th><th>Consegna</th><th>Stato</th></tr></thead><tbody>${rows||'<tr class="data-row"><td colspan="5" style="text-align:center;color:var(--mid);padding:20px">Nessun ordine ancora</td></tr>'}</tbody></table>`;
+}
+
+// ── ANAGRAFICHE ───────────────────────────────────────
+async function renderAnagrafiche(){
+  const filter = document.getElementById('ana-filter-val')||null;
+  let q = sb.from('anagrafiche').select('*').order('ragione_sociale');
+  const {data,error} = await q;
+  if(error){document.getElementById('main-content').innerHTML=`<div class="card"><p style="color:var(--red)">Errore: ${error.message}</p></div>`;return;}
+  const rows=(data||[]).map(a=>`
+    <tr class="data-row" onclick="editAnagrafica('${a.id}')">
+      <td><strong>${a.ragione_sociale}</strong></td>
+      <td>${a.partita_iva||'—'}</td>
+      <td>${a.codice_fiscale||'—'}</td>
+      <td><span class="tag">${a.tipo||'—'}</span>${a.canale?` <span class="tag">${a.canale}</span>`:''}</td>
+      <td>${a.citta||'—'}${a.provincia?' ('+a.provincia+')':''}</td>
+      <td>${a.codice_sdi||a.pec_fatturazione?'<span class="badge bg">SDI OK</span>':'<span class="badge ba">Manca SDI</span>'}</td>
+      <td>${badgeStato(a.stato||'attivo')}</td>
+    </tr>`).join('');
+  document.getElementById('main-content').innerHTML=`
+  <div class="card">
+    <div class="card-header">
+      <div style="display:flex;gap:8px;align-items:center">
+        <span class="card-title">Clienti e fornitori</span>
+        <span style="font-size:12px;color:var(--mid)">${(data||[]).length} soggetti</span>
+      </div>
+      <div style="display:flex;gap:8px">
+        <select class="btn btn-sm" onchange="filterAna(this.value)">
+          <option value="">Tutti</option>
+          <option value="cliente">Solo clienti</option>
+          <option value="fornitore">Solo fornitori</option>
+          <option value="entrambi">Clienti e fornitori</option>
+        </select>
+      </div>
+    </div>
+    <table>
+      <thead><tr><th>Ragione sociale</th><th>Partita IVA</th><th>Cod. fiscale</th><th>Tipo / Canale</th><th>Città</th><th>SDI</th><th>Stato</th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="7" style="text-align:center;color:var(--mid);padding:24px;font-style:italic">Nessuna anagrafica ancora — clicca "+ Nuova anagrafica" per iniziare</td></tr>'}</tbody>
+    </table>
+  </div>`;
+}
+
+async function filterAna(val){
+  let q = sb.from('anagrafiche').select('*').order('ragione_sociale');
+  if(val) q=q.eq('tipo',val);
+  const {data} = await q;
+  const rows=(data||[]).map(a=>`
+    <tr class="data-row" onclick="editAnagrafica('${a.id}')">
+      <td><strong>${a.ragione_sociale}</strong></td>
+      <td>${a.partita_iva||'—'}</td>
+      <td>${a.codice_fiscale||'—'}</td>
+      <td><span class="tag">${a.tipo||'—'}</span>${a.canale?` <span class="tag">${a.canale}</span>`:''}</td>
+      <td>${a.citta||'—'}${a.provincia?' ('+a.provincia+')':''}</td>
+      <td>${a.codice_sdi||a.pec_fatturazione?'<span class="badge bg">SDI OK</span>':'<span class="badge ba">Manca SDI</span>'}</td>
+      <td>${badgeStato(a.stato||'attivo')}</td>
+    </tr>`).join('');
+  document.querySelector('#main-content tbody').innerHTML = rows||'<tr><td colspan="7" style="text-align:center;color:var(--mid);padding:24px;font-style:italic">Nessun risultato</td></tr>';
+}
+
+async function openFormAnagrafica(data){
+  document.getElementById('form-ana-title').textContent = data?'Modifica anagrafica':'Nuova anagrafica';
+  document.getElementById('ana-id').value = data?.id||'';
+
+  // Carica agenti per la select
+  const {data:agenti} = await sb.from('agenti').select('id,nome,cognome,percentuale_provvigione').eq('attivo',true).order('cognome');
+  const agentiSel = document.getElementById('ana-agente-id');
+  if(agentiSel){
+    agentiSel.innerHTML='<option value="">— Nessun agente —</option>'+(agenti||[]).map(a=>`<option value="${a.id}" ${a.id===data?.agente_id?'selected':''}>${a.cognome} ${a.nome} (${a.percentuale_provvigione}%)</option>`).join('');
+  }
+
+  const fields={
+    'ana-tipo':data?.tipo||'','ana-canale':data?.canale||'','ana-natura':data?.natura_giuridica||'',
+    'ana-ragione':data?.ragione_sociale||'','ana-piva':data?.partita_iva||'','ana-cf':data?.codice_fiscale||'',
+    'ana-regime':data?.regime_fiscale||'ordinario','ana-rea':data?.codice_rea||'',
+    'ana-indirizzo':data?.indirizzo||'','ana-cap':data?.cap||'','ana-citta':data?.citta||'',
+    'ana-provincia':data?.provincia||'','ana-paese':data?.paese||'IT',
+    'ana-sdi':data?.codice_sdi||'','ana-pec-fatt':data?.pec_fatturazione||'','ana-pec':data?.pec||'',
+    'ana-iban':data?.iban||'','ana-bic':data?.bic_swift||'','ana-banca':data?.banca||'','ana-intestatario':data?.intestatario_conto||'',
+    'ana-referente':data?.referente||'','ana-email':data?.email||'','ana-email-ordini':data?.email_ordini||'','ana-telefono':data?.telefono||'',
+    'ana-pagamento':data?.condizioni_pagamento||'','ana-fido':data?.fido_commerciale||'',
+    'ana-cat-forn':data?.categoria_fornitura||'','ana-leadtime':data?.lead_time_giorni||'','ana-valutazione':data?.valutazione||'',
+    'ana-note':data?.note||''
+  };
+  Object.entries(fields).forEach(([id,val])=>{const el=document.getElementById(id);if(el)el.value=val;});
+  if(document.getElementById('ana-ritenuta')) document.getElementById('ana-ritenuta').checked=data?.ritenuta_acconto||false;
+  if(document.getElementById('ana-split')) document.getElementById('ana-split').checked=data?.split_payment||false;
+  if(document.getElementById('ana-sede-op')){document.getElementById('ana-sede-op').checked=data?.sede_op_diversa||false;toggleSedeOp();}
+  if(data?.sede_op_indirizzo) document.getElementById('ana-so-indirizzo').value=data.sede_op_indirizzo;
+  if(data?.sede_op_cap) document.getElementById('ana-so-cap').value=data.sede_op_cap;
+  if(data?.sede_op_citta) document.getElementById('ana-so-citta').value=data.sede_op_citta;
+
+  // Aggiorna campi condizionali in base al tipo
+  aggiornaCampiPerTipo(data?.tipo||'');
+  anaTab('generale', document.querySelector('.form-tab'));
+  document.getElementById('form-anagrafica').classList.add('open');
+}
+
+function aggiornaCampiPerTipo(tipo){
+  // Sezioni che variano per tipo
+  const isCliente = tipo==='cliente'||tipo==='entrambi';
+  const isFornitore = tipo==='fornitore'||tipo==='entrambi';
+
+  // Sezione "Solo fornitori" nel tab commerciale
+  const fornSection = document.getElementById('ana-section-fornitore');
+  if(fornSection) fornSection.style.display = isFornitore ? 'block' : 'none';
+
+  // Sezione agente e sconti — solo per clienti
+  const clienteSection = document.getElementById('ana-section-cliente');
+  if(clienteSection) clienteSection.style.display = isCliente ? 'block' : 'none';
+
+  // SDI e fatturazione — sempre visibile ma etichetta cambia
+  const sdiLabel = document.getElementById('ana-sdi-label');
+  if(sdiLabel) sdiLabel.textContent = isFornitore&&!isCliente ? 'Codice SDI fornitore' : 'Codice SDI';
+}
+
+async function editAnagrafica(id){
+  const {data} = await sb.from('anagrafiche').select('*').eq('id',id).single();
+  if(data) openFormAnagrafica(data);
+}
+
+async function saveAnagrafica(){
+  let valid=true;
+  const req=['ana-tipo','ana-ragione'];
+  req.forEach(id=>{const el=document.getElementById(id);const p=el.closest('.form-field');if(!el.value.trim()){p.classList.add('invalid');valid=false;}else p.classList.remove('invalid');});
+  if(!valid){toast('Compila i campi obbligatori (contrassegnati con *)','err');anaTab('generale',document.querySelectorAll('.form-tab')[0]);return;}
+  const payload={
+    tipo:v('ana-tipo'),canale:v('ana-canale')||null,natura_giuridica:v('ana-natura')||null,
+    ragione_sociale:v('ana-ragione'),partita_iva:v('ana-piva')||null,codice_fiscale:v('ana-cf')||null,
+    regime_fiscale:v('ana-regime')||'ordinario',codice_rea:v('ana-rea')||null,
+    ritenuta_acconto:document.getElementById('ana-ritenuta').checked,
+    indirizzo:v('ana-indirizzo')||null,cap:v('ana-cap')||null,citta:v('ana-citta')||null,
+    provincia:v('ana-provincia')||null,paese:v('ana-paese')||'IT',
+    sede_op_diversa:document.getElementById('ana-sede-op').checked,
+    sede_op_indirizzo:v('ana-so-indirizzo')||null,sede_op_cap:v('ana-so-cap')||null,sede_op_citta:v('ana-so-citta')||null,
+    codice_sdi:v('ana-sdi')||null,pec_fatturazione:v('ana-pec-fatt')||null,pec:v('ana-pec')||null,
+    split_payment:document.getElementById('ana-split').checked,
+    iban:v('ana-iban')||null,bic_swift:v('ana-bic')||null,banca:v('ana-banca')||null,intestatario_conto:v('ana-intestatario')||null,
+    referente:v('ana-referente')||null,email:v('ana-email')||null,email_ordini:v('ana-email-ordini')||null,telefono:v('ana-telefono')||null,
+    condizioni_pagamento:v('ana-pagamento')||null,fido_commerciale:v('ana-fido')||null,agente_id:v('ana-agente-id')||null,
+    categoria_fornitura:v('ana-cat-forn')||null,lead_time_giorni:v('ana-leadtime')||null,
+    valutazione:v('ana-valutazione')||null,note:v('ana-note')||null,stato:'attivo'
+  };
+  const id=document.getElementById('ana-id').value;
+  let error;
+  if(id){const r=await sb.from('anagrafiche').update(payload).eq('id',id);error=r.error;}
+  else{const r=await sb.from('anagrafiche').insert([payload]);error=r.error;}
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast(id?'Anagrafica aggiornata':'Anagrafica salvata','ok');
+  closeForm('form-anagrafica');
+  renderAnagrafiche();
+}
+
+function v(id){const el=document.getElementById(id);return el?el.value.trim():'';}
+
+function anaTab(tab, el){
+  ['generale','sede','sdi','banca','commerciale'].forEach(t=>{
+    const s=document.getElementById('ana-tab-'+t);if(s)s.classList.add('section-hidden');
+  });
+  document.getElementById('ana-tab-'+tab).classList.remove('section-hidden');
+  document.querySelectorAll('.form-tab').forEach(t=>t.classList.remove('active'));
+  if(el) el.classList.add('active');
+}
+
+function toggleSedeOp(){
+  const checked=document.getElementById('ana-sede-op').checked;
+  const fields=document.getElementById('sede-op-fields');
+  if(checked) fields.classList.remove('section-hidden');
+  else fields.classList.add('section-hidden');
+}
+
+// ── ORDINI ────────────────────────────────────────────
+async function renderOrdini(){
+  const {data,error} = await sb.from('ordini').select('*,anagrafiche(ragione_sociale)').order('created_at',{ascending:false});
+  if(error){document.getElementById('main-content').innerHTML=`<div class="card"><p style="color:var(--red)">${error.message}</p></div>`;return;}
+  const totale=(data||[]).filter(o=>o.stato!=='annullato').reduce((s,o)=>s+Number(o.importo||0),0);
+  const rows=(data||[]).map(o=>`
+    <tr class="data-row" onclick="editOrdine('${o.id}')">
+      <td><strong>${o.numero||'—'}</strong></td>
+      <td>${o.anagrafiche?.ragione_sociale||'—'}</td>
+      <td>${o.serie?`<span class="tag">${o.serie}</span>`:'—'}</td>
+      <td>${o.quantita||'—'} pz</td>
+      <td>${fmtEuro(o.importo)}</td>
+      <td>${fmtData(o.data_consegna)}</td>
+      <td>${badgeStato(o.stato||'confermato')}</td>
+      <td><div style="display:flex;align-items:center;gap:6px">${pbar(o.avanzamento)}<span style="font-size:11px;color:var(--mid);min-width:28px">${o.avanzamento||0}%</span></div></td>
+    </tr>`).join('');
+  document.getElementById('main-content').innerHTML=`
+  <div class="grid-4" style="margin-bottom:16px">
+    <div class="metric"><div class="metric-label">Totale ordini</div><div class="metric-value">${(data||[]).length}</div></div>
+    <div class="metric"><div class="metric-label">Aperti</div><div class="metric-value">${(data||[]).filter(o=>!['spedito','annullato'].includes(o.stato)).length}</div></div>
+    <div class="metric"><div class="metric-label">In ritardo</div><div class="metric-value" style="color:var(--red)">${(data||[]).filter(o=>o.stato==='ritardo').length}</div></div>
+    <div class="metric"><div class="metric-label">Valore totale</div><div class="metric-value" style="font-size:16px">${fmtEuro(totale)}</div></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><span class="card-title">Ordini di vendita</span></div>
+    <table>
+      <thead><tr><th>N° Ordine</th><th>Cliente</th><th>Serie</th><th>Q.tà</th><th>Importo</th><th>Consegna</th><th>Stato</th><th>Avanzamento</th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="8" style="text-align:center;color:var(--mid);padding:24px;font-style:italic">Nessun ordine ancora</td></tr>'}</tbody>
+    </table>
+  </div>`;
+}
+
+async function openFormOrdine(data){
+  const {data:clienti} = await sb.from('anagrafiche').select('id,ragione_sociale').order('ragione_sociale');
+  const opts=(clienti||[]).map(c=>`<option value="${c.id}" ${data?.anagrafica_id===c.id?'selected':''}>${c.ragione_sociale}</option>`).join('');
+  document.getElementById('ord-cliente').innerHTML='<option value="">Seleziona cliente...</option>'+opts;
+  document.getElementById('form-ord-title').textContent = data?'Modifica ordine':'Nuovo ordine';
+  document.getElementById('ord-id').value=data?.id||'';
+  document.getElementById('ord-numero').value=data?.numero||'';
+  document.getElementById('ord-serie').value=data?.serie||'';
+  document.getElementById('ord-qty').value=data?.quantita||'';
+  document.getElementById('ord-importo').value=data?.importo||'';
+  document.getElementById('ord-consegna').value=data?.data_consegna||'';
+  document.getElementById('ord-stato').value=data?.stato||'confermato';
+  document.getElementById('ord-avanz').value=data?.avanzamento||0;
+  document.getElementById('ord-note').value=data?.note||'';
+  document.getElementById('form-ordine').classList.add('open');
+}
+
+async function editOrdine(id){
+  const {data} = await sb.from('ordini').select('*').eq('id',id).single();
+  if(data) openFormOrdine(data);
+}
+
+async function saveOrdine(){
+  let valid=true;
+  ['ord-numero','ord-cliente'].forEach(id=>{
+    const el=document.getElementById(id);const p=el.closest('.form-field');
+    if(!el.value.trim()){p.classList.add('invalid');valid=false;}else p.classList.remove('invalid');
+  });
+  if(!valid){toast('Compila i campi obbligatori','err');return;}
+  const payload={
+    numero:v('ord-numero'),anagrafica_id:v('ord-cliente')||null,
+    serie:v('ord-serie')||null,quantita:parseInt(v('ord-qty'))||null,
+    importo:parseFloat(v('ord-importo'))||null,data_consegna:v('ord-consegna')||null,
+    stato:v('ord-stato')||'confermato',avanzamento:parseInt(v('ord-avanz'))||0,
+    note:v('ord-note')||null
+  };
+  const id=document.getElementById('ord-id').value;
+  let error;
+  if(id){const r=await sb.from('ordini').update(payload).eq('id',id);error=r.error;}
+  else{const r=await sb.from('ordini').insert([payload]);error=r.error;}
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast(id?'Ordine aggiornato':'Ordine salvato','ok');
+  closeForm('form-ordine');
+  renderOrdini();
+}
+
+// ── FATTURE ───────────────────────────────────────────
+async function renderFatture(){
+  const {data} = await sb.from('fatture').select('*,anagrafiche(ragione_sociale),ordini(numero)').order('created_at',{ascending:false});
+  const rows=(data||[]).map(f=>`
+    <tr class="data-row">
+      <td><strong>${f.numero||'—'}</strong></td>
+      <td>${f.anagrafiche?.ragione_sociale||'—'}</td>
+      <td>${f.ordini?.numero||'—'}</td>
+      <td>${fmtData(f.data_emissione)}</td>
+      <td>${fmtData(f.data_scadenza)}</td>
+      <td>${fmtEuro(f.importo)}</td>
+      <td>${f.iva_percentuale||22}%</td>
+      <td>${badgeStato(f.stato||'emessa')}</td>
+    </tr>`).join('');
+  const tot=(data||[]).reduce((s,f)=>s+Number(f.importo||0),0);
+  const pagate=(data||[]).filter(f=>f.stato==='pagata').reduce((s,f)=>s+Number(f.importo||0),0);
+  document.getElementById('main-content').innerHTML=`
+  <div class="grid-4" style="margin-bottom:16px">
+    <div class="metric"><div class="metric-label">Totale emesso</div><div class="metric-value" style="font-size:16px">${fmtEuro(tot)}</div></div>
+    <div class="metric"><div class="metric-label">Incassato</div><div class="metric-value" style="font-size:16px">${fmtEuro(pagate)}</div></div>
+    <div class="metric"><div class="metric-label">Da incassare</div><div class="metric-value" style="font-size:16px">${fmtEuro(tot-pagate)}</div></div>
+    <div class="metric"><div class="metric-label">Scadute</div><div class="metric-value" style="color:var(--red)">${(data||[]).filter(f=>f.stato==='scaduta').length}</div></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><span class="card-title">Registro fatture</span></div>
+    <table>
+      <thead><tr><th>N° Fattura</th><th>Cliente</th><th>Ordine</th><th>Emissione</th><th>Scadenza</th><th>Importo</th><th>IVA</th><th>Stato</th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="8" style="text-align:center;color:var(--mid);padding:24px;font-style:italic">Nessuna fattura ancora</td></tr>'}</tbody>
+    </table>
+  </div>`;
+}
+
+// ── MAGAZZINO ─────────────────────────────────────────
+async function renderMagazzino(){
+  const {data} = await sb.from('magazzino').select('*,anagrafiche(ragione_sociale)').order('codice');
+  const rows=(data||[]).map(m=>{
+    const sotto=Number(m.giacenza)<=Number(m.scorta_minima);
+    return `<tr class="data-row">
+      <td><strong>${m.codice||'—'}</strong></td>
+      <td>${m.descrizione||'—'}</td>
+      <td>${m.categoria?`<span class="tag">${m.categoria}</span>`:'—'}</td>
+      <td>${m.giacenza||0} ${m.unita||''}</td>
+      <td>${m.scorta_minima||0} ${m.unita||''}</td>
+      <td>${m.ubicazione||'—'}</td>
+      <td>${m.anagrafiche?.ragione_sociale||'—'}</td>
+      <td>${sotto?'<span class="badge br">Sotto scorta</span>':'<span class="badge bg">OK</span>'}</td>
+    </tr>`;}).join('');
+  const sottoscorta=(data||[]).filter(m=>Number(m.giacenza)<=Number(m.scorta_minima)).length;
+  document.getElementById('main-content').innerHTML=`
+  <div class="grid-4" style="margin-bottom:16px">
+    <div class="metric"><div class="metric-label">Articoli totali</div><div class="metric-value">${(data||[]).length}</div></div>
+    <div class="metric"><div class="metric-label">Sotto scorta minima</div><div class="metric-value" style="color:var(--red)">${sottoscorta}</div></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><span class="card-title">Giacenze magazzino</span></div>
+    <table>
+      <thead><tr><th>Codice</th><th>Descrizione</th><th>Cat.</th><th>Giacenza</th><th>Scorta min.</th><th>Ubicazione</th><th>Fornitore</th><th>Stato</th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="8" style="text-align:center;color:var(--mid);padding:24px;font-style:italic">Nessun articolo ancora</td></tr>'}</tbody>
+    </table>
+  </div>`;
+}
+
+// ── PRODUZIONE ────────────────────────────────────────
+async function renderProduzione(){
+  const {data} = await sb.from('ordini_produzione').select('*,ordini(numero)').order('created_at',{ascending:false});
+  const rows=(data||[]).map(op=>`
+    <tr class="data-row">
+      <td><strong>${op.numero_op||'—'}</strong></td>
+      <td>${op.prodotto||'—'}</td>
+      <td>${op.quantita||'—'} pz</td>
+      <td>${op.fase||'—'}</td>
+      <td>${fmtData(op.data_inizio)}</td>
+      <td>${fmtData(op.data_fine)}</td>
+      <td><div style="display:flex;align-items:center;gap:6px">${pbar(op.avanzamento)}<span style="font-size:11px;color:var(--mid)">${op.avanzamento||0}%</span></div></td>
+      <td>${badgeStato(op.stato||'pianificato')}</td>
+    </tr>`).join('');
+  document.getElementById('main-content').innerHTML=`
+  <div class="card">
+    <div class="card-header"><span class="card-title">Ordini di produzione</span></div>
+    <table>
+      <thead><tr><th>N° OP</th><th>Prodotto</th><th>Q.tà</th><th>Fase</th><th>Inizio</th><th>Fine prev.</th><th>Avanzamento</th><th>Stato</th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="8" style="text-align:center;color:var(--mid);padding:24px;font-style:italic">Nessun ordine di produzione ancora</td></tr>'}</tbody>
+    </table>
+  </div>`;
+}
+
+// ── DIPENDENTI ────────────────────────────────────────
+async function renderDipendenti(){
+  const {data} = await sb.from('dipendenti').select('*').order('cognome');
+  const rows=(data||[]).map(d=>`
+    <tr class="data-row">
+      <td><strong>${d.cognome||''} ${d.nome||''}</strong></td>
+      <td>${d.ruolo||'—'}</td>
+      <td>${d.reparto||'—'}</td>
+      <td>${d.contratto||'—'}</td>
+      <td>${d.ore_settimanali||'—'} h</td>
+      <td>${badgeStato(d.stato||'presente')}</td>
+    </tr>`).join('');
+  document.getElementById('main-content').innerHTML=`
+  <div class="grid-4" style="margin-bottom:16px">
+    <div class="metric"><div class="metric-label">Totale dipendenti</div><div class="metric-value">${(data||[]).length}</div></div>
+    <div class="metric"><div class="metric-label">Presenti</div><div class="metric-value">${(data||[]).filter(d=>d.stato==='presente').length}</div></div>
+    <div class="metric"><div class="metric-label">Assenti</div><div class="metric-value" style="color:var(--red)">${(data||[]).filter(d=>d.stato!=='presente').length}</div></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><span class="card-title">Registro dipendenti</span></div>
+    <table>
+      <thead><tr><th>Nome</th><th>Ruolo</th><th>Reparto</th><th>Contratto</th><th>Ore/sett.</th><th>Stato</th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="6" style="text-align:center;color:var(--mid);padding:24px;font-style:italic">Nessun dipendente ancora</td></tr>'}</tbody>
+    </table>
+  </div>`;
+}
+
+// ── VALIDAZIONI ───────────────────────────────────────
+function validatePIVA(){
+  const el=document.getElementById('ana-piva');
+  const val=el.value.replace(/\s/g,'');
+  const p=el.closest('.form-field');
+  if(!val){p.classList.remove('invalid');return true;}
+  const ok=/^\d{11}$/.test(val);
+  p.classList.toggle('invalid',!ok);
+  document.getElementById('err-piva').style.display=ok?'none':'block';
+  return ok;
+}
+function validateCF(){
+  const el=document.getElementById('ana-cf');
+  const val=el.value.replace(/\s/g,'').toUpperCase();
+  if(!val) return true;
+  const ok=/^[A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z]$/.test(val)||/^\d{11}$/.test(val);
+  el.closest('.form-field').classList.toggle('invalid',!ok);
+  document.getElementById('err-cf').style.display=ok?'none':'block';
+  return ok;
+}
+function validateIBAN(){
+  const el=document.getElementById('ana-iban');
+  const val=el.value.replace(/\s/g,'').toUpperCase();
+  if(!val) return true;
+  const ok=/^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/.test(val);
+  el.closest('.form-field').classList.toggle('invalid',!ok);
+  document.getElementById('err-iban').style.display=ok?'none':'block';
+  return ok;
+}
+
+// ── FORM UTILS ────────────────────────────────────────
+function closeForm(id){
+  document.getElementById(id).classList.remove('open');
+}
+// Form overlay — NON chiudere cliccando fuori, solo con i pulsanti espliciti
+// document.querySelectorAll('.form-overlay').forEach(o=>{
+//   o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open');});
+// });
+// Chiudi solo anagrafica e ordine con click fuori (non configuratore e nuovo doc)
+document.getElementById('form-anagrafica').addEventListener('click',e=>{if(e.target===document.getElementById('form-anagrafica'))closeForm('form-anagrafica');});
+document.getElementById('form-ordine').addEventListener('click',e=>{if(e.target===document.getElementById('form-ordine'))closeForm('form-ordine');});
+
+// ══════════════════════════════════════════════════════
+// CONFIGURATORE — stato globale
+// ══════════════════════════════════════════════════════
+let CFG = {};          // configurazione corrente porta
+let CFG_MODE = null;   // 'preventivo' | 'ordine'
+let CFG_TARGET_ID = null; // id preventivo o ordine corrente
+let CFG_RIGHE = [];    // righe accumulate prima del salvataggio testata
+
+function resetCFG(){
+  CFG = {
+    serie:null, modello:null, finitura:null,
+    pannello_bugna:null, colore_alu:null, colore_pietra:null,
+    tipo_vetro:null, apertura:null, senso:null,
+    larghezza:null, altezza:null, misura_custom:false,
+    spessore:null, spalla:null, accessorio_telaio:null,
+    ferramenta:null, maniglia:null, quantita:1, note_riga:'',
+    // prezzi componenti
+    p_base:0, p_vetro:0, p_finitura:0, p_bugna:0,
+    p_inserto:0, p_apertura:0, p_telaio:0, p_acc_telaio:0,
+    p_ferramenta:0, p_maniglia:0, p_extra_incisioni:0,
+    // nomi per descrizione
+    nome_serie:'', nome_modello:'', nome_finitura:'',
+    nome_apertura:'', nome_colore_alu:'', nome_colore_pietra:'',
+    nome_tipo_vetro:'', nome_ferramenta:'', nome_maniglia:''
+  };
+}
+resetCFG();
+
+function cfgTotale(){
+  return (CFG.p_base||0)+(CFG.p_vetro||0)+(CFG.p_finitura||0)+
+    (CFG.p_bugna||0)+(CFG.p_inserto||0)+(CFG.p_apertura||0)+
+    (CFG.p_telaio||0)+(CFG.p_acc_telaio||0)+
+    (CFG.p_ferramenta||0)+(CFG.p_maniglia||0)+(CFG.p_extra_incisioni||0);
+}
+
+function listino(){ return window._prevListino || 'A'; }
+
+function cfgUpdatePrice(){
+  const tot = cfgTotale();
+  const el = document.getElementById('cfg-prezzo-unitario');
+  if(el) el.textContent = '€ '+tot.toLocaleString('it-IT',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const qty = parseInt(document.getElementById('cfg-qty')?.value||1)||1;
+  const elTot = document.getElementById('cfg-prezzo-totale');
+  if(elTot) elTot.textContent = '€ '+(tot*qty).toLocaleString('it-IT',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+
+// ── MODAL CONFIGURATORE ───────────────────────────────
+function openConfiguratore(mode, targetId, listino_in){
+  CFG_MODE = mode;
+  CFG_TARGET_ID = targetId;
+  window._prevListino = listino_in || 'A';
+  resetCFG();
+  renderCfgStep('serie');
+  document.getElementById('modal-cfg').classList.add('open');
+}
+
+function closeCfg(){
+  document.getElementById('modal-cfg').classList.remove('open');
+}
+
+async function renderCfgStep(step){
+  const body = document.getElementById('cfg-body');
+  body.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+  updateCfgStepper(step);
+
+  if(step==='serie') await cfgSerie();
+  else if(step==='modello') await cfgModello();
+  else if(step==='finitura') await cfgFinitura();
+  else if(step==='opzioni') await cfgOpzioni();
+  else if(step==='apertura') await cfgApertura();
+  else if(step==='misure') await cfgMisure();
+  else if(step==='spessore') await cfgSpessore();
+  else if(step==='ferramenta') await cfgFerramenta();
+  else if(step==='riepilogo') await cfgRiepilogo();
+}
+
+const CFG_STEPS = ['serie','modello','finitura','opzioni','apertura','misure','spessore','ferramenta','riepilogo'];
+const CFG_LABELS = {serie:'Serie',modello:'Modello',finitura:'Finitura',opzioni:'Opzioni',apertura:'Apertura',misure:'Misure',spessore:'Spessore muro',ferramenta:'Ferramenta',riepilogo:'Riepilogo'};
+
+function updateCfgStepper(current){
+  const idx = CFG_STEPS.indexOf(current);
+  const el = document.getElementById('cfg-stepper');
+  if(!el) return;
+  el.innerHTML = CFG_STEPS.map((s,i)=>`
+    <div style="display:flex;align-items:center;gap:4px;font-size:11px;
+      color:${i<idx?'var(--green-tx)':i===idx?'var(--red)':'var(--mid)'}">
+      <div style="width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:500;flex-shrink:0;
+        background:${i<idx?'var(--green-bg)':i===idx?'var(--red)':'var(--border)'};
+        color:${i<idx?'var(--green-tx)':i===idx?'#fff':'var(--mid)'}">
+        ${i<idx?'✓':i+1}</div>
+      <span style="display:${i===idx?'inline':'none'}">${CFG_LABELS[s]}</span>
+    </div>
+    ${i<CFG_STEPS.length-1?'<div style="width:16px;height:1px;background:var(--border);flex-shrink:0"></div>':''}`
+  ).join('');
+}
+
+async function cfgSerie(){
+  const {data} = await sb.from('serie').select('*').eq('attiva',true).order('nome');
+  const cards = (data||[]).map(s=>`
+    <div onclick="selSerie('${s.codice}','${s.nome}')"
+      style="border:${CFG.serie===s.codice?'2px solid var(--red)':'0.5px solid var(--border)'};
+        border-radius:var(--radius-lg);padding:14px 16px;cursor:pointer;
+        background:${CFG.serie===s.codice?'var(--red-bg)':'var(--white)'};
+        transition:all 0.1s">
+      <div style="font-size:14px;font-weight:500;color:${CFG.serie===s.codice?'var(--red)':'var(--dark)'}">${s.nome}</div>
+      <div style="font-size:12px;color:var(--mid);margin-top:3px">${s.descrizione||''}</div>
+    </div>`).join('');
+  document.getElementById('cfg-body').innerHTML=`
+    <div style="font-size:13px;font-weight:500;margin-bottom:12px;color:var(--dark)">Seleziona la serie</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">${cards}</div>`;
+}
+
+async function selSerie(cod, nome){
+  CFG.serie=cod; CFG.nome_serie=nome;
+  CFG.modello=null; CFG.finitura=null;
+  await renderCfgStep('modello');
+}
+
+async function cfgModello(){
+  const {data} = await sb.from('modelli')
+    .select('*,prezzi_modello(listino,prezzo_base,prezzo_vetro,vetro_incluso,ha_extra_incisioni)')
+    .eq('codice_serie',CFG.serie).eq('attivo',true).order('nome');
+  const cards=(data||[]).map(m=>{
+    const pm = m.prezzi_modello?.find(p=>p.listino===listino());
+    const prezzo = pm?.prezzo_base||0;
+    return `<div onclick="selModello('${m.codice}','${m.nome.replace(/'/g,"\\'")}',${prezzo},${!!pm?.vetro_incluso},${!!pm?.ha_extra_incisioni})"
+      style="border:${CFG.modello===m.codice?'2px solid var(--red)':'0.5px solid var(--border)'};
+        border-radius:var(--radius);padding:10px 12px;cursor:pointer;
+        background:${CFG.modello===m.codice?'var(--red-bg)':'var(--white)'}">
+      <div style="font-size:13px;font-weight:500;color:${CFG.modello===m.codice?'var(--red)':'var(--dark)'}">${m.nome}</div>
+      <div style="font-size:10px;color:var(--mid);margin-top:2px">${m.codice}</div>
+      <div style="font-size:12px;color:var(--red);font-weight:500;margin-top:4px">€ ${prezzo.toLocaleString('it-IT',{minimumFractionDigits:2})}</div>
+    </div>`;
+  }).join('');
+  document.getElementById('cfg-body').innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:500">Seleziona il modello <span style="color:var(--mid);font-weight:400">— Serie ${CFG.nome_serie}</span></div>
+      <button class="btn btn-sm" onclick="renderCfgStep('serie')">← Cambia serie</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;max-height:calc(60vh);overflow-y:auto">${cards}</div>`;
+}
+
+async function selModello(cod, nome, prezzo, vetroIncluso, haExtraIncisioni){
+  CFG.modello=cod; CFG.nome_modello=nome; CFG.p_base=prezzo;
+  CFG._vetroIncluso=vetroIncluso; CFG._haExtraIncisioni=haExtraIncisioni;
+  // Carica dati modello per flags
+  const {data:m} = await sb.from('modelli').select('*').eq('codice',cod).single();
+  CFG._flags = m;
+  await renderCfgStep('finitura');
+}
+
+// ── SISTEMA UNIVERSALE COMPATIBILITÀ ─────────────────
+// Carica tutte le esclusioni per le scelte correnti del configuratore
+// Logica CUMULATIVA: un'opzione viene esclusa se ALMENO UNA delle scelte precedenti la esclude
+let _compatCache = null; // cache per evitare query ripetute nello stesso step
+
+async function caricaEsclusioni(){
+  // Costruisce lista di tutte le entità già scelte
+  const scelte = [];
+  if(CFG.serie)    scelte.push({tipo:'serie',    codice:CFG.serie});
+  if(CFG.modello)  scelte.push({tipo:'modello',  codice:CFG.modello});
+  if(CFG.finitura) scelte.push({tipo:'finitura', codice:CFG.finitura});
+  if(CFG.apertura) scelte.push({tipo:'apertura', codice:CFG.apertura});
+  if(CFG.ferramenta) scelte.push({tipo:'ferramenta', codice:CFG.ferramenta});
+  if(CFG.colore_alu) scelte.push({tipo:'inserto_alu', codice:CFG.colore_alu});
+  if(CFG.colore_pietra) scelte.push({tipo:'inserto_pietra', codice:CFG.colore_pietra});
+  if(CFG.tipo_vetro) scelte.push({tipo:'vetro', codice:CFG.tipo_vetro});
+  if(scelte.length===0) return new Set();
+
+  // Query: trova tutte le regole dove entita_a è una delle scelte correnti
+  const {data:regole} = await sb.from('regole_compatibilita')
+    .select('entita_b_tipo,entita_b_codice')
+    .in('entita_a_tipo', scelte.map(s=>s.tipo))
+    .filter('entita_a_codice','in',`(${scelte.map(s=>"'"+s.codice.replace(/'/g,"''")+"'").join(',')})`);
+
+  // Filtra solo le regole dove entita_a_codice corrisponde alle scelte effettive
+  const scelteMap = {};
+  scelte.forEach(s=>{ if(!scelteMap[s.tipo]) scelteMap[s.tipo]=new Set(); scelteMap[s.tipo].add(s.codice); });
+  
+  // Costruisce set di esclusi: "tipo:codice"
+  const esclusi = new Set();
+  (regole||[]).forEach(r=>{
+    esclusi.add(r.entita_b_tipo+':'+r.entita_b_codice);
+  });
+  return esclusi;
+}
+
+async function filtraPerCompatibilita(opzioni, categoria, codiceChiave){
+  const esclusi = await caricaEsclusioni();
+  if(esclusi.size===0) return opzioni;
+  return opzioni.filter(op=>!esclusi.has(categoria+':'+op[codiceChiave]));
+}
+
+async function cfgFinitura(){
+  const {data:tutteFiniture} = await sb.from('finiture')
+    .select('*')
+    .eq('codice_serie',CFG.serie)
+    .or(`codice_modello.is.null,codice_modello.eq.${CFG.modello}`)
+    .eq('attiva',true)
+    .order('nome_finitura');
+
+  // Applica filtro compatibilità
+  const data = await filtraPerCompatibilita(tutteFiniture||[], 'finitura', 'codice_finitura');
+
+  const cards=(data||[]).map(f=>{
+    const sp = f[`sovrapprezzo_${listino()}`]||0;
+    return `<div onclick="selFinitura('${f.codice_finitura}','${f.nome_finitura.replace(/'/g,"\\'")}',${sp},${!!f.consente_bugna})"
+      style="border:${CFG.finitura===f.codice_finitura?'2px solid var(--red)':'0.5px solid var(--border)'};
+        border-radius:var(--radius);padding:10px 12px;cursor:pointer;
+        background:${CFG.finitura===f.codice_finitura?'var(--red-bg)':'var(--white)'}">
+      <div style="font-size:13px;font-weight:500;color:${CFG.finitura===f.codice_finitura?'var(--red)':'var(--dark)'}">${f.nome_finitura}</div>
+      <div style="font-size:11px;color:var(--mid);margin-top:2px">${sp>0?'+€'+sp:'Inclusa'}</div>
+    </div>`;
+  }).join('');
+  document.getElementById('cfg-body').innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:500">Seleziona la finitura <span style="color:var(--mid);font-weight:400">— ${CFG.nome_modello}</span></div>
+      <button class="btn btn-sm" onclick="renderCfgStep('modello')">← Cambia modello</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;max-height:calc(60vh);overflow-y:auto">${cards}</div>`;
+}
+
+async function selFinitura(cod, nome, sovr, consenteBugna){
+  CFG.finitura=cod; CFG.nome_finitura=nome; CFG.p_finitura=sovr;
+  CFG._consenteBugna=consenteBugna;
+  await renderCfgStep('opzioni');
+}
+
+async function cfgOpzioni(){
+  const f = CFG._flags || {};
+  let html = `<div style="font-size:13px;font-weight:500;margin-bottom:14px">Opzioni aggiuntive <span style="color:var(--mid);font-weight:400">— ${CFG.nome_modello} / ${CFG.nome_finitura}</span></div>`;
+
+  // PANNELLO O BUGNA
+  if(f.ha_pannello_o_bugna){
+    html+=`<div style="margin-bottom:16px">
+      <div style="font-size:12px;font-weight:500;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.4px;color:var(--mid)">Pannello o bugna</div>
+      <div style="display:flex;gap:10px">
+        <div onclick="CFG.pannello_bugna='pannello';CFG.p_bugna=0;cfgOpzioniUpdate()" style="flex:1;border:${CFG.pannello_bugna==='pannello'?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:10px;cursor:pointer;text-align:center;background:${CFG.pannello_bugna==='pannello'?'var(--red-bg)':'var(--white)'}">
+          <div style="font-size:13px;font-weight:500">Pannello liscio</div>
+        </div>
+        ${CFG._consenteBugna?`<div onclick="selBugna()" style="flex:1;border:${CFG.pannello_bugna==='bugna'?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:10px;cursor:pointer;text-align:center;background:${CFG.pannello_bugna==='bugna'?'var(--red-bg)':'var(--white)'}">
+          <div style="font-size:13px;font-weight:500">Bugna</div>
+        </div>`:'<div style="flex:1;border:0.5px solid var(--border);border-radius:var(--radius);padding:10px;text-align:center;opacity:0.4;"><div style="font-size:13px">Bugna non disponibile per questa finitura</div></div>'}
+      </div>
+    </div>`;
+  }
+
+  // INSERTO ALLUMINIO
+  if(f.ha_inserto_alluminio){
+    const {data:colAlu} = await sb.from('colori_inserto_alluminio').select('*').order('nome');
+    const optsAlu = (colAlu||[]).map(c=>`
+      <div onclick="selAlu('${c.codice}','${c.nome}',${c.incluso?0:(c.sovrapprezzo_A||0)})"
+        style="border:${CFG.colore_alu===c.codice?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:8px 12px;cursor:pointer;background:${CFG.colore_alu===c.codice?'var(--red-bg)':'var(--white)'}">
+        <div style="font-size:13px;font-weight:500">${c.nome}</div>
+        <div style="font-size:11px;color:var(--mid)">${c.incluso?'Incluso':c.sovrapprezzo_A?'+€'+c.sovrapprezzo_A:'€ 0'}</div>
+      </div>`).join('');
+    html+=`<div style="margin-bottom:16px">
+      <div style="font-size:12px;font-weight:500;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.4px;color:var(--mid)">Colore inserto alluminio</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">${optsAlu}</div>
+    </div>`;
+  }
+
+  // INSERTO PIETRA
+  if(f.ha_inserto_pietra){
+    const {data:colPietra} = await sb.from('colori_pietra').select('*').order('nome');
+    const optsPietra = (colPietra||[]).map(c=>`
+      <div onclick="selPietra('${c.codice}','${c.nome}',${c[`sovrapprezzo_${listino()}`]||0})"
+        style="border:${CFG.colore_pietra===c.codice?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:8px 12px;cursor:pointer;background:${CFG.colore_pietra===c.codice?'var(--red-bg)':'var(--white)'}">
+        <div style="font-size:13px;font-weight:500">${c.nome}</div>
+        <div style="font-size:11px;color:var(--mid)">${c[`sovrapprezzo_${listino()}`]?'+€'+c[`sovrapprezzo_${listino()}`]:'Incluso'}</div>
+      </div>`).join('');
+    html+=`<div style="margin-bottom:16px">
+      <div style="font-size:12px;font-weight:500;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.4px;color:var(--mid)">Colore pietra</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">${optsPietra||'<p style="color:var(--mid);font-size:13px">Nessun colore pietra configurato — aggiungili dal pannello admin</p>'}</div>
+    </div>`;
+  }
+
+  // VETRO
+  if(f.ha_vetro && !CFG._vetroIncluso){
+    const {data:pm} = await sb.from('prezzi_modello').select('prezzo_vetro').eq('codice_modello',CFG.modello).eq('listino',listino()).single();
+    const prezzoVetroBase = pm?.prezzo_vetro||0;
+    const {data:tipiV} = await sb.from('tipi_vetro').select('*').eq('attivo',true).order('nome');
+    const optsV = (tipiV||[]).map(tv=>{
+      const totV = prezzoVetroBase + (tv[`sovrapprezzo_${listino()}`]||0);
+      return `<div onclick="selVetro('${tv.codice}','${tv.nome}',${totV})"
+        style="border:${CFG.tipo_vetro===tv.codice?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:8px 12px;cursor:pointer;background:${CFG.tipo_vetro===tv.codice?'var(--red-bg)':'var(--white)'}">
+        <div style="font-size:13px;font-weight:500">${tv.nome}</div>
+        <div style="font-size:11px;color:var(--mid)">€ ${totV.toLocaleString('it-IT',{minimumFractionDigits:2})}</div>
+      </div>`;
+    }).join('');
+    html+=`<div style="margin-bottom:16px">
+      <div style="font-size:12px;font-weight:500;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.4px;color:var(--mid)">Tipo di vetro</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">${optsV}</div>
+    </div>`;
+  }
+
+  // EXTRA INCISIONI
+  if(CFG._haExtraIncisioni){
+    const {data:pm} = await sb.from('prezzi_modello').select('prezzo_extra_incisioni').eq('codice_modello',CFG.modello).eq('listino',listino()).single();
+    const prezzoExtra = pm?.prezzo_extra_incisioni||0;
+    html+=`<div style="margin-bottom:16px">
+      <div style="font-size:12px;font-weight:500;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.4px;color:var(--mid)">Incisioni decorative</div>
+      <div style="display:flex;gap:10px">
+        <div onclick="CFG.p_extra_incisioni=0;cfgOpzioniUpdate()" style="flex:1;border:${CFG.p_extra_incisioni===0?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:10px;cursor:pointer;text-align:center;background:${CFG.p_extra_incisioni===0?'var(--red-bg)':'var(--white)'}">
+          <div style="font-size:13px;font-weight:500">Senza incisioni</div>
+        </div>
+        <div onclick="CFG.p_extra_incisioni=${prezzoExtra};cfgOpzioniUpdate()" style="flex:1;border:${CFG.p_extra_incisioni>0?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:10px;cursor:pointer;text-align:center;background:${CFG.p_extra_incisioni>0?'var(--red-bg)':'var(--white)'}">
+          <div style="font-size:13px;font-weight:500">Con incisioni</div>
+          <div style="font-size:12px;color:var(--mid)">+€ ${prezzoExtra.toLocaleString('it-IT',{minimumFractionDigits:2})}</div>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  html+=`<div style="display:flex;justify-content:space-between;margin-top:16px">
+    <button class="btn btn-sm" onclick="renderCfgStep('finitura')">← Indietro</button>
+    <button class="btn btn-red btn-sm" onclick="renderCfgStep('apertura')">Avanti →</button>
+  </div>`;
+
+  document.getElementById('cfg-body').innerHTML=html;
+  cfgUpdatePrice();
+}
+
+function cfgOpzioniUpdate(){ cfgOpzioni(); }
+async function selBugna(){
+  const {data:fin} = await sb.from('finiture').select('sovrapprezzo_bugna_A,sovrapprezzo_bugna_P').eq('codice_finitura',CFG.finitura).eq('codice_serie',CFG.serie).single();
+  CFG.pannello_bugna='bugna'; CFG.p_bugna=fin?.[`sovrapprezzo_bugna_${listino()}`]||0;
+  cfgOpzioniUpdate();
+}
+function selAlu(cod,nome,sovr){ CFG.colore_alu=cod;CFG.nome_colore_alu=nome;CFG.p_inserto=sovr; cfgUpdatePrice(); renderCfgStep('apertura'); }
+function selPietra(cod,nome,sovr){ CFG.colore_pietra=cod;CFG.nome_colore_pietra=nome;CFG.p_inserto=sovr; cfgUpdatePrice(); renderCfgStep('apertura'); }
+function selVetro(cod,nome,prezzo){ CFG.tipo_vetro=cod;CFG.nome_tipo_vetro=nome;CFG.p_vetro=prezzo; cfgUpdatePrice(); cfgOpzioniUpdate(); }
+
+async function cfgApertura(){
+  const [{data:ap},{data:sensi}] = await Promise.all([
+    sb.from('tipologie_apertura').select('*').eq('attiva',true).order('codice'),
+    sb.from('sensi_apertura').select('*'),
+  ]);
+
+  // Famiglia order and labels from Excel
+  const famOrder = ['BAT','CS','LIBRO','SALOON','ROTOTRASLANTI','SPECIALI','SCORREVOLI INTERNO MURO','SCORREVOLI ESTERNO MURO','FILO MURO','COMPLANARI','PASSATE'];
+  const famLabels = {
+    'BAT':'Battente con anuba registrabili',
+    'CS':'Senza battura con cerniere a scomparsa',
+    'LIBRO':'A libro',
+    'SALOON':'Va e vieni (Saloon)',
+    'ROTOTRASLANTI':'Rototraslante',
+    'SPECIALI':'Speciali',
+    'SCORREVOLI INTERNO MURO':'Scorrevole interno muro',
+    'SCORREVOLI ESTERNO MURO':'Scorrevole esterno muro',
+    'FILO MURO':'Filo muro',
+    'COMPLANARI':'Complanare',
+    'PASSATE':'Passata (stipite senza anta)',
+  };
+
+  // Build map codice→sensi from sensi_apertura
+  const sensiMap = {};
+  (sensi||[]).forEach(s=>{
+    if(!sensiMap[s.codice_apertura]) sensiMap[s.codice_apertura]=[];
+    sensiMap[s.codice_apertura].push(s);
+  });
+
+  // Group aperture by famiglia from sensi_apertura (more accurate than tipologie_apertura.famiglia)
+  const gruppi = {};
+  (ap||[]).forEach(a=>{
+    const s = sensiMap[a.codice];
+    const fam = s?.[0]?.famiglia || a.famiglia || 'ALTRO';
+    if(!gruppi[fam]) gruppi[fam]=[];
+    gruppi[fam].push(a);
+  });
+
+  let html=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+    <div style="font-size:13px;font-weight:500">Tipologia di apertura</div>
+    <button class="btn btn-sm" onclick="renderCfgStep('opzioni')">← Indietro</button>
+  </div>`;
+
+  // Render in correct family order
+  const orderedFams = [...famOrder.filter(f=>gruppi[f]), ...Object.keys(gruppi).filter(f=>!famOrder.includes(f))];
+
+  orderedFams.forEach(fam=>{
+    const aps = gruppi[fam];
+    if(!aps||!aps.length) return;
+    html+=`<div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:var(--mid);margin:14px 0 6px;padding-bottom:4px;border-bottom:0.5px solid var(--border)">${famLabels[fam]||fam}</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:4px">`;
+    aps.forEach(a=>{
+      const sp = a.logica_prezzo==='fisso'?(a[`sovrapprezzo_${listino()}`]||0):null;
+      const prezzoLabel = a.logica_prezzo==='spessore'?'Prezzo dipende dallo spessore muro':
+        a.logica_prezzo==='percentuale'?'Maggiorazione +'+a.maggiorazione_pct+'%':
+        a.logica_prezzo==='doppio'?'Prezzo doppio':
+        sp>0?'Sovrapprezzo +€'+sp:'Inclusa nel prezzo porta';
+      const isSelected = CFG.apertura===a.codice;
+      // Short description from nome (remove long details)
+      const desc = a.nome ? a.nome.replace(a.codice,'').trim() : '';
+      html+=`<div onclick="selApertura('${a.codice.replace(/'/g,"\\'")}','${a.nome.replace(/'/g,"\\'")}','${a.logica_prezzo}',${sp||0},${a.doppio_prezzo||false},${a.maggiorazione_pct||0})"
+        style="border:${isSelected?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:10px;cursor:pointer;background:${isSelected?'var(--red-bg)':'var(--white)'};display:flex;flex-direction:column;gap:3px">
+        <div style="font-size:13px;font-weight:700;color:${isSelected?'var(--red)':'var(--dark)'}">${a.codice}</div>
+        <div style="font-size:11px;color:${isSelected?'var(--red)':'var(--mid)'};line-height:1.4;flex:1">${desc}</div>
+        <div style="font-size:10px;color:${sp>0?'var(--amber-tx)':isSelected?'var(--green-tx)':'var(--green-tx)'};margin-top:4px;font-weight:500">${prezzoLabel}</div>
+      </div>`;
+    });
+    html+='</div>';
+  });
+
+  document.getElementById('cfg-body').innerHTML=html;
+}
+
+async function selApertura(cod, nome, logica, sovr, doppio, magg){
+  CFG.apertura=cod; CFG.nome_apertura=nome;
+  CFG._logicaApertura=logica; CFG._maggApertura=magg; CFG._doppioApertura=doppio;
+  if(logica==='fisso') CFG.p_apertura=sovr;
+  else if(logica==='percentuale') CFG.p_apertura=Math.round(CFG.p_base*(magg/100)*100)/100;
+  else CFG.p_apertura=0;
+
+  // Carica sensi disponibili per questa apertura
+  const {data:sensi} = await sb.from('sensi_apertura').select('*').eq('codice_apertura',cod).eq('attivo',true).order('ordine');
+
+  if(!sensi||sensi.length===0){
+    // Nessun senso configurato — vai direttamente alle misure
+    CFG.senso=null;
+    await renderCfgStep('misure');
+    return;
+  }
+
+  if(sensi.length===1 && sensi[0].codice_senso==='BIDIREZIONALE' || sensi[0].codice_senso==='NESSUNO' || sensi[0].codice_senso==='X'){
+    // Senso fisso o non applicabile
+    CFG.senso=sensi[0].codice_senso;
+    await renderCfgStep('misure');
+    return;
+  }
+
+  // Mostra scelta senso
+  await cfgSenso(sensi);
+}
+
+async function cfgSenso(sensi){
+  updateCfgStepper('misure'); // stepper rimane su misure visivamente
+  const cards=sensi.map(s=>{
+    const isSelected=CFG.senso===s.codice_senso;
+    return `<div onclick="selSenso('${s.codice_senso}','${(s.descrizione_senso||'').replace(/'/g,"\\'")}')"
+      style="border:${isSelected?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:14px 16px;cursor:pointer;background:${isSelected?'var(--red-bg)':'var(--white)'};display:flex;flex-direction:column;gap:4px">
+      <div style="font-size:16px;font-weight:700;color:${isSelected?'var(--red)':'var(--dark)'}">${s.codice_senso}</div>
+      <div style="font-size:12px;color:${isSelected?'var(--red)':'var(--mid)'}">${s.descrizione_senso||''}</div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('cfg-body').innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div style="font-size:13px;font-weight:500">Senso di apertura <span style="color:var(--mid);font-weight:400">— ${CFG.apertura}</span></div>
+      <button class="btn btn-sm" onclick="renderCfgStep('apertura')">← Indietro</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px">${cards}</div>`;
+}
+
+async function selSenso(senso, desc){
+  CFG.senso=senso;
+  await renderCfgStep('misure');
+}
+
+async function cfgMisure(){
+  // misure standard per famiglia apertura
+  const fam = ['SI','SE','FM','COM'].some(x=>CFG.apertura?.startsWith(x))?'SCOR':'BAT';
+  const {data:misure} = await sb.from('misure_standard').select('*').eq('famiglia_apertura',fam).order('larghezza_cm').order('altezza_cm');
+
+  const larghezze = [...new Set((misure||[]).map(m=>m.larghezza_cm))].sort((a,b)=>a-b);
+  const altezze = [...new Set((misure||[]).map(m=>m.altezza_cm))].sort((a,b)=>a-b);
+
+  let html=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+    <div style="font-size:13px;font-weight:500">Misure porta <span style="color:var(--mid);font-weight:400">— ${CFG.nome_apertura}</span></div>
+    <button class="btn btn-sm" onclick="renderCfgStep('apertura')">← Indietro</button>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+    <div>
+      <div style="font-size:12px;font-weight:500;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.4px;color:var(--mid)">Larghezza (cm)</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        ${larghezze.map(l=>`<div onclick="selLarghezza(${l})" style="padding:6px 12px;border-radius:var(--radius);border:${CFG.larghezza===l?'2px solid var(--red)':'0.5px solid var(--border)'};cursor:pointer;font-size:13px;font-weight:500;background:${CFG.larghezza===l?'var(--red-bg)':'var(--white)'};">${l}</div>`).join('')}
+      </div>
+    </div>
+    <div>
+      <div style="font-size:12px;font-weight:500;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.4px;color:var(--mid)">Altezza (cm)</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        ${altezze.map(a=>`<div onclick="selAltezza(${a})" style="padding:6px 12px;border-radius:var(--radius);border:${CFG.altezza===a?'2px solid var(--red)':'0.5px solid var(--border)'};cursor:pointer;font-size:13px;font-weight:500;background:${CFG.altezza===a?'var(--red-bg)':'var(--white)'};">${a}</div>`).join('')}
+      </div>
+    </div>
+  </div>
+  <div style="background:var(--amber-bg);border-radius:var(--radius);padding:10px 14px;font-size:12px;color:var(--amber-tx);margin-bottom:12px">
+    Misura non presente nell'elenco? Inseriscila manualmente — verrà marcata come <strong>misura custom</strong> e richiederà approvazione tecnica.
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px">
+    <div>
+      <div style="font-size:11px;color:var(--mid);margin-bottom:4px">Larghezza custom (cm)</div>
+      <input type="number" id="cfg-larg-custom" placeholder="es. 87" min="30" max="300" style="width:100%;padding:7px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit" oninput="selLarghezzaCustom(this.value)">
+    </div>
+    <div>
+      <div style="font-size:11px;color:var(--mid);margin-bottom:4px">Altezza custom (cm)</div>
+      <input type="number" id="cfg-alt-custom" placeholder="es. 215" min="100" max="400" style="width:100%;padding:7px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit" oninput="selAltezzaCustom(this.value)">
+    </div>
+  </div>
+  ${CFG.misura_custom?'<div style="background:var(--red-bg);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--red-tx);margin-bottom:12px">⚠ Misura custom — richiederà approvazione tecnica</div>':''}
+  <div style="display:flex;justify-content:flex-end">
+    <button class="btn btn-red btn-sm" onclick="avanzaASpessore()">Avanti →</button>
+  </div>`;
+  document.getElementById('cfg-body').innerHTML=html;
+}
+
+function selLarghezza(v){ CFG.larghezza=v; CFG.misura_custom=false; cfgMisure(); }
+function selAltezza(v){ CFG.altezza=v; CFG.misura_custom=false; cfgMisure(); }
+function selLarghezzaCustom(v){ if(v){ CFG.larghezza=parseFloat(v); CFG.misura_custom=true; } }
+function selAltezzaCustom(v){ if(v){ CFG.altezza=parseFloat(v); CFG.misura_custom=true; } }
+function avanzaASpessore(){
+  if(!CFG.larghezza||!CFG.altezza){ toast('Seleziona larghezza e altezza','err'); return; }
+  renderCfgStep('spessore');
+}
+
+async function cfgSpessore(){
+  const fam = CFG.apertura?.startsWith('SI')?'SI':
+    CFG.apertura?.startsWith('SE')?'SE':
+    CFG.apertura?.startsWith('FM')?'FM':
+    CFG.apertura==='COM'?'COM':
+    CFG.apertura==='ROTO'?'ROTO':
+    CFG.apertura?.startsWith('CS')?'CS':'BAT';
+
+  let html=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+    <div style="font-size:13px;font-weight:500">Spessore muro e telaio <span style="color:var(--mid);font-weight:400">— ${CFG.larghezza}×${CFG.altezza} cm ${CFG.senso}</span></div>
+    <button class="btn btn-sm" onclick="renderCfgStep('misure')">← Indietro</button>
+  </div>
+  <div style="margin-bottom:14px">
+    <div style="font-size:12px;font-weight:500;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.4px;color:var(--mid)">Spessore muro (cm)</div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <input type="number" id="cfg-spessore" value="${CFG.spessore||''}" placeholder="es. 12.5" step="0.5" min="5" max="60"
+        style="width:120px;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px;font-family:inherit"
+        oninput="calcolaTelaio(this.value,'${fam}')">
+      <span style="font-size:13px;color:var(--mid)">cm</span>
+    </div>
+  </div>
+  <div id="cfg-telaio-result" style="margin-bottom:14px"></div>
+  <div style="display:flex;justify-content:flex-end">
+    <button class="btn btn-red btn-sm" onclick="avanzaAFerramenta()">Avanti →</button>
+  </div>`;
+  document.getElementById('cfg-body').innerHTML=html;
+  if(CFG.spessore) calcolaTelaio(CFG.spessore, fam);
+}
+
+async function calcolaTelaio(spessore, fam){
+  const sp = parseFloat(spessore);
+  if(!sp||sp<5){ document.getElementById('cfg-telaio-result').innerHTML=''; return; }
+  CFG.spessore=sp;
+
+  // Per scorrevoli interni usiamo logica cassone
+  if(fam==='SI'){
+    const {data:kits} = await sb.from('scorrevoli_interni')
+      .select('*').eq('codice_apertura',CFG.apertura).order('spalla_cassone_cm');
+    if(!kits||kits.length===0){
+      document.getElementById('cfg-telaio-result').innerHTML=`<div style="background:var(--amber-bg);border-radius:var(--radius);padding:10px;font-size:12px;color:var(--amber-tx)">Nessun kit cassone configurato per questa tipologia.</div>`;
+      return;
+    }
+    let html=`<div style="font-size:12px;font-weight:500;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.4px;color:var(--mid)">Seleziona il cassone</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">`;
+    kits.forEach(k=>{
+      const prezzo = k[`prezzo_${listino()}`]||0;
+      html+=`<div onclick="selCassone('${k.kit_telaio_codice}',${prezzo},'${k.codice_cassone}')"
+        style="border:${CFG.spalla===k.kit_telaio_codice?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:8px 10px;cursor:pointer;background:${CFG.spalla===k.kit_telaio_codice?'var(--red-bg)':'var(--white)'}">
+        <div style="font-size:12px;font-weight:500">${k.codice_cassone}</div>
+        <div style="font-size:11px;color:var(--mid)">${k.spalla_cassone_cm} cm</div>
+        <div style="font-size:12px;color:var(--red);font-weight:500">${prezzo?'€ '+prezzo:'Da definire'}</div>
+      </div>`;
+    });
+    html+='</div>';
+    document.getElementById('cfg-telaio-result').innerHTML=html;
+    return;
+  }
+
+  // Per tutti gli altri: regole_telaio
+  const {data:regole} = await sb.from('regole_telaio')
+    .select('*').eq('famiglia_apertura',fam)
+    .lte('spessore_da_cm',sp).gte('spessore_a_cm',sp);
+
+  if(!regole||regole.length===0){
+    document.getElementById('cfg-telaio-result').innerHTML=`<div style="background:var(--red-bg);border-radius:var(--radius);padding:10px;font-size:12px;color:var(--red-tx)">Spessore fuori range — contattare l'ufficio tecnico.</div>`;
+    return;
+  }
+  const regola = regole[0];
+  const {data:spalla} = await sb.from('telai_spalle')
+    .select('*').eq('codice',regola.codice_spalla).eq('famiglia_apertura',fam).single();
+  const prezzoSpalla = spalla?.[`prezzo_${listino()}`]||0;
+  const prezzoAcc = regola[`prezzo_access_${listino()}`]||0;
+
+  CFG.spalla=regola.codice_spalla;
+  CFG.accessorio_telaio=regola.tipo_accessorio!=='nessuno'?regola.tipo_accessorio:null;
+  CFG.p_telaio=prezzoSpalla;
+  CFG.p_acc_telaio=prezzoAcc;
+
+  let note='';
+  if(regola.nota) note=`<div style="font-size:11px;color:var(--mid);margin-top:4px">${regola.nota}</div>`;
+
+  let accHtml='';
+  if(regola.tipo_accessorio&&regola.tipo_accessorio!=='nessuno'){
+    accHtml=`<div style="margin-top:8px;padding:8px 10px;background:var(--amber-bg);border-radius:var(--radius);font-size:12px;color:var(--amber-tx)">
+      Accessorio necessario: <strong>${regola.tipo_accessorio}</strong> ${regola.cm_accessorio?regola.cm_accessorio+' cm':''} 
+      — ${prezzoAcc?'€ '+prezzoAcc:'prezzo da definire'}
+      ${regola.note?'<br><span style="font-size:11px">'+regola.note+'</span>':''}
+    </div>`;
+  }
+
+  document.getElementById('cfg-telaio-result').innerHTML=`
+    <div style="background:var(--beige);border-radius:var(--radius);padding:12px 14px;border:0.5px solid var(--border)">
+      <div style="font-size:12px;font-weight:500;margin-bottom:6px;color:var(--mid);text-transform:uppercase;letter-spacing:0.4px">Telaio abbinato automaticamente</div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-size:14px;font-weight:500">Spalla ${regola.codice_spalla} — ${spalla?.spalla_cm||'?'} cm</div>
+          ${note}
+        </div>
+        <div style="font-size:14px;font-weight:500;color:var(--red)">${prezzoSpalla?'€ '+prezzoSpalla:'Prezzo da definire'}</div>
+      </div>
+      ${accHtml}
+    </div>`;
+  cfgUpdatePrice();
+}
+
+function selCassone(kit, prezzo, cassone){
+  CFG.spalla=kit; CFG.p_telaio=prezzo; CFG._cassone=cassone;
+  cfgUpdatePrice();
+}
+
+function avanzaAFerramenta(){
+  if(!CFG.spessore){ toast('Inserisci lo spessore del muro','err'); return; }
+  renderCfgStep('ferramenta');
+}
+
+async function cfgFerramenta(){
+  const [{data:tuttaFerr},{data:tutteMan}] = await Promise.all([
+    sb.from('ferramenta').select('*').eq('attivo',true).order('nome'),
+    sb.from('maniglie').select('*').eq('attivo',true).order('nome'),
+  ]);
+
+  // Applica filtro compatibilità
+  const ferr = await filtraPerCompatibilita(tuttaFerr||[], 'ferramenta', 'codice');
+  const man = await filtraPerCompatibilita(tutteMan||[], 'maniglia', 'codice');
+
+  const rowsFerr=(ferr||[]).map(f=>{
+    const sp=f[`sovrapprezzo_${listino()}`]||0;
+    const hex=f.colore_hex||'CCCCCC';
+    return `<div onclick="selFerramenta('${f.codice}','${f.nome}',${sp})"
+      style="border:${CFG.ferramenta===f.codice?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:8px 10px;cursor:pointer;background:${CFG.ferramenta===f.codice?'var(--red-bg)':'var(--white)'};display:flex;align-items:center;gap:8px">
+      <div style="width:22px;height:22px;border-radius:50%;background:#${hex};border:0.5px solid rgba(0,0,0,0.15);flex-shrink:0"></div>
+      <div>
+        <div style="font-size:12px;font-weight:500;color:${CFG.ferramenta===f.codice?'var(--red)':'var(--dark)'}">${f.nome}</div>
+        <div style="font-size:10px;color:var(--mid)">${sp>0?'+€'+sp:'Inclusa'}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  const rowsMan=(man||[]).map(m=>{
+    const pr=m[`prezzo_${listino()}`]||0;
+    return `<div onclick="selManiglia('${m.codice}','${m.nome.replace(/'/g,"\\'")}',${pr})"
+      style="border:${CFG.maniglia===m.codice?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:8px 10px;cursor:pointer;background:${CFG.maniglia===m.codice?'var(--red-bg)':'var(--white)'}">
+      <div style="font-size:13px;font-weight:500;color:${CFG.maniglia===m.codice?'var(--red)':'var(--dark)'}">${m.nome}</div>
+      <div style="font-size:11px;color:var(--mid)">${pr>0?'€ '+pr:'Inclusa'}</div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('cfg-body').innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:500">Ferramenta e maniglia</div>
+      <button class="btn btn-sm" onclick="renderCfgStep('spessore')">← Indietro</button>
+    </div>
+    <div style="margin-bottom:16px">
+      <div style="font-size:12px;font-weight:500;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.4px;color:var(--mid)">Colore ferramenta</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">${rowsFerr||'<p style="color:var(--mid);font-size:12px">Nessuna ferramenta configurata — aggiungila dal pannello admin</p>'}</div>
+    </div>
+    <div style="margin-bottom:16px">
+      <div style="font-size:12px;font-weight:500;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.4px;color:var(--mid)">Maniglia <span style="font-weight:400;text-transform:none">(opzionale)</span></div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">
+        <div onclick="CFG.maniglia=null;CFG.nome_maniglia='';CFG.p_maniglia=0;cfgFerramenta()" style="border:${!CFG.maniglia?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:8px 10px;cursor:pointer;background:${!CFG.maniglia?'var(--red-bg)':'var(--white)'}">
+          <div style="font-size:13px;font-weight:500">Senza maniglia</div>
+        </div>
+        ${rowsMan}
+      </div>
+    </div>
+    <div style="display:flex;justify-content:flex-end">
+      <button class="btn btn-red btn-sm" onclick="renderCfgStep('riepilogo')">Riepilogo →</button>
+    </div>`;
+  cfgUpdatePrice();
+}
+
+function selFerramenta(cod,nome,sovr){ CFG.ferramenta=cod;CFG.nome_ferramenta=nome;CFG.p_ferramenta=sovr; cfgUpdatePrice(); cfgFerramenta(); }
+function selManiglia(cod,nome,pr){ CFG.maniglia=cod;CFG.nome_maniglia=nome;CFG.p_maniglia=pr; cfgUpdatePrice(); cfgFerramenta(); }
+
+async function cfgRiepilogo(){
+  const tot = cfgTotale();
+  const desc = [
+    CFG.nome_serie, CFG.nome_modello, CFG.nome_finitura,
+    CFG.pannello_bugna?CFG.pannello_bugna:'',
+    CFG.nome_colore_alu||'', CFG.nome_colore_pietra||'',
+    CFG.nome_tipo_vetro||'',
+    CFG.nome_apertura, CFG.senso,
+    CFG.larghezza+'×'+CFG.altezza+' cm',
+    'sp.'+CFG.spessore+' cm',
+    CFG.nome_ferramenta||'',
+    CFG.nome_maniglia||''
+  ].filter(Boolean).join(' | ');
+
+  const righe_prezzo = [
+    {label:'Prezzo base porta',val:CFG.p_base},
+    CFG.p_vetro>0&&{label:'Vetro ('+CFG.nome_tipo_vetro+')',val:CFG.p_vetro},
+    CFG.p_finitura>0&&{label:'Finitura ('+CFG.nome_finitura+')',val:CFG.p_finitura},
+    CFG.p_bugna>0&&{label:'Bugna',val:CFG.p_bugna},
+    CFG.p_inserto>0&&{label:'Inserto '+(CFG.nome_colore_alu||CFG.nome_colore_pietra),val:CFG.p_inserto},
+    CFG.p_apertura>0&&{label:'Apertura ('+CFG.nome_apertura+')',val:CFG.p_apertura},
+    CFG.p_telaio>0&&{label:'Telaio / Spalla ('+CFG.spalla+')',val:CFG.p_telaio},
+    CFG.p_acc_telaio>0&&{label:'Accessorio telaio ('+CFG.accessorio_telaio+')',val:CFG.p_acc_telaio},
+    CFG.p_ferramenta>0&&{label:'Ferramenta ('+CFG.nome_ferramenta+')',val:CFG.p_ferramenta},
+    CFG.p_maniglia>0&&{label:'Maniglia ('+CFG.nome_maniglia+')',val:CFG.p_maniglia},
+    CFG.p_extra_incisioni>0&&{label:'Extra incisioni',val:CFG.p_extra_incisioni},
+  ].filter(Boolean);
+
+  document.getElementById('cfg-body').innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:500">Riepilogo configurazione</div>
+      <button class="btn btn-sm" onclick="renderCfgStep('ferramenta')">← Modifica</button>
+    </div>
+    ${CFG.misura_custom?`<div style="background:var(--red-bg);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--red-tx);margin-bottom:10px">⚠ Misura custom — questo ordine richiederà approvazione del responsabile tecnico</div>`:''}
+    <div style="background:var(--beige);border-radius:var(--radius);padding:12px;margin-bottom:12px;font-size:12px;color:var(--mid);line-height:1.6">${desc}</div>
+    <table style="width:100%;font-size:13px;margin-bottom:12px">
+      ${righe_prezzo.map(r=>`<tr><td style="padding:3px 0;color:var(--mid)">${r.label}</td><td style="text-align:right;font-weight:500">€ ${(r.val||0).toLocaleString('it-IT',{minimumFractionDigits:2})}</td></tr>`).join('')}
+      <tr style="border-top:0.5px solid var(--border)"><td style="padding:8px 0;font-weight:500">Totale unitario</td><td style="text-align:right;font-size:16px;font-weight:500;color:var(--red)">€ ${tot.toLocaleString('it-IT',{minimumFractionDigits:2})}</td></tr>
+    </table>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+      <div>
+        <div style="font-size:11px;color:var(--mid);margin-bottom:4px">Quantità</div>
+        <input type="number" id="cfg-qty" value="${CFG.quantita||1}" min="1" style="width:100%;padding:7px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit" oninput="CFG.quantita=parseInt(this.value)||1;cfgUpdatePrice()">
+      </div>
+      <div>
+        <div style="font-size:11px;color:var(--mid);margin-bottom:4px">Note riga</div>
+        <input type="text" id="cfg-note-riga" value="${CFG.note_riga||''}" placeholder="Note specifiche su questa porta..." style="width:100%;padding:7px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit" oninput="CFG.note_riga=this.value">
+      </div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div style="font-size:11px;color:var(--mid)">Totale riga</div>
+        <div id="cfg-prezzo-totale" style="font-size:20px;font-weight:500;color:var(--red)">€ ${(tot*(CFG.quantita||1)).toLocaleString('it-IT',{minimumFractionDigits:2})}</div>
+      </div>
+      <button class="btn btn-red" onclick="aggiungiRigaAlDocumento()">+ Aggiungi al documento</button>
+    </div>`;
+  cfgUpdatePrice();
+}
+
+async function aggiungiRigaAlDocumento(){
+  CFG.quantita = parseInt(document.getElementById('cfg-qty')?.value||1)||1;
+  CFG.note_riga = document.getElementById('cfg-note-riga')?.value||'';
+  const tot = cfgTotale();
+  const riga = {
+    codice_serie:CFG.serie, codice_modello:CFG.modello, nome_modello:CFG.nome_modello,
+    nome_serie:CFG.nome_serie,
+    codice_finitura:CFG.finitura, nome_finitura:CFG.nome_finitura,
+    pannello_bugna:CFG.pannello_bugna,
+    codice_colore_alu:CFG.colore_alu, nome_colore_alu:CFG.nome_colore_alu,
+    codice_colore_pietra:CFG.colore_pietra, nome_colore_pietra:CFG.nome_colore_pietra,
+    codice_tipo_vetro:CFG.tipo_vetro, nome_tipo_vetro:CFG.nome_tipo_vetro,
+    codice_apertura:CFG.apertura, nome_apertura:CFG.nome_apertura,
+    senso_apertura:CFG.senso,
+    larghezza_cm:CFG.larghezza, altezza_cm:CFG.altezza,
+    misura_custom:CFG.misura_custom, spessore_muro_cm:CFG.spessore,
+    codice_spalla:CFG.spalla, tipo_accessorio_telaio:CFG.accessorio_telaio,
+    codice_ferramenta:CFG.ferramenta, nome_ferramenta:CFG.nome_ferramenta,
+    codice_maniglia:CFG.maniglia, nome_maniglia:CFG.nome_maniglia,
+    prezzo_base:CFG.p_base, prezzo_vetro:CFG.p_vetro,
+    prezzo_finitura:CFG.p_finitura, prezzo_bugna:CFG.p_bugna,
+    prezzo_inserto:CFG.p_inserto, prezzo_apertura:CFG.p_apertura,
+    prezzo_telaio:CFG.p_telaio, prezzo_accessorio_telaio:CFG.p_acc_telaio,
+    prezzo_ferramenta:CFG.p_ferramenta, prezzo_maniglia:CFG.p_maniglia,
+    prezzo_extra_incisioni:CFG.p_extra_incisioni,
+    prezzo_unitario:tot, quantita:CFG.quantita,
+    prezzo_totale_riga:tot*CFG.quantita,
+    note_riga:CFG.note_riga
+  };
+
+  if(CFG_TARGET_ID){
+    // Salvataggio diretto su documento esistente
+    const tabella = CFG_MODE==='preventivo'?'righe_preventivo':'righe_ordine';
+    const fk = CFG_MODE==='preventivo'?'preventivo_id':'ordine_id';
+    const {data:esistenti} = await sb.from(tabella).select('riga_numero').eq(fk,CFG_TARGET_ID).order('riga_numero',{ascending:false}).limit(1);
+    const nextNum = (esistenti?.[0]?.riga_numero||0)+1;
+    await sb.from(tabella).insert([{...riga,[fk]:CFG_TARGET_ID,riga_numero:nextNum}]);
+    // Aggiorna totale documento
+    await ricalcolaTotale(CFG_TARGET_ID, CFG_MODE);
+    toast('Porta aggiunta','ok');
+    closeCfg();
+    if(CFG_MODE==='preventivo') renderPreventivoDetail(CFG_TARGET_ID);
+    else renderOrdineDetail(CFG_TARGET_ID);
+  } else {
+    // Accumulo locale (documento non ancora salvato)
+    CFG_RIGHE.push(riga);
+    toast('Porta aggiunta — salva il documento per confermare','ok');
+    closeCfg();
+    renderNuovoDocBozza();
+  }
+  resetCFG();
+}
+
+async function ricalcolaTotale(docId, mode){
+  const tabRighe = mode==='preventivo'?'righe_preventivo':'righe_ordine';
+  const fk = mode==='preventivo'?'preventivo_id':'ordine_id';
+  const tabDoc = mode==='preventivo'?'preventivi':'ordini_vendita';
+  const {data:righe} = await sb.from(tabRighe).select('prezzo_totale_riga').eq(fk,docId);
+  const totImponibile = (righe||[]).reduce((s,r)=>s+(r.prezzo_totale_riga||0),0);
+  await sb.from(tabDoc).update({totale_imponibile:totImponibile}).eq('id',docId);
+}
+
+// ══════════════════════════════════════════════════════
+// PREVENTIVI
+// ══════════════════════════════════════════════════════
+async function renderPreventivi(){
+  try {
+    const {data,error} = await sb.from('preventivi')
+      .select('*,anagrafiche(ragione_sociale),agenti(nome,cognome)')
+      .order('created_at',{ascending:false});
+    if(error) throw error;
+
+  const stats={bozza:0,inviato:0,firmato:0,rifiutato:0};
+  (data||[]).forEach(p=>{ if(stats[p.stato]!==undefined) stats[p.stato]++; });
+
+  const rows=(data||[]).map(p=>`<tr class="data-row" onclick="renderPreventivoDetail('${p.id}')">
+    <td><strong>${p.numero}</strong></td>
+    <td>${p.anagrafiche?.ragione_sociale||'—'}</td>
+    <td>${p.agenti?p.agenti.nome+' '+p.agenti.cognome:'—'}</td>
+    <td>${fmtData(p.data_creazione)}</td>
+    <td>${fmtData(p.data_scadenza)}</td>
+    <td><span class="tag">${p.listino}</span></td>
+    <td>${fmtEuro(p.totale_netto||p.totale_imponibile)}</td>
+    <td>${badgeStato(p.stato)}</td>
+  </tr>`).join('');
+
+  document.getElementById('main-content').innerHTML=`
+  <div class="grid-4" style="margin-bottom:16px">
+    <div class="metric"><div class="metric-label">Bozze</div><div class="metric-value">${stats.bozza}</div></div>
+    <div class="metric"><div class="metric-label">Inviati</div><div class="metric-value">${stats.inviato}</div></div>
+    <div class="metric"><div class="metric-label">Firmati</div><div class="metric-value" style="color:var(--green-tx)">${stats.firmato}</div></div>
+    <div class="metric"><div class="metric-label">Rifiutati</div><div class="metric-value" style="color:var(--red)">${stats.rifiutato}</div></div>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Preventivi</span>
+      <button class="btn btn-red btn-sm" onclick="nuovoPreventivo()">+ Nuovo preventivo</button>
+    </div>
+    <table>
+      <thead><tr><th>N°</th><th>Cliente</th><th>Agente</th><th>Data</th><th>Scadenza</th><th>Listino</th><th>Totale netto</th><th>Stato</th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--mid);font-style:italic">Nessun preventivo ancora — clicca "+ Nuovo preventivo"</td></tr>'}</tbody>
+    </table>
+  </div>`;
+  } catch(e) {
+    console.error('renderPreventivi error:',e);
+    document.getElementById('main-content').innerHTML=`<div class="card">
+      <div style="padding:20px">
+        <p style="color:var(--red);margin-bottom:12px">Errore caricamento preventivi: ${e.message}</p>
+        <button class="btn btn-red btn-sm" onclick="nuovoPreventivo()">+ Nuovo preventivo</button>
+      </div>
+    </div>`;
+  }
+}
+
+async function nuovoPreventivo(){
+  try {
+    const [{data:clienti},{data:agenti}] = await Promise.all([
+      sb.from('anagrafiche').select('*').order('ragione_sociale'),
+      sb.from('agenti').select('*').eq('attivo',true).order('cognome'),
+    ]);
+    CFG_RIGHE=[];
+    const modal = document.getElementById('modal-nuovo-doc');
+    if(!modal){ toast('Errore: modal non trovato','err'); return; }
+    modal.dataset.mode='preventivo';
+    document.getElementById('ndoc-title').textContent='Nuovo preventivo';
+    document.getElementById('ndoc-clienti').innerHTML='<option value="">Seleziona cliente...</option>'+(clienti||[]).map(c=>`<option value="${c.id}" data-listino="${c.listino||'A'}" data-sa="${c.sconto_dedicato_A||0}" data-sp="${c.sconto_dedicato_P||0}" data-ind="${c.indirizzo||''}" data-cap="${c.cap||''}" data-cit="${c.citta||''}" data-prv="${c.provincia||''}">${c.ragione_sociale}</option>`).join('');
+    document.getElementById('ndoc-agenti').innerHTML='<option value="">Nessun agente</option>'+(agenti||[]).map(a=>`<option value="${a.id}">${a.cognome} ${a.nome}</option>`).join('');
+    document.getElementById('ndoc-righe-list').innerHTML='<div style="text-align:center;padding:20px;color:var(--mid);font-size:13px;font-style:italic">Nessuna porta aggiunta ancora — clicca "+ Aggiungi porta"</div>';
+    document.getElementById('ndoc-totale').textContent='€ 0,00';
+    modal.classList.add('open');
+  } catch(e) {
+    console.error('nuovoPreventivo error:', e);
+    toast('Errore apertura preventivo: '+e.message,'err');
+  }
+}
+
+function ndocClienteChange(sel){
+  const opt = sel.options[sel.selectedIndex];
+  const listino = opt.dataset.listino||'A';
+  document.getElementById('ndoc-listino').value=listino;
+  const sc = listino==='A'?opt.dataset.sa:opt.dataset.sp;
+  document.getElementById('ndoc-sconto1').value=sc||0;
+  document.getElementById('ndoc-ind').value=opt.dataset.ind||'';
+  document.getElementById('ndoc-cap').value=opt.dataset.cap||'';
+  document.getElementById('ndoc-cit').value=opt.dataset.cit||'';
+  document.getElementById('ndoc-prv').value=opt.dataset.prv||'';
+  aggiornaTotaleNdoc();
+}
+
+function aggiornaTotaleNdoc(){
+  const sc1=parseFloat(document.getElementById('ndoc-sconto1')?.value||0)/100;
+  const sc2=parseFloat(document.getElementById('ndoc-sconto2')?.value||0)/100;
+  const imponibile=CFG_RIGHE.reduce((s,r)=>s+(r.prezzo_totale_riga||0),0);
+  const dopoSc1=imponibile*(1-sc1);
+  const netto=dopoSc1*(1-sc2);
+  const scTot=((1-(1-sc1)*(1-sc2))*100).toFixed(2);
+  document.getElementById('ndoc-totale').textContent=fmtEuro(netto);
+  // mostra dettaglio sconti se applicati
+  const detEl=document.getElementById('ndoc-sconto-detail');
+  if(detEl){
+    if(sc1>0||sc2>0){
+      detEl.innerHTML=`<span style="font-size:11px;color:var(--mid)">Imponibile ${fmtEuro(imponibile)} → sconto effettivo ${scTot}%</span>`;
+    } else {
+      detEl.innerHTML='';
+    }
+  }
+  // aggiorna lista righe
+  const list=document.getElementById('ndoc-righe-list');
+  if(CFG_RIGHE.length===0){
+    list.innerHTML='<div style="text-align:center;padding:20px;color:var(--mid);font-size:13px;font-style:italic">Nessuna porta aggiunta ancora</div>';
+    return;
+  }
+  list.innerHTML=CFG_RIGHE.map((r,i)=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid var(--border)">
+      <div>
+        <div style="font-size:13px;font-weight:500">${r.nome_serie||''} ${r.nome_modello||''} — ${r.nome_finitura||''}</div>
+        <div style="font-size:11px;color:var(--mid)">${[r.nome_apertura,r.senso_apertura,r.larghezza_cm&&r.larghezza_cm+'×'+r.altezza_cm+' cm','sp.'+(r.spessore_muro_cm||'?')+' cm'].filter(Boolean).join(' | ')}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="text-align:right">
+          <div style="font-size:11px;color:var(--mid)">×${r.quantita} — list. ${fmtEuro(r.prezzo_totale_riga)}</div>
+          <div style="font-size:14px;font-weight:500;color:var(--red)">${fmtEuro(r.prezzo_totale_riga*(1-sc1)*(1-sc2))}</div>
+        </div>
+        <button onclick="rimuoviRigaNdoc(${i})" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:18px;padding:0 4px;line-height:1">×</button>
+      </div>
+    </div>`).join('');
+}
+
+function rimuoviRigaNdoc(i){ CFG_RIGHE.splice(i,1); aggiornaTotaleNdoc(); }
+
+function ndocAggiungiPorta(){
+  const listino = document.getElementById('ndoc-listino')?.value||'A';
+  window._prevListino=listino;
+  CFG_TARGET_ID=null;
+  CFG_MODE=document.getElementById('modal-nuovo-doc').dataset.mode;
+  resetCFG();
+  renderCfgStep('serie');
+  document.getElementById('modal-cfg').classList.add('open');
+}
+
+function renderNuovoDocBozza(){ aggiornaTotaleNdoc(); }
+
+async function salvaNuovoDoc(){
+  const mode = document.getElementById('modal-nuovo-doc').dataset.mode;
+  const clienteId=document.getElementById('ndoc-clienti').value;
+  if(!clienteId){ toast('Seleziona un cliente','err'); return; }
+  if(CFG_RIGHE.length===0){ toast('Aggiungi almeno una porta','err'); return; }
+
+  const listino=document.getElementById('ndoc-listino').value||'A';
+  const sc1=parseFloat(document.getElementById('ndoc-sconto1').value||0);
+  const sc2=parseFloat(document.getElementById('ndoc-sconto2').value||0);
+  const agenteId=document.getElementById('ndoc-agenti').value||null;
+  const trasporto=document.getElementById('ndoc-trasporto').value||'Max Porte';
+  const note=document.getElementById('ndoc-note').value||null;
+  const ind=document.getElementById('ndoc-ind').value||null;
+  const cap=document.getElementById('ndoc-cap').value||null;
+  const cit=document.getElementById('ndoc-cit').value||null;
+  const prv=document.getElementById('ndoc-prv').value||null;
+
+  const imponibile=CFG_RIGHE.reduce((s,r)=>s+(r.prezzo_totale_riga||0),0);
+  const netto=imponibile*(1-(sc1/100))*(1-(sc2/100));
+  const haCustom=CFG_RIGHE.some(r=>r.misura_custom);
+
+  // Calcola sconto effettivo e provvigione agente
+  const scontoEff = ((1-(1-sc1/100)*(1-sc2/100))*100);
+  let provvPct=0; let provvEuro=0;
+  if(agenteId){
+    provvPct = await calcolaProvvigione(agenteId, scontoEff);
+    provvEuro = Math.round(netto*(provvPct/100)*100)/100;
+  }
+
+  const tabDoc = mode==='preventivo'?'preventivi':'ordini_vendita';
+  const numSeq = await sb.rpc('nextval',{sequence_name:`seq_${mode==='preventivo'?'preventivi':'ordini'}`}).then(r=>r.data).catch(()=>Date.now());
+  const numero = (mode==='preventivo'?'PRV':'ORD')+'-'+new Date().getFullYear()+'-'+(String(numSeq||Date.now()).slice(-4));
+
+  const docData = {
+    numero, anagrafica_id:clienteId, agente_id:agenteId||null,
+    listino, sconto1:sc1, sconto2:sc2,
+    indirizzo_destinazione:ind, cap_destinazione:cap,
+    citta_destinazione:cit, provincia_destinazione:prv,
+    trasporto, note,
+    totale_imponibile:imponibile, totale_netto:netto,
+    provvigione_pct:provvPct, provvigione_euro:provvEuro,
+    creato_da:currentUser?.id,
+    ...(mode==='ordine'?{richiede_approvazione_tecnica:haCustom}:{})
+  };
+
+  const {data:doc,error} = await sb.from(tabDoc).insert([docData]).select().single();
+  if(error){ toast('Errore salvataggio: '+error.message,'err'); return; }
+
+  // Salva righe
+  const tabRighe = mode==='preventivo'?'righe_preventivo':'righe_ordine';
+  const fk = mode==='preventivo'?'preventivo_id':'ordine_id';
+  const righe = CFG_RIGHE.map((r,i)=>({...r,[fk]:doc.id,riga_numero:i+1}));
+  await sb.from(tabRighe).insert(righe);
+
+  toast(numero+' salvato con successo','ok');
+  document.getElementById('modal-nuovo-doc').classList.remove('open');
+  CFG_RIGHE=[];
+  if(mode==='preventivo') renderPreventivi();
+  else renderOrdiniDiretti();
+}
+
+async function renderPreventivoDetail(id){
+  const [{data:prev},{data:righe}] = await Promise.all([
+    sb.from('preventivi').select('*,anagrafiche(ragione_sociale,partita_iva),agenti(nome,cognome)').eq('id',id).single(),
+    sb.from('righe_preventivo').select('*').eq('preventivo_id',id).order('riga_numero'),
+  ]);
+  if(!prev) return;
+  CFG_TARGET_ID=id; CFG_MODE='preventivo';
+  window._prevListino=prev.listino;
+
+  const sc1=prev.sconto1||0; const sc2=prev.sconto2||0;
+  const netto=prev.totale_imponibile*(1-sc1/100)*(1-sc2/100);
+
+  const rowsRighe=(righe||[]).map(r=>`
+    <tr>
+      <td style="font-size:12px;font-weight:500">${r.riga_numero}</td>
+      <td>
+        <div style="font-size:13px;font-weight:500">${r.nome_modello||''}</div>
+        <div style="font-size:11px;color:var(--mid)">${[r.nome_finitura,r.pannello_bugna,r.nome_apertura,r.senso_apertura,r.larghezza_cm&&r.larghezza_cm+'×'+r.altezza_cm+' cm','sp.'+(r.spessore_muro_cm||'?')+' cm',r.nome_ferramenta,r.nome_maniglia].filter(Boolean).join(' | ')}</div>
+        ${r.misura_custom?'<span style="font-size:10px;background:var(--red-bg);color:var(--red-tx);padding:1px 5px;border-radius:3px">Custom</span>':''}
+      </td>
+      <td style="text-align:center">${r.quantita}</td>
+      <td style="text-align:right">${fmtEuro(r.prezzo_unitario)}</td>
+      <td style="text-align:right;font-weight:500">${fmtEuro(r.prezzo_totale_riga)}</td>
+      <td><button class="btn btn-sm" style="color:var(--red)" onclick="eliminaRiga('righe_preventivo','${r.id}','${id}','preventivo')">×</button></td>
+    </tr>`).join('');
+
+  document.getElementById('main-content').innerHTML=`
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+    <div>
+      <button class="btn btn-sm" onclick="renderPreventivi()">← Tutti i preventivi</button>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-sm" onclick="openConfiguratore('preventivo','${id}','${prev.listino}')">+ Aggiungi porta</button>
+      ${prev.stato==='bozza'?`<button class="btn btn-sm" onclick="cambiaStato('preventivi','${id}','inviato','renderPreventivoDetail')">Invia al cliente</button>`:''}
+      ${prev.stato==='inviato'?`<button class="btn btn-red btn-sm" onclick="firmaPreventivo('${id}')">Firma e converti in ordine</button>`:''}
+    </div>
+  </div>
+  <div class="grid-2" style="margin-bottom:14px">
+    <div class="card">
+      <div class="card-title">Intestazione preventivo</div>
+      <table style="font-size:13px">
+        <tr><td style="color:var(--mid);padding:3px 0;width:130px">N° Preventivo</td><td><strong>${prev.numero}</strong></td></tr>
+        <tr><td style="color:var(--mid);padding:3px 0">Cliente</td><td>${prev.anagrafiche?.ragione_sociale||'—'}</td></tr>
+        <tr><td style="color:var(--mid);padding:3px 0">Agente</td><td>${prev.agenti?prev.agenti.nome+' '+prev.agenti.cognome:'—'}</td></tr>
+        <tr><td style="color:var(--mid);padding:3px 0">Data</td><td>${fmtData(prev.data_creazione)}</td></tr>
+        <tr><td style="color:var(--mid);padding:3px 0">Listino</td><td><span class="tag">${prev.listino}</span></td></tr>
+        <tr><td style="color:var(--mid);padding:3px 0">Trasporto</td><td>${prev.trasporto||'—'}</td></tr>
+        <tr><td style="color:var(--mid);padding:3px 0">Stato</td><td>${badgeStato(prev.stato)}</td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <div class="card-title">Riepilogo economico</div>
+      <table style="font-size:13px">
+        <tr><td style="color:var(--mid);padding:3px 0;width:130px">Imponibile</td><td style="text-align:right">${fmtEuro(prev.totale_imponibile)}</td></tr>
+        <tr><td style="color:var(--mid);padding:3px 0">Sconto 1</td><td style="text-align:right">${sc1}%</td></tr>
+        <tr><td style="color:var(--mid);padding:3px 0">Sconto 2</td><td style="text-align:right">${sc2||0}%</td></tr>
+        <tr style="border-top:0.5px solid var(--border)"><td style="padding:6px 0;font-weight:500">Totale netto</td><td style="text-align:right;font-size:18px;font-weight:500;color:var(--red)">${fmtEuro(netto)}</td></tr>
+      </table>
+      ${prev.note?`<div style="margin-top:10px;font-size:12px;color:var(--mid)">${prev.note}</div>`:''}
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header"><span class="card-title">Righe preventivo (${righe?.length||0} porte)</span></div>
+    <table>
+      <thead><tr><th>#</th><th>Descrizione</th><th style="text-align:center">Q.tà</th><th style="text-align:right">Unitario</th><th style="text-align:right">Totale riga</th><th></th></tr></thead>
+      <tbody>${rowsRighe||'<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--mid);font-style:italic">Nessuna porta — clicca "+ Aggiungi porta"</td></tr>'}</tbody>
+    </table>
+  </div>`;
+}
+
+async function eliminaRiga(tabella, rigaId, docId, mode){
+  if(!confirm('Eliminare questa riga?')) return;
+  await sb.from(tabella).delete().eq('id',rigaId);
+  await ricalcolaTotale(docId, mode);
+  if(mode==='preventivo') renderPreventivoDetail(docId);
+  else renderOrdineDetail(docId);
+  toast('Riga eliminata','ok');
+}
+
+async function cambiaStato(tabella, id, stato, callback){
+  await sb.from(tabella).update({stato}).eq('id',id);
+  toast('Stato aggiornato: '+stato,'ok');
+  if(callback==='renderPreventivoDetail') renderPreventivoDetail(id);
+  else if(callback==='renderOrdineDetail') renderOrdineDetail(id);
+}
+
+async function firmaPreventivo(prevId){
+  if(!confirm('Convertire questo preventivo in ordine?')) return;
+  const {data:prev} = await sb.from('preventivi').select('*').eq('id',prevId).single();
+  const {data:righe} = await sb.from('righe_preventivo').select('*').eq('preventivo_id',prevId);
+  const haCustom=(righe||[]).some(r=>r.misura_custom);
+  const numero='ORD-'+new Date().getFullYear()+'-'+String(Date.now()).slice(-4);
+  const {data:ord} = await sb.from('ordini_vendita').insert([{
+    numero, preventivo_id:prevId,
+    anagrafica_id:prev.anagrafica_id, agente_id:prev.agente_id,
+    listino:prev.listino, sconto1:prev.sconto1, sconto2:prev.sconto2,
+    indirizzo_destinazione:prev.indirizzo_destinazione,
+    cap_destinazione:prev.cap_destinazione,
+    citta_destinazione:prev.citta_destinazione,
+    provincia_destinazione:prev.provincia_destinazione,
+    trasporto:prev.trasporto, note:prev.note,
+    totale_imponibile:prev.totale_imponibile,
+    totale_netto:prev.totale_netto||prev.totale_imponibile,
+    richiede_approvazione_tecnica:haCustom,
+    stato:'in_attesa', creato_da:currentUser?.id
+  }]).select().single();
+
+  if(ord?.data||ord){
+    const ordId = ord.data?.id||ord.id;
+    const righeOrd=(righe||[]).map(r=>({
+      ...r, id:undefined, ordine_id:ordId,
+      riga_preventivo_id:r.id, preventivo_id:undefined
+    }));
+    await sb.from('righe_ordine').insert(righeOrd);
+    await sb.from('preventivi').update({stato:'firmato'}).eq('id',prevId);
+    toast(numero+' creato — in attesa di approvazione','ok');
+    renderPreventivi();
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// ORDINI DIRETTI
+// ══════════════════════════════════════════════════════
+async function renderOrdiniDiretti(){
+  try {
+    const {data,error} = await sb.from('ordini_vendita')
+      .select('*,anagrafiche(ragione_sociale),agenti(nome,cognome)')
+      .order('created_at',{ascending:false});
+    if(error) throw error;
+
+  const rows=(data||[]).map(o=>`<tr class="data-row" onclick="renderOrdineDetail('${o.id}')">
+    <td><strong>${o.numero}</strong></td>
+    <td>${o.anagrafiche?.ragione_sociale||'—'}</td>
+    <td>${o.agenti?o.agenti.nome+' '+o.agenti.cognome:'—'}</td>
+    <td>${o.preventivo_id?'<span class="badge bb">Da prev.</span>':'<span class="badge bgr">Diretto</span>'}</td>
+    <td>${fmtData(o.data_ordine)}</td>
+    <td>${fmtEuro(o.totale_netto||o.totale_imponibile)}</td>
+    <td>${badgeStato(o.stato)}</td>
+    <td>${o.richiede_approvazione_tecnica?'<span class="badge br">Tecnica</span>':'<span class="badge bg">Standard</span>'}</td>
+  </tr>`).join('');
+
+  document.getElementById('main-content').innerHTML=`
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Ordini</span>
+      <button class="btn btn-red btn-sm" onclick="nuovoOrdineDiretto()">+ Nuovo ordine diretto</button>
+    </div>
+    <table>
+      <thead><tr><th>N°</th><th>Cliente</th><th>Agente</th><th>Origine</th><th>Data</th><th>Totale netto</th><th>Stato</th><th>Approvazione</th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--mid);font-style:italic">Nessun ordine ancora</td></tr>'}</tbody>
+    </table>
+  </div>`;
+  } catch(e) {
+    console.error('renderOrdiniDiretti error:',e);
+    document.getElementById('main-content').innerHTML=`<div class="card">
+      <div style="padding:20px">
+        <p style="color:var(--red);margin-bottom:12px">Errore caricamento ordini: ${e.message}</p>
+        <button class="btn btn-red btn-sm" onclick="nuovoOrdineDiretto()">+ Nuovo ordine diretto</button>
+      </div>
+    </div>`;
+  }
+}
+
+async function nuovoOrdineDiretto(){
+  try {
+    const [{data:clienti},{data:agenti}] = await Promise.all([
+      sb.from('anagrafiche').select('*').order('ragione_sociale'),
+      sb.from('agenti').select('*').eq('attivo',true).order('cognome'),
+    ]);
+    CFG_RIGHE=[];
+    const modal=document.getElementById('modal-nuovo-doc');
+    if(!modal){ toast('Errore: modal non trovato','err'); return; }
+    modal.dataset.mode='ordine';
+    document.getElementById('ndoc-title').textContent='Nuovo ordine diretto';
+    document.getElementById('ndoc-clienti').innerHTML='<option value="">Seleziona cliente...</option>'+(clienti||[]).map(c=>`<option value="${c.id}" data-listino="${c.listino||'A'}" data-sa="${c.sconto_dedicato_A||0}" data-sp="${c.sconto_dedicato_P||0}" data-ind="${c.indirizzo||''}" data-cap="${c.cap||''}" data-cit="${c.citta||''}" data-prv="${c.provincia||''}">${c.ragione_sociale}</option>`).join('');
+    document.getElementById('ndoc-agenti').innerHTML='<option value="">Nessun agente</option>'+(agenti||[]).map(a=>`<option value="${a.id}">${a.cognome} ${a.nome}</option>`).join('');
+    document.getElementById('ndoc-righe-list').innerHTML='<div style="text-align:center;padding:20px;color:var(--mid);font-size:13px;font-style:italic">Nessuna porta ancora</div>';
+    document.getElementById('ndoc-totale').textContent='€ 0,00';
+    modal.classList.add('open');
+  } catch(e) {
+    console.error('nuovoOrdineDiretto error:', e);
+    toast('Errore apertura ordine: '+e.message,'err');
+  }
+}
+
+async function renderOrdineDetail(id){
+  const [{data:ord},{data:righe}] = await Promise.all([
+    sb.from('ordini_vendita').select('*,anagrafiche(ragione_sociale),agenti(nome,cognome)').eq('id',id).single(),
+    sb.from('righe_ordine').select('*').eq('ordine_id',id).order('riga_numero'),
+  ]);
+  if(!ord) return;
+  CFG_TARGET_ID=id; CFG_MODE='ordine';
+  window._prevListino=ord.listino;
+
+  const possoApprovareComm = isRespComm();
+  const possoApprovaTec = isRespTec();
+
+  const rowsRighe=(righe||[]).map(r=>`
+    <tr>
+      <td style="font-size:12px;font-weight:500">${r.riga_numero}</td>
+      <td>
+        <div style="font-size:13px;font-weight:500">${r.nome_modello||''}</div>
+        <div style="font-size:11px;color:var(--mid)">${[r.nome_finitura,r.pannello_bugna,r.nome_apertura,r.senso_apertura,r.larghezza_cm&&r.larghezza_cm+'×'+r.altezza_cm+' cm','sp.'+(r.spessore_muro_cm||'?')+' cm',r.nome_ferramenta,r.nome_maniglia].filter(Boolean).join(' | ')}</div>
+        ${r.misura_custom?'<span style="font-size:10px;background:var(--red-bg);color:var(--red-tx);padding:1px 5px;border-radius:3px">Custom</span>':''}
+      </td>
+      <td style="text-align:center">${r.quantita}</td>
+      <td style="text-align:right">${fmtEuro(r.prezzo_unitario)}</td>
+      <td style="text-align:right;font-weight:500">${fmtEuro(r.prezzo_totale_riga)}</td>
+    </tr>`).join('');
+
+  let bottoniApprovazione='';
+  if(ord.stato==='in_attesa'&&possoApprovareComm){
+    bottoniApprovazione=`<button class="btn btn-red btn-sm" onclick="approvaOrdine('${id}','comm')">Approva (commerciale)</button>
+    <button class="btn btn-sm" onclick="cambiaStato('ordini_vendita','${id}','bloccato','renderOrdineDetail')">Blocca</button>`;
+  }
+  if(ord.stato==='approvato_comm'&&ord.richiede_approvazione_tecnica&&possoApprovaTec){
+    bottoniApprovazione+=`<button class="btn btn-red btn-sm" onclick="approvaOrdine('${id}','tec')">Approva (tecnico)</button>`;
+  }
+  if((ord.stato==='approvato_comm'&&!ord.richiede_approvazione_tecnica)||(ord.stato==='approvato_tec')){
+    bottoniApprovazione+=`<button class="btn btn-red btn-sm" onclick="cambiaStato('ordini_vendita','${id}','in_produzione','renderOrdineDetail')">Lancia in produzione</button>`;
+  }
+
+  document.getElementById('main-content').innerHTML=`
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+    <button class="btn btn-sm" onclick="renderOrdiniDiretti()">← Tutti gli ordini</button>
+    <div style="display:flex;gap:8px">
+      ${ord.stato==='in_attesa'?`<button class="btn btn-sm" onclick="openConfiguratore('ordine','${id}','${ord.listino}')">+ Aggiungi porta</button>`:''}
+      ${bottoniApprovazione}
+    </div>
+  </div>
+  <div class="grid-2" style="margin-bottom:14px">
+    <div class="card">
+      <div class="card-title">Intestazione ordine</div>
+      <table style="font-size:13px">
+        <tr><td style="color:var(--mid);padding:3px 0;width:140px">N° Ordine</td><td><strong>${ord.numero}</strong></td></tr>
+        <tr><td style="color:var(--mid);padding:3px 0">Cliente</td><td>${ord.anagrafiche?.ragione_sociale||'—'}</td></tr>
+        <tr><td style="color:var(--mid);padding:3px 0">Agente</td><td>${ord.agenti?ord.agenti.nome+' '+ord.agenti.cognome:'—'}</td></tr>
+        <tr><td style="color:var(--mid);padding:3px 0">Listino</td><td><span class="tag">${ord.listino}</span></td></tr>
+        <tr><td style="color:var(--mid);padding:3px 0">Trasporto</td><td>${ord.trasporto||'—'}</td></tr>
+        <tr><td style="color:var(--mid);padding:3px 0">Approvazione</td><td>${ord.richiede_approvazione_tecnica?'<span class="badge br">Tecnica richiesta</span>':'<span class="badge bg">Solo commerciale</span>'}</td></tr>
+        <tr><td style="color:var(--mid);padding:3px 0">Stato</td><td>${badgeStato(ord.stato)}</td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <div class="card-title">Riepilogo economico</div>
+      <table style="font-size:13px">
+        <tr><td style="color:var(--mid);padding:3px 0;width:140px">Imponibile</td><td style="text-align:right">${fmtEuro(ord.totale_imponibile)}</td></tr>
+        <tr><td style="color:var(--mid);padding:3px 0">Sconto 1</td><td style="text-align:right">${ord.sconto1||0}%</td></tr>
+        <tr><td style="color:var(--mid);padding:3px 0">Sconto 2</td><td style="text-align:right">${ord.sconto2||0}%</td></tr>
+        <tr style="border-top:0.5px solid var(--border)"><td style="padding:6px 0;font-weight:500">Totale netto</td><td style="text-align:right;font-size:18px;font-weight:500;color:var(--red)">${fmtEuro(ord.totale_netto||ord.totale_imponibile)}</td></tr>
+      </table>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header"><span class="card-title">Righe ordine (${righe?.length||0} porte)</span></div>
+    <table>
+      <thead><tr><th>#</th><th>Descrizione porta</th><th style="text-align:center">Q.tà</th><th style="text-align:right">Unitario</th><th style="text-align:right">Totale riga</th></tr></thead>
+      <tbody>${rowsRighe||'<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--mid)">Nessuna porta</td></tr>'}</tbody>
+    </table>
+  </div>`;
+}
+
+async function approvaOrdine(id, tipo){
+  const stato = tipo==='comm'?'approvato_comm':'approvato_tec';
+  const campoData = tipo==='comm'?'data_approvazione_comm':'data_approvazione_tec';
+  const campoUser = tipo==='comm'?'approvato_da_comm':'approvato_da_tec';
+  await sb.from('ordini_vendita').update({stato,[campoData]:new Date().toISOString(),[campoUser]:currentUser?.id}).eq('id',id);
+  await sb.from('log_approvazioni').insert([{ordine_id:id,user_id:currentUser?.id,azione:stato}]);
+  toast('Ordine approvato','ok');
+  renderOrdineDetail(id);
+}
+
+// ══════════════════════════════════════════════════════
+// PANNELLO SUPER-ADMIN — navigazione e struttura
+// ══════════════════════════════════════════════════════
+
+const ADMIN_SECTIONS = [
+  {id:'catalogo',    label:'Catalogo',          icon:'M4 4h8v8H4zM10 2h4v4h-4zM2 10h4v4H2z'},
+  {id:'prezzi',      label:'Prezzi e listini',  icon:'M8 1l2 5h5l-4 3 1.5 5L8 11l-4.5 3L5 9 1 6h5z'},
+  {id:'telaio',      label:'Telaio e componenti',icon:'M2 8h12M8 2v12'},
+  {id:'distinte',    label:'Distinte base',     icon:'M3 3h10v2H3zM3 7h10v2H3zM3 11h6v2H3z'},
+  {id:'compatibilita',label:'Compatibilità',    icon:'M2 8h5M9 8h5M8 2v5M8 9v5'},
+  {id:'agenti',      label:'Agenti',            icon:'M8 5a3 3 0 100 6 3 3 0 000-6zM2 14c0-3 2-5 6-5s6 2 6 5'},
+  {id:'impostazioni',label:'Impostazioni',      icon:'M8 5a3 3 0 100 6M8 1v2M8 13v2M1 8h2M13 8h2'},
+];
+
+const ADMIN_SUB = {
+  catalogo:   ['serie','modelli','finiture','aperture','ferramenta','maniglie'],
+  prezzi:     ['listini','sovrapprezzi','scontistiche'],
+  telaio:     ['spalle','regole','scorrevoli_int','scorrevoli_ext','colori'],
+  distinte:   ['db_modelli'],
+  agenti:     ['agenti_lista'],
+  impostazioni:['generale','utenti'],
+};
+
+let adminSection = 'catalogo';
+let adminSub = 'serie';
+
+async function renderAdmin(){
+  if(!isAdmin()){
+    document.getElementById('main-content').innerHTML='<div class="card"><p style="color:var(--red)">Accesso non autorizzato.</p></div>';
+    return;
+  }
+  const navHtml = ADMIN_SECTIONS.map(s=>`
+    <div onclick="switchAdminSection('${s.id}')" style="display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;border-radius:var(--radius);font-size:13px;
+      background:${adminSection===s.id?'rgba(208,32,26,0.08)':'transparent'};
+      color:${adminSection===s.id?'var(--red)':'var(--mid)'};font-weight:${adminSection===s.id?'500':'400'}">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="${s.icon}"/></svg>
+      ${s.label}
+    </div>`).join('');
+
+  document.getElementById('main-content').innerHTML=`
+  <div style="display:flex;gap:0;height:calc(100vh - 50px);overflow:hidden">
+    <div style="width:180px;min-width:180px;border-right:0.5px solid var(--border);padding:12px 8px;overflow-y:auto;background:var(--white)">
+      <div style="font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:var(--mid);padding:0 4px 8px">Configurazione</div>
+      ${navHtml}
+    </div>
+    <div style="flex:1;overflow-y:auto;padding:20px" id="admin-main"></div>
+  </div>`;
+  loadAdminSection();
+}
+
+function switchAdminSection(sec){
+  adminSection=sec;
+  adminSub=ADMIN_SUB[sec]?.[0]||'';
+  renderAdmin();
+}
+
+function loadAdminSection(){
+  if(adminSection==='catalogo') adminCatalogo();
+  else if(adminSection==='prezzi') adminPrezzi();
+  else if(adminSection==='telaio') adminTelaioPanel();
+  else if(adminSection==='distinte') adminDistinte();
+  else if(adminSection==='compatibilita') adminCompatibilita();
+  else if(adminSection==='agenti') adminAgenti();
+  else if(adminSection==='impostazioni') adminImpostazioni();
+}
+
+// ── HELPER UI ──────────────────────────────────────────
+function adminSubTabs(tabs, active, onclick){
+  return `<div style="display:flex;gap:0;margin-bottom:16px;border-bottom:0.5px solid var(--border)">
+    ${tabs.map(t=>`<div onclick="${onclick}('${t.id}')" style="padding:8px 16px;cursor:pointer;font-size:13px;border-bottom:${active===t.id?'2px solid var(--red)':'2px solid transparent'};color:${active===t.id?'var(--red)':'var(--mid)'};font-weight:${active===t.id?'500':'400'};margin-bottom:-0.5px">${t.label}</div>`).join('')}
+  </div>`;
+}
+
+function adminCard(title, content, actions=''){
+  return `<div class="card" style="margin-bottom:14px">
+    <div class="card-header">${title?`<span class="card-title">${title}</span>`:''}${actions}</div>
+    ${content}
+  </div>`;
+}
+
+function inlineInput(val, onchange, width='80px', type='number', placeholder=''){
+  return `<input type="${type}" value="${val??''}" placeholder="${placeholder}" step="0.01"
+    style="width:${width};padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit"
+    onchange="${onchange}">`;
+}
+
+function adminToggle(attivo, onclick){
+  return `<span class="badge ${attivo?'bg':'br'}" style="cursor:pointer" onclick="${onclick}">${attivo?'Attivo':'Inattivo'}</span>`;
+}
+
+// ══════════════════════════════════════════════════════
+// CATALOGO
+// ══════════════════════════════════════════════════════
+function adminCatalogo(){
+  const tabs=[
+    {id:'serie',label:'Serie'},{id:'modelli',label:'Modelli'},
+    {id:'finiture',label:'Finiture'},{id:'aperture',label:'Aperture e sensi'},
+    {id:'ferramenta',label:'Ferramenta'},{id:'maniglie',label:'Maniglie'},
+  ];
+  const el=document.getElementById('admin-main');
+  el.innerHTML=adminSubTabs(tabs,adminSub,'switchAdminCat')+'<div id="admin-sub"></div>';
+  switchAdminCat(adminSub||'serie');
+}
+
+function switchAdminCat(sub){
+  adminSub=sub;
+  document.querySelectorAll('#admin-main [onclick^="switchAdminCat"]').forEach(t=>{
+    const isActive=t.getAttribute('onclick').includes(`'${sub}'`);
+    t.style.borderBottom=isActive?'2px solid var(--red)':'2px solid transparent';
+    t.style.color=isActive?'var(--red)':'var(--mid)';
+    t.style.fontWeight=isActive?'500':'400';
+  });
+  if(sub==='serie') adminSerie();
+  else if(sub==='modelli') adminModelli();
+  else if(sub==='finiture') adminFiniture();
+  else if(sub==='aperture') adminAperture();
+  else if(sub==='ferramenta') adminFerramenta();
+  else if(sub==='maniglie') adminManiglie();
+}
+
+// SERIE
+async function adminSerie(){
+  const {data} = await sb.from('serie').select('*').order('nome');
+  const rows=(data||[]).map(s=>`<tr>
+    <td>${inlineInput(s.codice,`adminSalva('serie','${s.id}','codice',this.value)`,'70px','text')}</td>
+    <td>${inlineInput(s.nome,`adminSalva('serie','${s.id}','nome',this.value)`,'140px','text')}</td>
+    <td>${inlineInput(s.descrizione||'',`adminSalva('serie','${s.id}','descrizione',this.value)`,'220px','text','Descrizione')}</td>
+    <td>
+      ${s.immagine_url?`<img src="${s.immagine_url}" style="width:40px;height:40px;object-fit:cover;border-radius:4px;margin-right:6px">`:'<span style="font-size:11px;color:var(--mid)">Nessuna</span>'}
+      <label style="cursor:pointer"><input type="file" accept="image/*" style="display:none" onchange="uploadImmagine('serie','${s.id}',this)"><span class="btn btn-sm" style="font-size:11px">📷 Carica</span></label>
+    </td>
+    <td>${adminToggle(s.attiva,`toggleCampo('serie','${s.id}','attiva',${s.attiva})`)}</td>
+    <td><button onclick="eliminaRigaAdmin('serie','${s.id}','adminSerie')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px" title="Elimina">×</button></td>
+  </tr>`).join('');
+  document.getElementById('admin-sub').innerHTML=adminCard('Serie',`
+    <table><thead><tr><th>Codice</th><th>Nome</th><th>Descrizione</th><th>Immagine</th><th>Stato</th><th></th></tr></thead>
+    <tbody>${rows}</tbody></table>`,
+    `<button class="btn btn-red btn-sm" onclick="nuovaRiga('serie',{codice:'NUOVA',nome:'Nuova serie',attiva:true},'adminSerie')">+ Aggiungi serie</button>`);
+}
+
+// MODELLI
+async function adminModelli(){
+  const {data:serie} = await sb.from('serie').select('codice,nome').order('nome');
+  const {data:modelli} = await sb.from('modelli').select('*,prezzi_modello(listino,prezzo_base,prezzo_vetro,vetro_incluso,ha_extra_incisioni,prezzo_extra_incisioni)').order('codice_serie').order('nome');
+
+  const rows=(modelli||[]).map(m=>{
+    const pa=m.prezzi_modello?.find(p=>p.listino==='A');
+    const pp=m.prezzi_modello?.find(p=>p.listino==='P');
+    const flags=['ha_vetro','ha_pannello_o_bugna','ha_inserto_alluminio','ha_inserto_pietra','ha_pantografatura'];
+    const flagLabels={ha_vetro:'V',ha_pannello_o_bugna:'P',ha_inserto_alluminio:'A',ha_inserto_pietra:'I',ha_pantografatura:'T'};
+    const flagHtml=flags.map(f=>`<span title="${f.replace(/_/g,' ')}" style="display:inline-block;width:16px;height:16px;border-radius:3px;margin-right:2px;cursor:pointer;
+      background:${m[f]?'var(--green-bg)':'var(--border)'};border:0.5px solid ${m[f]?'var(--green-tx)':'var(--mid)'};
+      color:${m[f]?'var(--green-tx)':'var(--mid)'};font-size:9px;text-align:center;line-height:16px;font-weight:500"
+      onclick="toggleCampo('modelli','${m.id}','${f}',${m[f]})">${flagLabels[f]}</span>`).join('');
+    return `<tr>
+      <td>${inlineInput(m.codice,`adminSalva('modelli','${m.id}','codice',this.value)`,'70px','text')}</td>
+      <td>${inlineInput(m.nome,`adminSalva('modelli','${m.id}','nome',this.value)`,'150px','text')}</td>
+      <td><select onchange="adminSalva('modelli','${m.id}','codice_serie',this.value)" style="padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px">
+        ${(serie||[]).map(s=>`<option value="${s.codice}" ${s.codice===m.codice_serie?'selected':''}>${s.codice}</option>`).join('')}
+      </select></td>
+      <td><select onchange="adminSalva('modelli','${m.id}','tipo_variante',this.value)" style="padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:11px">
+        <option value="" ${!m.tipo_variante?'selected':''}>—</option>
+        <option value="PERSONALIZZATA" ${m.tipo_variante==='PERSONALIZZATA'?'selected':''}>Personalizzata</option>
+        <option value="STANDARD" ${m.tipo_variante==='STANDARD'?'selected':''}>Standard</option>
+      </select></td>
+      <td>${flagHtml}</td>
+      <td>${inlineInput(pa?.prezzo_base||'',`salvaPrezzo('${m.codice}','A','prezzo_base',this.value)`,'70px')}</td>
+      <td>${inlineInput(pp?.prezzo_base||'',`salvaPrezzo('${m.codice}','P','prezzo_base',this.value)`,'70px')}</td>
+      <td>${m.ha_vetro?`
+        <div style="display:flex;align-items:center;gap:4px">
+          ${inlineInput(pa?.vetro_incluso?'INCL':pa?.prezzo_vetro||'',`salvaPrezzo('${m.codice}','A','prezzo_vetro',this.value)`,'60px')}
+          <span title="Vetro incluso nel prezzo porta" style="cursor:pointer;font-size:10px;color:${pa?.vetro_incluso?'var(--green-tx)':'var(--mid)'}" onclick="toggleVetroIncluso('${m.codice}',${!!pa?.vetro_incluso})">${pa?.vetro_incluso?'✓incl':'libero'}</span>
+        </div>`:'—'}</td>
+      <td>${pa?.ha_extra_incisioni?inlineInput(pa?.prezzo_extra_incisioni||'',`salvaPrezzo('${m.codice}','A','prezzo_extra_incisioni',this.value)`,'65px'):'<span style="font-size:11px;color:var(--mid)">No</span>'}</td>
+      <td>
+        ${m.immagine_url?`<img src="${m.immagine_url}" style="width:32px;height:32px;object-fit:cover;border-radius:4px;margin-right:4px">`:''}
+        <label style="cursor:pointer"><input type="file" accept="image/*" style="display:none" onchange="uploadImmagine('modelli','${m.id}',this)"><span style="font-size:11px;cursor:pointer;color:var(--red)">📷</span></label>
+      </td>
+      <td>${adminToggle(m.attivo,`toggleCampo('modelli','${m.id}','attivo',${m.attivo})`)}</td>
+      <td><button onclick="eliminaRigaAdmin('modelli','${m.id}','adminModelli')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px" title="Elimina">×</button></td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('admin-sub').innerHTML=adminCard('Modelli',`
+    <div style="font-size:11px;color:var(--mid);margin-bottom:8px">Flag cliccabili: <b>V</b>=vetro <b>P</b>=pannello/bugna <b>A</b>=inserto alluminio <b>I</b>=inserto pietra <b>T</b>=pantografatura</div>
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>Codice</th><th>Nome</th><th>Serie</th><th>Variante</th><th>Flag</th><th>Prezzo A</th><th>Prezzo P</th><th>Vetro A</th><th>Extra incis.</th><th>Img</th><th>Stato</th><th></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`,
+    `<button class="btn btn-red btn-sm" onclick="nuovoModello()">+ Aggiungi modello</button>`);
+}
+
+async function toggleVetroIncluso(codModello, attualeIncluso){
+  await sb.from('prezzi_modello').update({vetro_incluso:!attualeIncluso}).eq('codice_modello',codModello);
+  toast(!attualeIncluso?'Vetro ora incluso nel prezzo':'Vetro ora separato','ok');
+  adminModelli();
+}
+
+async function nuovoModello(){
+  const {data:serie} = await sb.from('serie').select('codice,nome').order('nome');
+  const opts=(serie||[]).map(s=>`<option value="${s.codice}">${s.codice} — ${s.nome}</option>`).join('');
+  const cod=prompt('Codice modello (es. TAM-048):'); if(!cod) return;
+  const nome=prompt('Nome modello:'); if(!nome) return;
+  const serieEl=document.createElement('select');
+  serieEl.innerHTML=opts;
+  const serie_cod = prompt('Codice serie ('+( serie||[]).map(s=>s.codice).join('/')+'):');
+  if(!serie_cod) return;
+  const {error}=await sb.from('modelli').insert([{codice:cod.toUpperCase(),nome,codice_serie:serie_cod.toUpperCase(),attivo:true}]);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Modello '+cod+' aggiunto','ok'); adminModelli();
+}
+
+// FINITURE
+async function adminFiniture(){
+  const {data:serie} = await sb.from('serie').select('codice').order('codice');
+  const serieFilter = document.getElementById('admin-serie-filter')?.value || 'TAM';
+
+  const {data} = await sb.from('finiture').select('*').eq('codice_serie',serieFilter).order('nome_finitura');
+  const serieOpts=(serie||[]).map(s=>`<option value="${s.codice}" ${s.codice===serieFilter?'selected':''}>${s.codice}</option>`).join('');
+
+  const rows=(data||[]).map(f=>`<tr>
+    <td>${inlineInput(f.codice_finitura,`adminSalva('finiture','${f.id}','codice_finitura',this.value)`,'60px','text')}</td>
+    <td>${inlineInput(f.nome_finitura,`adminSalva('finiture','${f.id}','nome_finitura',this.value)`,'150px','text')}</td>
+    <td>${inlineInput(f.codice_modello||'',`adminSalva('finiture','${f.id}','codice_modello',this.value)`,'70px','text','Tutti')}</td>
+    <td>${inlineInput(f.sovrapprezzo_A??0,`adminSalva('finiture','${f.id}','sovrapprezzo_A',this.value)`,'65px')}</td>
+    <td>${inlineInput(f.sovrapprezzo_P??0,`adminSalva('finiture','${f.id}','sovrapprezzo_P',this.value)`,'65px')}</td>
+    <td><span class="badge ${f.consente_bugna?'bg':'br'}" style="cursor:pointer" onclick="toggleCampo('finiture','${f.id}','consente_bugna',${f.consente_bugna})">${f.consente_bugna?'Sì':'No'}</span></td>
+    <td>${inlineInput(f.sovrapprezzo_bugna_A??0,`adminSalva('finiture','${f.id}','sovrapprezzo_bugna_A',this.value)`,'65px')}</td>
+    <td>${inlineInput(f.sovrapprezzo_bugna_P??0,`adminSalva('finiture','${f.id}','sovrapprezzo_bugna_P',this.value)`,'65px')}</td>
+    <td>${adminToggle(f.attiva,`toggleCampo('finiture','${f.id}','attiva',${f.attiva})`)}</td>
+    <td><button onclick="eliminaRigaAdmin('finiture','${f.id}','adminFiniture')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px" title="Elimina">×</button></td>
+  </tr>`).join('');
+
+  document.getElementById('admin-sub').innerHTML=`
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+    <label style="font-size:12px;color:var(--mid)">Serie:</label>
+    <select id="admin-serie-filter" onchange="adminFiniture()" style="padding:5px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit">${serieOpts}</select>
+    <button class="btn btn-red btn-sm" onclick="nuovaFinitura('${serieFilter}')">+ Aggiungi finitura</button>
+  </div>
+  ${adminCard('Finiture',`<div style="overflow-x:auto"><table>
+    <thead><tr><th>Codice</th><th>Nome</th><th>Modello</th><th>Sovr.A</th><th>Sovr.P</th><th>Bugna</th><th>Bugna A</th><th>Bugna P</th><th>Stato</th><th></th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div>`)}`;
+}
+
+async function nuovaFinitura(serieFilter){
+  const cod=prompt('Codice finitura:'); if(!cod) return;
+  const nome=prompt('Nome finitura:'); if(!nome) return;
+  const {error}=await sb.from('finiture').insert([{codice_serie:serieFilter,codice_finitura:cod.toUpperCase(),nome_finitura:nome,attiva:true}]);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Finitura aggiunta','ok'); adminFiniture();
+}
+
+// APERTURE E SENSI
+async function adminAperture(){
+  const [{data:ap},{data:sensi}] = await Promise.all([
+    sb.from('tipologie_apertura').select('*').order('famiglia').order('codice'),
+    sb.from('sensi_apertura').select('*').order('codice_apertura').order('ordine'),
+  ]);
+
+  const rows=(ap||[]).map(a=>{
+    const sensiAp=(sensi||[]).filter(s=>s.codice_apertura===a.codice);
+    const sensiHtml=sensiAp.map(s=>`
+      <span style="display:inline-flex;align-items:center;gap:2px;padding:1px 6px;border-radius:3px;font-size:10px;background:var(--blue-bg);color:var(--blue-tx);margin:1px">
+        ${s.codice_senso}
+        <span onclick="eliminaSenso('${s.id}','${a.codice}')" style="cursor:pointer;color:var(--mid);margin-left:2px;font-size:11px" title="Rimuovi">×</span>
+      </span>`).join('');
+    const sp = a.logica_prezzo==='fisso'?inlineInput(a.sovrapprezzo_A??'',`adminSalva('tipologie_apertura','${a.id}','sovrapprezzo_A',this.value)`,'65px'):
+              a.logica_prezzo==='percentuale'?inlineInput(a.maggiorazione_pct??'',`adminSalva('tipologie_apertura','${a.id}','maggiorazione_pct',this.value)`,'55px')+'%':'variabile';
+    const spP = a.logica_prezzo==='fisso'?inlineInput(a.sovrapprezzo_P??'',`adminSalva('tipologie_apertura','${a.id}','sovrapprezzo_P',this.value)`,'65px'):'—';
+    return `<tr>
+      <td>${inlineInput(a.codice,`adminSalva('tipologie_apertura','${a.id}','codice',this.value)`,'80px','text')}</td>
+      <td>${inlineInput(a.nome||'',`adminSalva('tipologie_apertura','${a.id}','nome',this.value)`,'180px','text')}</td>
+      <td><select onchange="adminSalva('tipologie_apertura','${a.id}','famiglia',this.value)" style="padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:11px">
+        ${['BAT','CS','SI','SE','FM','COM','ROTO','LIBRO','SALOON','ROTOTRASLANTI','SPECIALI','PASSATE'].map(f=>`<option value="${f}" ${f===a.famiglia?'selected':''}>${f}</option>`).join('')}
+      </select></td>
+      <td><select onchange="adminSalva('tipologie_apertura','${a.id}','logica_prezzo',this.value)" style="padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:11px">
+        ${['fisso','spessore','percentuale','doppio'].map(l=>`<option value="${l}" ${l===a.logica_prezzo?'selected':''}>${l}</option>`).join('')}
+      </select></td>
+      <td>${sp}</td><td>${spP}</td>
+      <td style="max-width:160px">
+        ${sensiHtml||'<span style="font-size:11px;color:var(--mid)">Nessuno</span>'}
+        <button onclick="aggiungiSenso('${a.codice}')" style="background:none;border:0.5px solid var(--border);border-radius:3px;color:var(--red);cursor:pointer;font-size:10px;padding:1px 5px;margin-left:3px">+</button>
+      </td>
+      <td>${adminToggle(a.attiva,`toggleCampo('tipologie_apertura','${a.id}','attiva',${a.attiva})`)}</td>
+      <td><button onclick="eliminaRigaAdmin('tipologie_apertura','${a.id}','adminAperture')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('admin-sub').innerHTML=adminCard('Tipologie apertura e sensi',`
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>Codice</th><th>Nome completo</th><th>Famiglia</th><th>Logica prezzo</th><th>Sovr.A</th><th>Sovr.P</th><th>Sensi (× per rimuovere, + per aggiungere)</th><th>Stato</th><th></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`,
+    `<button class="btn btn-red btn-sm" onclick="nuovaApertura()">+ Aggiungi tipologia</button>`);
+}
+
+async function aggiungiSenso(codApertura){
+  const cod=prompt(`Codice senso per ${codApertura} (DX, SX, T.DX, T.SX, BIDIREZIONALE, X, NESSUNO):`);
+  if(!cod) return;
+  const desc=prompt('Descrizione (es. Apertura SPINGERE DX):');
+  const {error}=await sb.from('sensi_apertura').insert([{
+    codice_apertura:codApertura, codice_senso:cod.toUpperCase(),
+    famiglia:'BAT', descrizione_senso:desc||'', attivo:true, ordine:99
+  }]);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Senso aggiunto','ok'); adminAperture();
+}
+
+async function eliminaSenso(id, codApertura){
+  if(!confirm('Rimuovere questo senso?')) return;
+  await sb.from('sensi_apertura').delete().eq('id',id);
+  toast('Senso rimosso','ok'); adminAperture();
+}
+
+async function nuovaApertura(){
+  const cod=prompt('Codice apertura (es. BAT-NEW):'); if(!cod) return;
+  const nome=prompt('Nome completo:'); if(!nome) return;
+  const famiglia=prompt('Famiglia (BAT/SI/SE/FM/COM/ROTO/LIBRO/SALOON):'); if(!famiglia) return;
+  const {error}=await sb.from('tipologie_apertura').insert([{codice:cod,nome,famiglia,logica_prezzo:'fisso',attiva:true}]);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Apertura aggiunta','ok'); adminAperture();
+}
+
+// FERRAMENTA
+async function adminFerramenta(){
+  const {data} = await sb.from('ferramenta').select('*').order('nome');
+  const rows=(data||[]).map(f=>`<tr>
+    <td>${inlineInput(f.codice,`adminSalva('ferramenta','${f.id}','codice',this.value)`,'70px','text')}</td>
+    <td>${inlineInput(f.nome,`adminSalva('ferramenta','${f.id}','nome',this.value)`,'160px','text')}</td>
+    <td style="display:flex;align-items:center;gap:6px">
+      ${f.colore_hex?`<div style="width:24px;height:24px;border-radius:4px;background:#${f.colore_hex};border:0.5px solid var(--border);flex-shrink:0"></div>`:''}
+      ${inlineInput(f.colore_hex||'',`adminSalvaFerramenta('${f.id}','colore_hex',this.value,this)`,'80px','text','es. C0C0C0')}
+    </td>
+    <td>${inlineInput(f.sovrapprezzo_A??0,`adminSalva('ferramenta','${f.id}','sovrapprezzo_A',this.value)`,'65px')}</td>
+    <td>${inlineInput(f.sovrapprezzo_P??0,`adminSalva('ferramenta','${f.id}','sovrapprezzo_P',this.value)`,'65px')}</td>
+    <td>${adminToggle(f.attivo,`toggleCampo('ferramenta','${f.id}','attivo',${f.attivo})`)}</td>
+    <td><button onclick="eliminaRigaAdmin('ferramenta','${f.id}','adminFerramenta')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
+  </tr>`).join('');
+  document.getElementById('admin-sub').innerHTML=adminCard('Ferramenta',`
+    <table><thead><tr><th>Codice</th><th>Nome</th><th>Colore hex</th><th>Sovr.A (€)</th><th>Sovr.P (€)</th><th>Stato</th><th></th></tr></thead>
+    <tbody>${rows}</tbody></table>`,
+    `<button class="btn btn-red btn-sm" onclick="nuovaRiga('ferramenta',{codice:'NEW',nome:'Nuovo colore',attivo:true,sovrapprezzo_A:0,sovrapprezzo_P:0},'adminFerramenta')">+ Aggiungi colore</button>`);
+}
+
+async function adminSalvaFerramenta(id, campo, valore, el){
+  await adminSalva('ferramenta', id, campo, valore);
+  // Aggiorna il pallino colore inline senza ricaricare tutta la tabella
+  const preview = el.parentElement.querySelector('div[style*="border-radius:4px"]');
+  if(preview && valore) preview.style.background='#'+valore;
+}
+
+// MANIGLIE
+async function adminManiglie(){
+  const {data} = await sb.from('maniglie').select('*').order('nome');
+  const rows=(data||[]).map(m=>`<tr>
+    <td>${inlineInput(m.codice,`adminSalva('maniglie','${m.id}','codice',this.value)`,'70px','text')}</td>
+    <td>${inlineInput(m.nome,`adminSalva('maniglie','${m.id}','nome',this.value)`,'160px','text')}</td>
+    <td>${inlineInput(m.serie_compatibili||'',`adminSalva('maniglie','${m.id}','serie_compatibili',this.value)`,'100px','text','Tutte')}</td>
+    <td>${inlineInput(m.descrizione||'',`adminSalva('maniglie','${m.id}','descrizione',this.value)`,'150px','text','Descrizione')}</td>
+    <td>${inlineInput(m.prezzo_A??0,`adminSalva('maniglie','${m.id}','prezzo_A',this.value)`,'65px')}</td>
+    <td>${inlineInput(m.prezzo_P??0,`adminSalva('maniglie','${m.id}','prezzo_P',this.value)`,'65px')}</td>
+    <td>
+      ${m.immagine_url?`<img src="${m.immagine_url}" style="width:32px;height:32px;object-fit:cover;border-radius:4px;margin-right:4px">`:''}
+      <label style="cursor:pointer"><input type="file" accept="image/*" style="display:none" onchange="uploadImmagine('maniglie','${m.id}',this)"><span style="font-size:11px;cursor:pointer;color:var(--red)">📷</span></label>
+    </td>
+    <td>${adminToggle(m.attivo,`toggleCampo('maniglie','${m.id}','attivo',${m.attivo})`)}</td>
+    <td><button onclick="eliminaRigaAdmin('maniglie','${m.id}','adminManiglie')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
+  </tr>`).join('');
+  document.getElementById('admin-sub').innerHTML=adminCard('Maniglie',`
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>Codice</th><th>Nome</th><th>Serie compatibili</th><th>Descrizione</th><th>Prezzo A</th><th>Prezzo P</th><th>Immagine</th><th>Stato</th><th></th></tr></thead>
+      <tbody>${rows}</tbody></table></div>`,
+    `<button class="btn btn-red btn-sm" onclick="nuovaRiga('maniglie',{codice:'MAN-NEW',nome:'Nuova maniglia',attivo:true,prezzo_A:0,prezzo_P:0},'adminManiglie')">+ Aggiungi maniglia</button>`);
+}
+
+async function eliminaRigaAdmin(tabella, id, callback){
+  if(!confirm('Eliminare questa riga? L\'operazione non è reversibile.')) return;
+  const {error} = await sb.from(tabella).delete().eq('id',id);
+  if(error){toast('Errore eliminazione: '+error.message,'err');return;}
+  toast('Eliminato','ok');
+  if(callback && window[callback]) window[callback]();
+}
+
+// ══════════════════════════════════════════════════════
+// PREZZI E LISTINI
+// ══════════════════════════════════════════════════════
+function adminPrezzi(){
+  const tabs=[{id:'listini',label:'Listini A e P'},{id:'colori_extra',label:'Vetro e inserti'},{id:'scontistiche',label:'Scontistiche'}];
+  document.getElementById('admin-main').innerHTML=adminSubTabs(tabs,'listini','switchAdminPrezzi')+'<div id="admin-sub"></div>';
+  switchAdminPrezzi('listini');
+}
+function switchAdminPrezzi(sub){
+  adminSub=sub;
+  document.querySelectorAll('#admin-main [onclick^="switchAdminPrezzi"]').forEach(t=>{
+    const isActive=t.getAttribute('onclick').includes(`'${sub}'`);
+    t.style.borderBottom=isActive?'2px solid var(--red)':'2px solid transparent';
+    t.style.color=isActive?'var(--red)':'var(--mid)'; t.style.fontWeight=isActive?'500':'400';
+  });
+  if(sub==='listini') adminListini();
+  else if(sub==='colori_extra') adminColoriExtra();
+  else if(sub==='scontistiche') adminScontistiche();
+}
+
+async function adminListini(){
+  const {data:modelli} = await sb.from('modelli').select('*,prezzi_modello(listino,prezzo_base,prezzo_vetro,vetro_incluso,ha_extra_incisioni,prezzo_extra_incisioni)').order('codice_serie').order('nome');
+  const rows=(modelli||[]).map(m=>{
+    const pa=m.prezzi_modello?.find(p=>p.listino==='A');
+    const pp=m.prezzi_modello?.find(p=>p.listino==='P');
+    return `<tr>
+      <td><span class="tag" style="font-size:10px">${m.codice_serie}</span></td>
+      <td><strong style="font-size:12px">${m.codice}</strong></td>
+      <td style="font-size:12px">${m.nome}</td>
+      <td>${inlineInput(pa?.prezzo_base||'',`salvaPrezzo('${m.codice}','A','prezzo_base',this.value)`,'75px')}</td>
+      <td>${inlineInput(pp?.prezzo_base||'',`salvaPrezzo('${m.codice}','P','prezzo_base',this.value)`,'75px')}</td>
+      <td>${m.ha_vetro&&!pa?.vetro_incluso?inlineInput(pa?.prezzo_vetro||'',`salvaPrezzo('${m.codice}','A','prezzo_vetro',this.value)`,'70px'):m.ha_vetro?'<span class="badge bg" style="font-size:10px">Incl.</span>':'—'}</td>
+      <td>${m.ha_vetro&&!pp?.vetro_incluso?inlineInput(pp?.prezzo_vetro||'',`salvaPrezzo('${m.codice}','P','prezzo_vetro',this.value)`,'70px'):'—'}</td>
+      <td>${pa?.ha_extra_incisioni?inlineInput(pa?.prezzo_extra_incisioni||'',`salvaPrezzo('${m.codice}','A','prezzo_extra_incisioni',this.value)`,'70px'):'—'}</td>
+      <td>${adminToggle(m.attivo,`toggleCampo('modelli','${m.id}','attivo',${m.attivo})`)}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('admin-sub').innerHTML=adminCard('Listini A e P — prezzi base e vetro',`
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>Serie</th><th>Codice</th><th>Modello</th><th>Base A (€)</th><th>Base P (€)</th><th>Vetro A</th><th>Vetro P</th><th>Incis. A</th><th>Stato</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`);
+}
+
+async function adminColoriExtra(){
+  const [{data:tv},{data:alu},{data:pietra}] = await Promise.all([
+    sb.from('tipi_vetro').select('*').order('nome'),
+    sb.from('colori_inserto_alluminio').select('*').order('nome'),
+    sb.from('colori_pietra').select('*').order('nome'),
+  ]);
+  const rowsV=(tv||[]).map(v=>`<tr>
+    <td>${inlineInput(v.codice,`adminSalva('tipi_vetro','${v.id}','codice',this.value)`,'70px','text')}</td>
+    <td>${inlineInput(v.nome,`adminSalva('tipi_vetro','${v.id}','nome',this.value)`,'150px','text')}</td>
+    <td>${inlineInput(v.sovrapprezzo_A??0,`adminSalva('tipi_vetro','${v.id}','sovrapprezzo_A',this.value)`,'65px')}</td>
+    <td>${inlineInput(v.sovrapprezzo_P??0,`adminSalva('tipi_vetro','${v.id}','sovrapprezzo_P',this.value)`,'65px')}</td>
+    <td>${adminToggle(v.attivo,`toggleCampo('tipi_vetro','${v.id}','attivo',${v.attivo})`)}</td>
+  </tr>`).join('');
+  const rowsA=(alu||[]).map(a=>`<tr>
+    <td>${inlineInput(a.codice,`adminSalva('colori_inserto_alluminio','${a.id}','codice',this.value)`,'70px','text')}</td>
+    <td>${inlineInput(a.nome,`adminSalva('colori_inserto_alluminio','${a.id}','nome',this.value)`,'150px','text')}</td>
+    <td><span class="badge ${a.incluso?'bg':'ba'}" style="cursor:pointer;font-size:10px" onclick="toggleCampo('colori_inserto_alluminio','${a.id}','incluso',${a.incluso})">${a.incluso?'Incluso':'A pagamento'}</span></td>
+    <td>${inlineInput(a.sovrapprezzo_A??'',`adminSalva('colori_inserto_alluminio','${a.id}','sovrapprezzo_A',this.value)`,'65px','number','0')}</td>
+    <td>${inlineInput(a.sovrapprezzo_P??'',`adminSalva('colori_inserto_alluminio','${a.id}','sovrapprezzo_P',this.value)`,'65px','number','0')}</td>
+  </tr>`).join('');
+  const rowsP=(pietra||[]).map(p=>`<tr>
+    <td>${inlineInput(p.codice,`adminSalva('colori_pietra','${p.id}','codice',this.value)`,'70px','text')}</td>
+    <td>${inlineInput(p.nome,`adminSalva('colori_pietra','${p.id}','nome',this.value)`,'150px','text')}</td>
+    <td>${inlineInput(p.sovrapprezzo_A??0,`adminSalva('colori_pietra','${p.id}','sovrapprezzo_A',this.value)`,'65px')}</td>
+    <td>${inlineInput(p.sovrapprezzo_P??0,`adminSalva('colori_pietra','${p.id}','sovrapprezzo_P',this.value)`,'65px')}</td>
+  </tr>`).join('');
+  document.getElementById('admin-sub').innerHTML=`
+  <div class="card" style="margin-bottom:12px">
+    <div class="card-header"><span class="card-title">Tipi vetro</span><button class="btn btn-red btn-sm" onclick="nuovaRiga('tipi_vetro',{codice:'VET',nome:'Nuovo vetro',sovrapprezzo_A:0,sovrapprezzo_P:0,attivo:true},'adminColoriExtra')">+</button></div>
+    <table><thead><tr><th>Codice</th><th>Nome</th><th>Sovr.A</th><th>Sovr.P</th><th>Stato</th></tr></thead><tbody>${rowsV||'<tr><td colspan="5" style="text-align:center;color:var(--mid);padding:12px">Nessuno</td></tr>'}</tbody></table>
+  </div>
+  <div class="card" style="margin-bottom:12px">
+    <div class="card-header"><span class="card-title">Colori inserto alluminio</span><button class="btn btn-red btn-sm" onclick="nuovaRiga('colori_inserto_alluminio',{codice:'ALU',nome:'Nuovo colore',incluso:false},'adminColoriExtra')">+</button></div>
+    <table><thead><tr><th>Codice</th><th>Nome</th><th>Incluso</th><th>Sovr.A</th><th>Sovr.P</th></tr></thead><tbody>${rowsA||'<tr><td colspan="5" style="text-align:center;color:var(--mid);padding:12px">Nessuno</td></tr>'}</tbody></table>
+  </div>
+  <div class="card">
+    <div class="card-header"><span class="card-title">Colori pietra</span><button class="btn btn-red btn-sm" onclick="nuovaRiga('colori_pietra',{codice:'PIE',nome:'Nuovo colore',sovrapprezzo_A:0,sovrapprezzo_P:0},'adminColoriExtra')">+</button></div>
+    <table><thead><tr><th>Codice</th><th>Nome</th><th>Sovr.A</th><th>Sovr.P</th></tr></thead><tbody>${rowsP||'<tr><td colspan="4" style="text-align:center;color:var(--mid);padding:12px">Nessun colore pietra — aggiungilo qui</td></tr>'}</tbody></table>
+  </div>`;
+}
+
+async function adminScontistiche(){
+  const {data} = await sb.from('scontistiche').select('*').order('canale');
+  const canali=['rivenditore','architetto','impresa','privato'];
+  const rows=(data||[]).map(s=>`<tr>
+    <td><select onchange="adminSalva('scontistiche','${s.id}','canale',this.value)" style="padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px">
+      ${canali.map(c=>`<option value="${c}" ${c===s.canale?'selected':''}>${c}</option>`).join('')}
+    </select></td>
+    <td><span class="tag">${s.listino||'—'}</span></td>
+    <td>${inlineInput(s.sconto_base_pct??'',`adminSalva('scontistiche','${s.id}','sconto_base_pct',this.value)`,'60px')} %</td>
+    <td>${inlineInput(s.sconto_max_pct??'',`adminSalva('scontistiche','${s.id}','sconto_max_pct',this.value)`,'60px')} %</td>
+    <td style="font-size:12px;color:var(--mid);max-width:200px">${s.note||''}</td>
+    <td>${adminToggle(s.attivo!==false,`toggleCampo('scontistiche','${s.id}','attivo',${s.attivo!==false})`)}</td>
+  </tr>`).join('');
+  document.getElementById('admin-sub').innerHTML=adminCard('Scontistiche per canale',`
+    <table><thead><tr><th>Canale</th><th>Listino</th><th>Sconto base %</th><th>Sconto max %</th><th>Note</th><th>Stato</th></tr></thead>
+    <tbody>${rows||'<tr><td colspan="6" style="text-align:center;color:var(--mid);padding:12px">Nessuna scontistica</td></tr>'}</tbody></table>`);
+}
+
+// ══════════════════════════════════════════════════════
+// TELAIO E COMPONENTI
+// ══════════════════════════════════════════════════════
+function adminTelaioPanel(){
+  const tabs=[{id:'spalle',label:'Spalle telaio'},{id:'regole',label:'Regole spessore'},
+    {id:'scorrevoli_ext',label:'Scorrevoli esterni'},{id:'scorrevoli_int',label:'Scorrevoli interni'}];
+  document.getElementById('admin-main').innerHTML=adminSubTabs(tabs,'spalle','switchAdminTelaio')+'<div id="admin-sub"></div>';
+  switchAdminTelaio('spalle');
+}
+function switchAdminTelaio(sub){
+  adminSub=sub;
+  document.querySelectorAll('#admin-main [onclick^="switchAdminTelaio"]').forEach(t=>{
+    const isActive=t.getAttribute('onclick').includes(`'${sub}'`);
+    t.style.borderBottom=isActive?'2px solid var(--red)':'2px solid transparent';
+    t.style.color=isActive?'var(--red)':'var(--mid)'; t.style.fontWeight=isActive?'500':'400';
+  });
+  if(sub==='spalle') adminSpalle();
+  else if(sub==='regole') adminRegole();
+  else if(sub==='scorrevoli_ext') adminScorExt();
+  else if(sub==='scorrevoli_int') adminScorInt();
+}
+
+async function adminSpalle(){
+  const {data} = await sb.from('telai_spalle').select('*').order('famiglia_apertura').order('spalla_cm');
+  const rows=(data||[]).map(s=>`<tr>
+    <td>${inlineInput(s.codice,`adminSalva('telai_spalle','${s.id}','codice',this.value)`,'90px','text')}</td>
+    <td>${inlineInput(s.spalla_cm,`adminSalva('telai_spalle','${s.id}','spalla_cm',this.value)`,'60px')} cm</td>
+    <td><span class="tag" style="font-size:10px">${s.famiglia_apertura}</span></td>
+    <td style="font-size:11px;color:var(--mid);max-width:160px">${s.descrizione||''}</td>
+    <td>${inlineInput(s.prezzo_A??'',`adminSalva('telai_spalle','${s.id}','prezzo_A',this.value)`,'70px','number','€')}</td>
+    <td>${inlineInput(s.prezzo_P??'',`adminSalva('telai_spalle','${s.id}','prezzo_P',this.value)`,'70px','number','€')}</td>
+  </tr>`).join('');
+  document.getElementById('admin-sub').innerHTML=adminCard('Spalle telaio a magazzino',`
+    <table><thead><tr><th>Codice</th><th>Spalla</th><th>Famiglia</th><th>Descrizione</th><th>Prezzo A (€)</th><th>Prezzo P (€)</th></tr></thead>
+    <tbody>${rows}</tbody></table>`);
+}
+
+async function adminRegole(){
+  const {data} = await sb.from('regole_telaio').select('*').order('famiglia_apertura').order('spessore_da_cm');
+  const rows=(data||[]).map(r=>`<tr>
+    <td><span class="tag" style="font-size:10px">${r.famiglia_apertura}</span></td>
+    <td style="font-size:12px">${r.spessore_da_cm} – ${r.spessore_a_cm} cm</td>
+    <td><strong style="font-size:12px">${r.codice_spalla}</strong></td>
+    <td style="font-size:12px">${r.tipo_accessorio||'—'}</td>
+    <td style="font-size:12px">${r.cm_accessorio||'—'}</td>
+    <td>${inlineInput(r.prezzo_access_A??'',`adminSalva('regole_telaio','${r.id}','prezzo_access_A',this.value)`,'70px','number','€')}</td>
+    <td>${inlineInput(r.prezzo_access_P??'',`adminSalva('regole_telaio','${r.id}','prezzo_access_P',this.value)`,'70px','number','€')}</td>
+    <td style="font-size:11px;color:var(--mid);max-width:160px">${r.note||''}</td>
+  </tr>`).join('');
+  document.getElementById('admin-sub').innerHTML=adminCard('Regole abbinamento spessore → telaio',`
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>Famiglia</th><th>Spessore</th><th>Spalla</th><th>Accessorio</th><th>Cm</th><th>Costo A (€)</th><th>Costo P (€)</th><th>Note</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`);
+}
+
+async function adminScorExt(){
+  const {data} = await sb.from('scorrevoli_esterni').select('*').order('codice_apertura').order('spessore_da_cm');
+  const rows=(data||[]).map(s=>`<tr>
+    <td><strong style="font-size:12px">${s.codice_apertura}</strong></td>
+    <td style="font-size:12px">${s.spessore_da_cm}–${s.spessore_a_cm} cm</td>
+    <td style="font-size:11px">${s.tipo_accessorio||'—'} ${s.cm_accessorio?s.cm_accessorio+'cm':''}</td>
+    <td>${inlineInput(s.prezzo_A??'',`adminSalva('scorrevoli_esterni','${s.id}','prezzo_A',this.value)`,'75px','number','€')}</td>
+    <td>${inlineInput(s.prezzo_P??'',`adminSalva('scorrevoli_esterni','${s.id}','prezzo_P',this.value)`,'75px','number','€')}</td>
+  </tr>`).join('');
+  document.getElementById('admin-sub').innerHTML=adminCard('Scorrevoli esterni — prezzi per fascia spessore',`
+    <table><thead><tr><th>Tipologia</th><th>Spessore muro</th><th>Accessorio</th><th>Prezzo A (€)</th><th>Prezzo P (€)</th></tr></thead>
+    <tbody>${rows}</tbody></table>`);
+}
+
+async function adminScorInt(){
+  const {data} = await sb.from('scorrevoli_interni').select('*').order('codice_apertura').order('spalla_cassone_cm');
+  const rows=(data||[]).map(s=>`<tr>
+    <td><strong style="font-size:12px">${s.codice_apertura}</strong></td>
+    <td style="font-size:12px">${s.codice_cassone}</td>
+    <td style="font-size:12px">${s.spalla_cassone_cm} cm</td>
+    <td><strong style="font-size:12px">${s.kit_telaio_codice}</strong></td>
+    <td>${inlineInput(s.prezzo_A??'',`adminSalva('scorrevoli_interni','${s.id}','prezzo_A',this.value)`,'75px','number','€')}</td>
+    <td>${inlineInput(s.prezzo_P??'',`adminSalva('scorrevoli_interni','${s.id}','prezzo_P',this.value)`,'75px','number','€')}</td>
+  </tr>`).join('');
+  document.getElementById('admin-sub').innerHTML=adminCard('Scorrevoli interni — kit cassone',`
+    <table><thead><tr><th>Tipologia</th><th>Cassone</th><th>Spalla</th><th>Kit telaio</th><th>Prezzo A (€)</th><th>Prezzo P (€)</th></tr></thead>
+    <tbody>${rows}</tbody></table>`);
+}
+
+// ══════════════════════════════════════════════════════
+// DISTINTE BASE
+// ══════════════════════════════════════════════════════
+async function adminDistinte(){
+  const [{data:modelli},{data:serie}] = await Promise.all([
+    sb.from('modelli').select('codice,nome,codice_serie').eq('attivo',true).order('codice_serie').order('nome'),
+    sb.from('serie').select('codice,nome').order('nome'),
+  ]);
+  const filtroSerie = document.getElementById('db-serie-filter')?.value||'TAM';
+  const filtroModello = document.getElementById('db-modello-filter')?.value||modelli?.[0]?.codice||'';
+  const serieOpts=(serie||[]).map(s=>`<option value="${s.codice}" ${s.codice===filtroSerie?'selected':''}>${s.codice}</option>`).join('');
+  const modelliSerie=(modelli||[]).filter(m=>m.codice_serie===filtroSerie);
+  const modelloOpts=modelliSerie.map(m=>`<option value="${m.codice}" ${m.codice===filtroModello?'selected':''}>${m.codice} — ${m.nome}</option>`).join('');
+
+  let rowsDB='';
+  if(filtroModello){
+    const {data:db} = await sb.from('distinte_base').select('*').eq('codice_modello',filtroModello).eq('attivo',true).order('categoria').order('descrizione_componente');
+    const catColors={legno:'bb',accessorio:'bg',ferramenta:'ba',vetro:'bb',imballaggio:'bgr'};
+    rowsDB=(db||[]).map(r=>`<tr>
+      <td>${inlineInput(r.codice_componente,`adminSalva('distinte_base','${r.id}','codice_componente',this.value)`,'90px','text')}</td>
+      <td>${inlineInput(r.descrizione_componente,`adminSalva('distinte_base','${r.id}','descrizione_componente',this.value)`,'200px','text')}</td>
+      <td><select onchange="adminSalva('distinte_base','${r.id}','categoria',this.value)" style="padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:11px">
+        ${['legno','accessorio','ferramenta','vetro','imballaggio'].map(c=>`<option value="${c}" ${c===r.categoria?'selected':''}>${c}</option>`).join('')}
+      </select></td>
+      <td>${inlineInput(r.quantita??1,`adminSalva('distinte_base','${r.id}','quantita',this.value)`,'55px')}</td>
+      <td>${inlineInput(r.unita_misura||'pz',`adminSalva('distinte_base','${r.id}','unita_misura',this.value)`,'50px','text')}</td>
+      <td>${inlineInput(r.note||'',`adminSalva('distinte_base','${r.id}','note',this.value)`,'120px','text','')}</td>
+      <td><button onclick="eliminaDistinta('${r.id}')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
+    </tr>`).join('');
+    if(!rowsDB) rowsDB='<tr><td colspan="7" style="text-align:center;color:var(--mid);padding:20px;font-style:italic">Nessun componente ancora — aggiungi il primo</td></tr>';
+  }
+
+  document.getElementById('admin-main').innerHTML=`
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+    <label style="font-size:12px;color:var(--mid)">Serie:</label>
+    <select id="db-serie-filter" onchange="adminDistinte()" style="padding:5px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit">${serieOpts}</select>
+    <label style="font-size:12px;color:var(--mid)">Modello:</label>
+    <select id="db-modello-filter" onchange="adminDistinte()" style="padding:5px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit;min-width:220px">${modelloOpts}</select>
+    ${filtroModello?`<button class="btn btn-red btn-sm" onclick="nuovoComponenteDB('${filtroModello}')">+ Aggiungi componente</button>`:''}
+  </div>
+  ${filtroModello?adminCard(`Distinta base — ${filtroModello}`,`
+    <div style="background:var(--blue-bg);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--blue-tx);margin-bottom:10px">
+      Inserisci tutti i componenti necessari per produrre questo modello. Sarà la base per il magazzino e il ciclo produttivo.
+    </div>
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>Codice componente</th><th>Descrizione</th><th>Categoria</th><th>Q.tà</th><th>Unità</th><th>Note</th><th></th></tr></thead>
+      <tbody>${rowsDB}</tbody>
+    </table></div>`):'<div class="card"><p style="color:var(--mid);padding:20px;text-align:center">Seleziona una serie e un modello per gestire la distinta base</p></div>'}`;
+}
+
+async function nuovoComponenteDB(codModello){
+  const {error}=await sb.from('distinte_base').insert([{codice_modello:codModello,codice_componente:'COD',descrizione_componente:'Nuovo componente',categoria:'accessorio',quantita:1,unita_misura:'pz'}]);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Componente aggiunto','ok'); adminDistinte();
+}
+
+async function eliminaDistinta(id){
+  if(!confirm('Eliminare questo componente dalla distinta?')) return;
+  await sb.from('distinte_base').update({attivo:false}).eq('id',id);
+  adminDistinte();
+}
+
+// ══════════════════════════════════════════════════════
+// AGENTI
+// ══════════════════════════════════════════════════════
+async function adminAgenti(){
+  const [{data:agenti},{data:scala}] = await Promise.all([
+    sb.from('agenti').select('*').order('cognome'),
+    sb.from('provvigioni_scala').select('*').eq('attivo',true).order('sconto_da_pct'),
+  ]);
+
+  const rowsAgenti=(agenti||[]).map(a=>`<tr>
+    <td>${inlineInput(a.nome,`adminSalva('agenti','${a.id}','nome',this.value)`,'100px','text')}</td>
+    <td>${inlineInput(a.cognome,`adminSalva('agenti','${a.id}','cognome',this.value)`,'120px','text')}</td>
+    <td>${inlineInput(a.email||'',`adminSalva('agenti','${a.id}','email',this.value)`,'160px','text','email')}</td>
+    <td>${inlineInput(a.telefono||'',`adminSalva('agenti','${a.id}','telefono',this.value)`,'120px','text')}</td>
+    <td>${inlineInput(a.zona||'',`adminSalva('agenti','${a.id}','zona',this.value)`,'100px','text','es. Piemonte')}</td>
+    <td>
+      <button onclick="adminScalaAgente('${a.id}','${a.nome} ${a.cognome}')" class="btn btn-sm" style="font-size:11px">
+        Scala personalizzata
+      </button>
+    </td>
+    <td>${adminToggle(a.attivo,`toggleCampo('agenti','${a.id}','attivo',${a.attivo})`)}</td>
+    <td><button onclick="eliminaRigaAdmin('agenti','${a.id}','adminAgenti')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
+  </tr>`).join('');
+
+  const rowsScala=(scala||[]).map(s=>`<tr>
+    <td>${inlineInput(s.sconto_da_pct,`adminSalva('provvigioni_scala','${s.id}','sconto_da_pct',this.value)`,'55px')} %</td>
+    <td>${inlineInput(s.sconto_a_pct,`adminSalva('provvigioni_scala','${s.id}','sconto_a_pct',this.value)`,'55px')} %</td>
+    <td>${inlineInput(s.provvigione_pct,`adminSalva('provvigioni_scala','${s.id}','provvigione_pct',this.value)`,'55px')} %</td>
+    <td>${inlineInput(s.note||'',`adminSalva('provvigioni_scala','${s.id}','note',this.value)`,'200px','text','')}</td>
+    <td><button onclick="eliminaRigaAdmin('provvigioni_scala','${s.id}','adminAgenti')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
+  </tr>`).join('');
+
+  document.getElementById('admin-main').innerHTML=`
+  <div class="grid-2" style="gap:14px">
+    ${adminCard('Agenti Max Porte',`
+      <table><thead><tr><th>Nome</th><th>Cognome</th><th>Email</th><th>Telefono</th><th>Zona</th><th>Scala provv.</th><th>Stato</th><th></th></tr></thead>
+      <tbody>${rowsAgenti||'<tr><td colspan="8" style="text-align:center;color:var(--mid);padding:20px">Nessun agente ancora</td></tr>'}</tbody></table>`,
+      `<button class="btn btn-red btn-sm" onclick="nuovoAgente()">+ Aggiungi agente</button>`)}
+    ${adminCard('Scala provvigioni globale',`
+      <div style="background:var(--blue-bg);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--blue-tx);margin-bottom:10px">
+        All'abbassarsi dello sconto applicato al cliente, la provvigione dell'agente aumenta.<br>
+        Se un agente ha una scala personalizzata, questa globale viene ignorata per quell'agente.
+      </div>
+      <table>
+        <thead><tr><th>Sconto da %</th><th>Sconto a %</th><th>Provvigione %</th><th>Note</th><th></th></tr></thead>
+        <tbody>${rowsScala}</tbody>
+      </table>`,
+      `<button class="btn btn-red btn-sm" onclick="nuovaFasciaScala()">+ Aggiungi fascia</button>`)}
+  </div>`;
+}
+
+async function nuovoAgente(){
+  const nome=prompt('Nome:'); if(!nome) return;
+  const cognome=prompt('Cognome:'); if(!cognome) return;
+  const {error}=await sb.from('agenti').insert([{nome,cognome,attivo:true,percentuale_provvigione:0}]);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Agente aggiunto','ok'); adminAgenti();
+}
+
+async function nuovaFasciaScala(){
+  const da=parseFloat(prompt('Sconto da % (incluso):')||'0');
+  const a=parseFloat(prompt('Sconto a % (incluso):')||'0');
+  const prov=parseFloat(prompt('Provvigione %:')||'0');
+  if(isNaN(da)||isNaN(a)||isNaN(prov)) return;
+  const {error}=await sb.from('provvigioni_scala').insert([{sconto_da_pct:da,sconto_a_pct:a,provvigione_pct:prov}]);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Fascia aggiunta','ok'); adminAgenti();
+}
+
+async function adminScalaAgente(agenteId, nomeAgente){
+  const {data:scala} = await sb.from('provvigioni_scala_agente').select('*').eq('agente_id',agenteId).order('sconto_da_pct');
+  const {data:globale} = await sb.from('provvigioni_scala').select('*').eq('attivo',true).order('sconto_da_pct');
+
+  const rows=(scala||[]).map(s=>`<tr>
+    <td>${inlineInput(s.sconto_da_pct,`adminSalva('provvigioni_scala_agente','${s.id}','sconto_da_pct',this.value)`,'55px')} %</td>
+    <td>${inlineInput(s.sconto_a_pct,`adminSalva('provvigioni_scala_agente','${s.id}','sconto_a_pct',this.value)`,'55px')} %</td>
+    <td>${inlineInput(s.provvigione_pct,`adminSalva('provvigioni_scala_agente','${s.id}','provvigione_pct',this.value)`,'55px')} %</td>
+    <td><button onclick="eliminaRigaAdmin('provvigioni_scala_agente','${s.id}','adminAgenti')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
+  </tr>`).join('');
+
+  const globaleHtml=(globale||[]).map(s=>`<span style="font-size:11px;color:var(--mid)">
+    ${s.sconto_da_pct}–${s.sconto_a_pct}% → ${s.provvigione_pct}%
+  </span>`).join(' | ');
+
+  document.getElementById('admin-main').innerHTML=`
+  <div style="margin-bottom:14px">
+    <button class="btn btn-sm" onclick="adminAgenti()">← Torna agli agenti</button>
+  </div>
+  <div class="card">
+    <div class="card-header"><span class="card-title">Scala provvigioni personalizzata — ${nomeAgente}</span>
+      <button class="btn btn-red btn-sm" onclick="nuovaFasciaScalaAgente('${agenteId}')">+ Aggiungi fascia</button>
+    </div>
+    ${rows?`<table><thead><tr><th>Sconto da %</th><th>Sconto a %</th><th>Provvigione %</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+    :'<div style="padding:16px;text-align:center;color:var(--mid);font-size:13px">Nessuna scala personalizzata — viene usata la scala globale:<br><br>'+globaleHtml+'</div>'}
+    ${rows?`<div style="margin-top:10px;font-size:12px;color:var(--mid)">Scala globale (ignorata): ${globaleHtml}</div>`:''}
+  </div>`;
+}
+
+async function nuovaFasciaScalaAgente(agenteId){
+  const da=parseFloat(prompt('Sconto da % (incluso):')||'0');
+  const a=parseFloat(prompt('Sconto a % (incluso):')||'0');
+  const prov=parseFloat(prompt('Provvigione %:')||'0');
+  if(isNaN(da)||isNaN(a)||isNaN(prov)) return;
+  const {error}=await sb.from('provvigioni_scala_agente').insert([{agente_id:agenteId,sconto_da_pct:da,sconto_a_pct:a,provvigione_pct:prov}]);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Fascia aggiunta','ok'); adminScalaAgente(agenteId,'');
+}
+
+// Calcola provvigione in base allo sconto effettivo
+async function calcolaProvvigione(agenteId, scontoEffettivoPct){
+  if(!agenteId) return 0;
+  // Prima cerca scala personalizzata
+  const {data:pers} = await sb.from('provvigioni_scala_agente')
+    .select('provvigione_pct')
+    .eq('agente_id',agenteId)
+    .lte('sconto_da_pct',scontoEffettivoPct)
+    .gte('sconto_a_pct',scontoEffettivoPct)
+    .single();
+  if(pers?.provvigione_pct!=null) return pers.provvigione_pct;
+  // Fallback scala globale
+  const {data:glob} = await sb.from('provvigioni_scala')
+    .select('provvigione_pct')
+    .eq('attivo',true)
+    .lte('sconto_da_pct',scontoEffettivoPct)
+    .gte('sconto_a_pct',scontoEffettivoPct)
+    .single();
+  return glob?.provvigione_pct || 0;
+}
+
+// ══════════════════════════════════════════════════════
+// COMPATIBILITÀ OPZIONI
+// ══════════════════════════════════════════════════════
+async function adminCompatibilita(){
+  // Carica tutte le entità disponibili per i menu
+  const [
+    {data:serie},{data:modelli},{data:finiture},{data:aperture},
+    {data:ferramenta},{data:maniglie},{data:vetri},{data:alu},{data:pietra},
+    {data:regole}
+  ] = await Promise.all([
+    sb.from('serie').select('codice,nome').eq('attiva',true).order('nome'),
+    sb.from('modelli').select('codice,nome').eq('attivo',true).order('nome'),
+    sb.from('finiture').select('codice_finitura as codice,nome_finitura as nome').eq('attiva',true).order('nome_finitura'),
+    sb.from('tipologie_apertura').select('codice,nome').eq('attiva',true).order('codice'),
+    sb.from('ferramenta').select('codice,nome').eq('attivo',true).order('nome'),
+    sb.from('maniglie').select('codice,nome').eq('attivo',true).order('nome'),
+    sb.from('tipi_vetro').select('codice,nome').eq('attivo',true).order('nome'),
+    sb.from('colori_inserto_alluminio').select('codice,nome').order('nome'),
+    sb.from('colori_pietra').select('codice,nome').order('nome'),
+    sb.from('regole_compatibilita').select('*').order('entita_a_tipo').order('entita_a_codice').limit(200),
+  ]);
+
+  const ENTITA = {
+    serie:    {label:'Serie',      items:serie||[],   codKey:'codice',nameKey:'nome'},
+    modello:  {label:'Modello',    items:modelli||[],  codKey:'codice',nameKey:'nome'},
+    finitura: {label:'Finitura',   items:finiture||[], codKey:'codice',nameKey:'nome'},
+    apertura: {label:'Apertura',   items:aperture||[], codKey:'codice',nameKey:'nome'},
+    ferramenta:{label:'Ferramenta',items:ferramenta||[],codKey:'codice',nameKey:'nome'},
+    maniglia: {label:'Maniglia',   items:maniglie||[], codKey:'codice',nameKey:'nome'},
+    vetro:    {label:'Vetro',      items:vetri||[],    codKey:'codice',nameKey:'nome'},
+    inserto_alu:{label:'Inserto alluminio',items:alu||[],codKey:'codice',nameKey:'nome'},
+    inserto_pietra:{label:'Inserto pietra',items:pietra||[],codKey:'codice',nameKey:'nome'},
+  };
+
+  // Stato filtri correnti
+  const aTipo = document.getElementById('compat-a-tipo')?.value||'serie';
+  const aCodice = document.getElementById('compat-a-codice')?.value||'';
+  const bTipo = document.getElementById('compat-b-tipo')?.value||'finitura';
+
+  const aItems = ENTITA[aTipo]?.items||[];
+  const bItems = ENTITA[bTipo]?.items||[];
+
+  // Opzioni per i select
+  const tipiOpts = Object.entries(ENTITA).map(([k,v])=>`<option value="${k}">${v.label}</option>`).join('');
+
+  const aCodsOpts = aItems.map(i=>`<option value="${i.codice||i[ENTITA[aTipo].codKey]}" ${(i.codice||i[ENTITA[aTipo].codKey])===aCodice?'selected':''}>${i.codice||i[ENTITA[aTipo].codKey]} — ${i.nome||i[ENTITA[aTipo].nameKey]}</option>`).join('');
+
+  // Filtra regole per A selezionato
+  const regoleFiltrate = (regole||[]).filter(r=> (!aCodice || (r.entita_a_tipo===aTipo && r.entita_a_codice===aCodice)));
+  const esclusiB = new Set(regoleFiltrate.filter(r=>r.entita_b_tipo===bTipo).map(r=>r.entita_b_codice));
+
+  // Lista opzioni B con stato
+  const opzioniHtml = bItems.map(op=>{
+    const cod = op.codice||op[ENTITA[bTipo].codKey];
+    const nome = op.nome||op[ENTITA[bTipo].nameKey];
+    const escluso = esclusiB.has(cod);
+    const regola = regoleFiltrate.find(r=>r.entita_b_tipo===bTipo&&r.entita_b_codice===cod);
+    const aNome = aItems.find(i=>(i.codice||i[ENTITA[aTipo].codKey])===aCodice)?.nome||aCodice;
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border-bottom:0.5px solid var(--border);background:${escluso?'var(--red-bg)':'transparent'}">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:13px">${escluso?'🚫':'✓'}</span>
+        <span style="font-size:12px;font-weight:500;color:${escluso?'var(--red-tx)':'var(--dark)'}">${cod}</span>
+        <span style="font-size:12px;color:${escluso?'var(--red-tx)':'var(--mid)'}">${nome}</span>
+      </div>
+      ${aCodice
+        ? escluso
+          ? `<button onclick="rimuoviRegola('${regola?.id}')" style="padding:3px 12px;border-radius:4px;border:0.5px solid var(--green-tx);font-size:11px;cursor:pointer;background:var(--green-bg);color:var(--green-tx);font-family:inherit">↺ Riabilita</button>`
+          : `<button onclick="aggiungiRegola('${aTipo}','${aCodice}','${aNome.replace(/'/g,"\'")}','${bTipo}','${cod}','${nome.replace(/'/g,"\'")}');" style="padding:3px 12px;border-radius:4px;border:0.5px solid var(--border);font-size:11px;cursor:pointer;background:none;color:var(--mid);font-family:inherit">🚫 Escludi</button>`
+        : '<span style="font-size:11px;color:var(--mid)">Seleziona un valore A</span>'
+      }
+    </div>`;
+  }).join('');
+
+  // Lista tutte le regole esistenti
+  const tutteRegole = (regole||[]).map(r=>`<tr style="font-size:12px">
+    <td style="padding:5px 8px"><span class="tag" style="font-size:10px">${ENTITA[r.entita_a_tipo]?.label||r.entita_a_tipo}</span></td>
+    <td style="padding:5px 8px;font-weight:500">${r.entita_a_codice}</td>
+    <td style="padding:5px 8px;color:var(--mid)">${r.entita_a_nome||''}</td>
+    <td style="padding:5px 8px;color:var(--mid)">→ esclude</td>
+    <td style="padding:5px 8px"><span class="tag" style="font-size:10px;background:var(--red-bg);color:var(--red-tx)">${ENTITA[r.entita_b_tipo]?.label||r.entita_b_tipo}</span></td>
+    <td style="padding:5px 8px;font-weight:500;color:var(--red-tx)">${r.entita_b_codice}</td>
+    <td style="padding:5px 8px;color:var(--mid)">${r.entita_b_nome||''}</td>
+    <td style="padding:5px 8px"><button onclick="rimuoviRegola('${r.id}')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
+  </tr>`).join('');
+
+  document.getElementById('admin-main').innerHTML=`
+  <div style="display:flex;gap:14px;height:calc(100vh - 110px);overflow:hidden">
+
+    <!-- Pannello sinistro: crea nuove regole -->
+    <div style="width:420px;min-width:420px;display:flex;flex-direction:column;gap:10px">
+      ${adminCard('Aggiungi regola di esclusione',`
+        <div style="background:var(--green-bg);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--green-tx);margin-bottom:12px">
+          Tutto è disponibile per default. Definisci solo le esclusioni: <em>"Se si sceglie A → escludi B"</em>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+          <div>
+            <div style="font-size:11px;color:var(--mid);margin-bottom:4px;font-weight:500">SE SI SCEGLIE...</div>
+            <select id="compat-a-tipo" onchange="adminCompatibilita()" style="width:100%;padding:6px 8px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:12px;font-family:inherit;margin-bottom:6px">
+              ${Object.entries(ENTITA).map(([k,v])=>`<option value="${k}" ${k===aTipo?'selected':''}>${v.label}</option>`).join('')}
+            </select>
+            <select id="compat-a-codice" onchange="adminCompatibilita()" style="width:100%;padding:6px 8px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:12px;font-family:inherit">
+              <option value="">— Seleziona —</option>
+              ${aCodsOpts}
+            </select>
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--mid);margin-bottom:4px;font-weight:500">...ESCLUDI QUESTA OPZIONE</div>
+            <select id="compat-b-tipo" onchange="adminCompatibilita()" style="width:100%;padding:6px 8px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:12px;font-family:inherit;margin-bottom:6px">
+              ${Object.entries(ENTITA).map(([k,v])=>`<option value="${k}" ${k===bTipo?'selected':''}>${v.label}</option>`).join('')}
+            </select>
+            <div style="font-size:11px;color:var(--mid)">${bItems.length} opzioni disponibili</div>
+          </div>
+        </div>
+        <div style="max-height:calc(100vh - 380px);overflow-y:auto;border:0.5px solid var(--border);border-radius:var(--radius)">
+          ${aCodice
+            ? opzioniHtml||'<div style="padding:16px;text-align:center;color:var(--mid);font-size:12px">Nessuna opzione B per questa categoria</div>'
+            : '<div style="padding:20px;text-align:center;color:var(--mid);font-size:12px">Seleziona prima un valore A per vedere le opzioni</div>'}
+        </div>
+      `)}
+    </div>
+
+    <!-- Pannello destro: elenco tutte le regole -->
+    <div style="flex:1;overflow-y:auto">
+      ${adminCard(`Tutte le regole attive (${regole?.length||0})`,`
+        ${tutteRegole
+          ? `<div style="overflow-x:auto"><table style="width:100%">
+              <thead><tr><th>Se tipo A</th><th>Codice A</th><th>Nome A</th><th></th><th>Esclude B</th><th>Codice B</th><th>Nome B</th><th></th></tr></thead>
+              <tbody>${tutteRegole}</tbody>
+            </table></div>`
+          : '<div style="padding:20px;text-align:center;color:var(--mid);font-style:italic">Nessuna regola ancora — tutte le combinazioni sono disponibili</div>'}
+      `)}
+    </div>
+  </div>`;
+}
+
+async function aggiungiRegola(aTipo, aCodice, aNome, bTipo, bCodice, bNome){
+  const {error}=await sb.from('regole_compatibilita').insert([{
+    entita_a_tipo:aTipo, entita_a_codice:aCodice, entita_a_nome:aNome,
+    entita_b_tipo:bTipo, entita_b_codice:bCodice, entita_b_nome:bNome,
+    creato_da:currentUser?.id
+  }]);
+  if(error){toast('Già esiste o errore: '+error.message,'err');return;}
+  toast('Regola aggiunta','ok');
+  adminCompatibilita();
+}
+
+async function rimuoviRegola(id){
+  await sb.from('regole_compatibilita').delete().eq('id',id);
+  toast('Regola rimossa','ok');
+  adminCompatibilita();
+}
+
+// compatibilità legacy (usata dal vecchio sistema)
+async function setCompatEscludi(){ adminCompatibilita(); }
+async function rimuoviCompat(t,id){ await rimuoviRegola(id); }
+
+// ══════════════════════════════════════════════════════
+// IMPOSTAZIONI
+// ══════════════════════════════════════════════════════
+function adminImpostazioni(){
+  document.getElementById('admin-main').innerHTML=`
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">Numerazione documenti</div>
+      <div style="font-size:13px;color:var(--mid);margin-bottom:12px">Le sequenze numeriche vengono gestite automaticamente da Supabase. I prefissi sono configurati nel codice.</div>
+      <table style="font-size:13px">
+        <tr><td style="color:var(--mid);padding:4px 0">Formato preventivi</td><td><strong>PRV-YYYY-NNNN</strong></td></tr>
+        <tr><td style="color:var(--mid);padding:4px 0">Formato ordini</td><td><strong>ORD-YYYY-NNNN</strong></td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <div class="card-title">Supabase Storage</div>
+      <div style="font-size:13px;color:var(--mid);margin-bottom:10px">Bucket per le immagini del catalogo</div>
+      <div style="background:var(--green-bg);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--green-tx)">
+        Bucket <strong>catalogo_immagini</strong> configurato e attivo
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">Gestione utenti e ruoli</div>
+    <div id="utenti-content"><div class="loading"><div class="spinner"></div></div></div>
+  </div>`;
+  renderUtentiInline();
+}
+
+async function renderUtentiInline(){
+  // Raggruppa per user_id per mostrare ruoli multipli
+  const {data} = await sb.from('utenti_ruoli').select('*').order('user_id');
+  const {data:ruoliDisp} = await sb.from('ruoli').select('*').eq('attivo',true).order('nome');
+  const byUser = {};
+  (data||[]).forEach(r=>{ if(!byUser[r.user_id]) byUser[r.user_id]={ruoli:[],created_at:r.created_at}; byUser[r.user_id].ruoli.push(r); });
+  const ruoliOpts=(ruoliDisp||[]).map(r=>`<option value="${r.codice}">${r.nome}</option>`).join('');
+
+  const rows=Object.entries(byUser).map(([uid,info])=>{
+    const ruoliBadge=info.ruoli.map(r=>`
+      <span style="display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:99px;font-size:11px;background:var(--blue-bg);color:var(--blue-tx);margin:1px">
+        ${RUOLI_LABEL[r.codice_ruolo]||r.codice_ruolo}
+        <span onclick="rimuoviRuoloUtente('${r.id}')" style="cursor:pointer;color:var(--mid)" title="Rimuovi">×</span>
+      </span>`).join('');
+    return `<tr>
+      <td style="font-size:11px;color:var(--mid);font-family:monospace">${uid.slice(0,20)}...</td>
+      <td style="max-width:280px">
+        ${ruoliBadge}
+        <br><div style="display:flex;gap:4px;margin-top:4px">
+          <select id="add-role-${uid.replace(/-/g,'')}" style="padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:11px;font-family:inherit">${ruoliOpts}</select>
+          <button onclick="aggiungiRuoloUtente('${uid}','add-role-${uid.replace(/-/g,'')}')" class="btn btn-sm" style="font-size:11px;padding:3px 8px">+ Aggiungi ruolo</button>
+        </div>
+      </td>
+      <td style="font-size:12px;color:var(--mid)">${new Date(info.created_at).toLocaleDateString('it-IT')}</td>
+      <td><button onclick="eliminaUtente('${uid}')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px" title="Rimuovi utente">×</button></td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('utenti-content').innerHTML=`
+  <div style="background:var(--blue-bg);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--blue-tx);margin-bottom:12px">
+    Ogni utente può avere più ruoli. I permessi vengono aggregati da tutti i ruoli assegnati. Il super_admin ha accesso completo a tutto.
+  </div>
+  <table style="margin-bottom:16px">
+    <thead><tr><th>User ID</th><th>Ruoli assegnati</th><th>Dal</th><th></th></tr></thead>
+    <tbody>${rows||'<tr><td colspan="4" style="text-align:center;color:var(--mid);padding:16px">Nessun utente</td></tr>'}</tbody>
+  </table>
+  <div style="border-top:0.5px solid var(--border);padding-top:14px">
+    <div style="font-size:12px;font-weight:500;margin-bottom:8px">Aggiungi nuovo utente</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <input type="text" id="new-user-id" placeholder="Incolla user_id da Supabase Auth..." style="flex:1;min-width:200px;padding:7px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit">
+      <select id="new-user-ruolo" style="padding:7px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit">${ruoliOpts}</select>
+      <button class="btn btn-red" onclick="aggiungiUtente()">Aggiungi</button>
+    </div>
+  </div>`;
+}
+
+async function aggiungiRuoloUtente(userId, selectId){
+  const ruolo = document.getElementById(selectId)?.value;
+  if(!ruolo) return;
+  const {error} = await sb.from('utenti_ruoli').insert([{user_id:userId, codice_ruolo:ruolo}]);
+  if(error){toast('Errore (ruolo già assegnato?): '+error.message,'err');return;}
+  toast('Ruolo aggiunto','ok'); renderUtentiInline();
+}
+
+async function rimuoviRuoloUtente(rigaId){
+  if(!confirm('Rimuovere questo ruolo dall\'utente?')) return;
+  await sb.from('utenti_ruoli').delete().eq('id',rigaId);
+  toast('Ruolo rimosso','ok'); renderUtentiInline();
+}
+
+async function eliminaUtente(userId){
+  if(!confirm('Rimuovere TUTTI i ruoli di questo utente?')) return;
+  await sb.from('utenti_ruoli').delete().eq('user_id',userId);
+  toast('Utente rimosso','ok'); renderUtentiInline();
+}
+
+// ══════════════════════════════════════════════════════
+// FUNZIONI GENERICHE ADMIN
+// ══════════════════════════════════════════════════════
+async function adminSalva(tabella, id, campo, valore){
+  let val = valore;
+  // Numeric fields
+  const numericFields=['sovrapprezzo_A','sovrapprezzo_P','prezzo_A','prezzo_P','prezzo_base',
+    'prezzo_vetro','prezzo_extra_incisioni','sovrapprezzo_bugna_A','sovrapprezzo_bugna_P',
+    'maggiorazione_pct','spalla_cm','spessore_da_cm','spessore_a_cm','cm_accessorio',
+    'prezzo_access_A','prezzo_access_P','spalla_cassone_cm','quantita',
+    'percentuale_provvigione','sconto_base_pct','sconto_max_pct'];
+  if(numericFields.includes(campo)){
+    val = parseFloat(valore);
+    if(isNaN(val)) return;
+  }
+  const {error} = await sb.from(tabella).update({[campo]:val}).eq('id',id);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Salvato','ok');
+}
+
+async function salvaPrezzo(codModello, listino, campo, valore){
+  const val = parseFloat(valore);
+  if(isNaN(val)) return;
+  const {error} = await sb.from('prezzi_modello').update({[campo]:val}).eq('codice_modello',codModello).eq('listino',listino);
+  if(error){
+    // Se non esiste ancora la riga, creala
+    await sb.from('prezzi_modello').insert([{codice_modello:codModello,listino,[campo]:val}]);
+  }
+  toast(`Prezzo aggiornato`,'ok');
+}
+
+async function toggleCampo(tabella, id, campo, attualeStr){
+  const attuale = attualeStr===true||attualeStr==='true';
+  const {error} = await sb.from(tabella).update({[campo]:!attuale}).eq('id',id);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast(!attuale?'Attivato':'Disattivato','ok');
+  // Refresh current view
+  loadAdminSection();
+}
+
+async function nuovaRiga(tabella, defaultData, callback){
+  const {error} = await sb.from(tabella).insert([defaultData]);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Riga aggiunta','ok');
+  if(callback && window[callback]) window[callback]();
+}
+
+async function uploadImmagine(tabella, id, input){
+  const file = input.files[0];
+  if(!file) return;
+  const ext = file.name.split('.').pop();
+  const path = `${tabella}/${id}.${ext}`;
+  toast('Caricamento in corso...','ok');
+  const {error:upErr} = await sb.storage.from('catalogo_immagini').upload(path, file, {upsert:true});
+  if(upErr){toast('Errore upload: '+upErr.message,'err');return;}
+  const {data:urlData} = sb.storage.from('catalogo_immagini').getPublicUrl(path);
+  const url = urlData?.publicUrl;
+  if(url){
+    await sb.from(tabella).update({immagine_url:url}).eq('id',id);
+    toast('Immagine caricata','ok');
+    loadAdminSection();
+  }
+}
+
+// ── UTENTI E RUOLI ─────────────────────────────────────
+async function renderUtenti(){
+  // Redirect to impostazioni
+  adminSection='impostazioni';
+  renderAdmin();
+}
+
+// aggiornaRuolo mantenuto per compatibilità (non più usato direttamente)
+async function aggiornaRuolo(id, ruolo){
+  const {error} = await sb.from('utenti_ruoli').update({codice_ruolo:ruolo}).eq('id',id);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Ruolo aggiornato','ok');
+}
+
+async function aggiungiUtente(){
+  const userId = document.getElementById('new-user-id').value.trim();
+  const ruolo = document.getElementById('new-user-ruolo').value;
+  if(!userId){toast('Inserisci un user_id valido','err');return;}
+  const {error} = await sb.from('utenti_ruoli').insert([{user_id:userId, codice_ruolo:ruolo}]);
+  if(error){toast('Errore (utente già presente con questo ruolo?): '+error.message,'err');return;}
+  toast('Utente aggiunto con ruolo '+RUOLI_LABEL[ruolo],'ok');
+  renderUtentiInline();
+}
+
+</script>
+</body>
+</html>
+
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Utente aggiunto con ruolo '+RUOLI_LABEL[ruolo],'ok');
+  renderUtentiInline();
+}
+
+</script>
+
 <!-- MODAL CONFIGURATORE PORTA -->
 <div class="form-overlay" id="modal-cfg" style="background:rgba(0,0,0,0.75)">
   <div class="form-modal" style="width:min(820px,100%);max-height:90vh;display:flex;flex-direction:column">
@@ -3796,6 +6836,31 @@ async function aggiungiUtente(){
     </div>
   </div>
 </div>
+
+
+<!-- MODAL CONFIGURATORE PORTA -->
+<div class="form-overlay" id="modal-cfg" style="background:rgba(0,0,0,0.75)">
+  <div class="form-modal" style="width:min(820px,100%);max-height:90vh;display:flex;flex-direction:column">
+    <div class="form-modal-head">
+      <div style="display:flex;flex-direction:column;gap:6px;flex:1">
+        <span class="form-modal-title">Configuratore porta</span>
+        <div id="cfg-stepper" style="display:flex;align-items:center;gap:4px;flex-wrap:wrap"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:16px">
+        <div style="text-align:right">
+          <div style="font-size:11px;color:rgba(255,255,255,0.5)">Prezzo unitario</div>
+          <div id="cfg-prezzo-unitario" style="font-size:18px;font-weight:500;color:#fff">€ 0,00</div>
+        </div>
+        <button class="form-close" onclick="closeCfg()">×</button>
+      </div>
+    </div>
+    <div id="cfg-body" style="padding:20px;overflow-y:auto;flex:1">
+      <div class="loading"><div class="spinner"></div></div>
+    </div>
+  </div>
+</div>
+
+
 
 </body>
 </html>
