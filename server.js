@@ -1531,7 +1531,10 @@ async function cfgFinitura(){
 async function selFinitura(cod, nome, sovr, consenteBugna){
   CFG.finitura=cod; CFG.nome_finitura=nome; CFG.p_finitura=sovr;
   CFG._consenteBugna=consenteBugna;
-  await renderCfgStep('opzioni');
+  // Salta le opzioni se il modello non ha nessuna opzione disponibile
+  const f = CFG._flags||{};
+  const haOpzioni = f.ha_vetro || f.ha_pannello_o_bugna || f.ha_inserto_alluminio || f.ha_inserto_pietra || f.ha_pantografatura;
+  await renderCfgStep(haOpzioni ? 'opzioni' : 'apertura');
 }
 
 async function cfgOpzioni(){
@@ -1679,7 +1682,7 @@ async function cfgApertura(){
 
   let html=\`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
     <div style="font-size:13px;font-weight:500">Tipologia di apertura</div>
-    <button class="btn btn-sm" onclick="renderCfgStep('opzioni')">← Indietro</button>
+    <button class="btn btn-sm" onclick="renderCfgStep((CFG._flags?.ha_vetro||CFG._flags?.ha_pannello_o_bugna||CFG._flags?.ha_inserto_alluminio||CFG._flags?.ha_inserto_pietra||CFG._flags?.ha_pantografatura)?'opzioni':'finitura')">← Indietro</button>
   </div>\`;
 
   // Render in correct family order
@@ -2795,7 +2798,7 @@ async function nuovoModello(){
   const serie_cod = prompt('Codice serie ('+( serie||[]).map(s=>s.codice).join('/')+'):');
   if(!serie_cod) return;
   const {error}=await sb.from('modelli').insert([{codice:cod.toUpperCase(),nome,codice_serie:serie_cod.toUpperCase(),attivo:true}]);
-  if(error){toast('Errore: '+error.message,'err');return;}
+  if(error){toast(msgErrore(error,cod),'err');return;}
   toast('Modello '+cod+' aggiunto','ok'); adminModelli();
 }
 
@@ -2836,7 +2839,7 @@ async function nuovaFinitura(serieFilter){
   const cod=prompt('Codice finitura:'); if(!cod) return;
   const nome=prompt('Nome finitura:'); if(!nome) return;
   const {error}=await sb.from('finiture').insert([{codice_serie:serieFilter,codice_finitura:cod.toUpperCase(),nome_finitura:nome,attiva:true}]);
-  if(error){toast('Errore: '+error.message,'err');return;}
+  if(error){toast(msgErrore(error,cod),'err');return;}
   toast('Finitura aggiunta','ok'); adminFiniture();
 }
 
@@ -2907,7 +2910,7 @@ async function nuovaApertura(){
   const nome=prompt('Nome completo:'); if(!nome) return;
   const famiglia=prompt('Famiglia (BAT/SI/SE/FM/COM/ROTO/LIBRO/SALOON):'); if(!famiglia) return;
   const {error}=await sb.from('tipologie_apertura').insert([{codice:cod,nome,famiglia,logica_prezzo:'fisso',attiva:true}]);
-  if(error){toast('Errore: '+error.message,'err');return;}
+  if(error){toast(msgErrore(error,cod),'err');return;}
   toast('Apertura aggiunta','ok'); adminAperture();
 }
 
@@ -3276,7 +3279,7 @@ async function nuovoAgente(){
   const nome=prompt('Nome:'); if(!nome) return;
   const cognome=prompt('Cognome:'); if(!cognome) return;
   const {error}=await sb.from('agenti').insert([{nome,cognome,attivo:true,percentuale_provvigione:0}]);
-  if(error){toast('Errore: '+error.message,'err');return;}
+  if(error){toast(msgErrore(error,nome+' '+cognome),'err');return;}
   toast('Agente aggiunto','ok'); adminAgenti();
 }
 
@@ -3611,9 +3614,15 @@ async function eliminaUtente(userId){
 // ══════════════════════════════════════════════════════
 // FUNZIONI GENERICHE ADMIN
 // ══════════════════════════════════════════════════════
+function msgErrore(error, valore){
+  if(error.code==='23505'||error.message?.includes('duplicate')||error.message?.includes('unique')){
+    return \`Il codice "\${valore}" esiste già — scegli un codice diverso.\`;
+  }
+  return 'Errore: '+error.message;
+}
+
 async function adminSalva(tabella, id, campo, valore){
   let val = valore;
-  // Numeric fields
   const numericFields=['sovrapprezzo_A','sovrapprezzo_P','prezzo_A','prezzo_P','prezzo_base',
     'prezzo_vetro','prezzo_extra_incisioni','sovrapprezzo_bugna_A','sovrapprezzo_bugna_P',
     'maggiorazione_pct','spalla_cm','spessore_da_cm','spessore_a_cm','cm_accessorio',
@@ -3624,7 +3633,7 @@ async function adminSalva(tabella, id, campo, valore){
     if(isNaN(val)) return;
   }
   const {error} = await sb.from(tabella).update({[campo]:val}).eq('id',id);
-  if(error){toast('Errore: '+error.message,'err');return;}
+  if(error){toast(msgErrore(error,valore),'err');return;}
   toast('Salvato','ok');
 }
 
@@ -3650,7 +3659,7 @@ async function toggleCampo(tabella, id, campo, attualeStr){
 
 async function nuovaRiga(tabella, defaultData, callback){
   const {error} = await sb.from(tabella).insert([defaultData]);
-  if(error){toast('Errore: '+error.message,'err');return;}
+  if(error){toast(msgErrore(error, defaultData.codice||defaultData.nome||''),'err');return;}
   toast('Riga aggiunta','ok');
   if(callback && window[callback]) window[callback]();
 }
