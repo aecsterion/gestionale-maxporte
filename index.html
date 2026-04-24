@@ -67,7 +67,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--beige);color:v
 .sb-logout:hover{color:var(--red)}
 
 /* MAIN */
-.main{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--beige)}
+.main{flex:1;display:flex;flex-direction:column;overflow:visible;background:var(--beige)}
 .topbar{padding:0 20px;height:50px;border-bottom:0.5px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--white);flex-shrink:0}
 .topbar-title{font-size:15px;font-weight:500}
 .topbar-bc{font-size:12px;color:var(--mid);margin-left:10px}
@@ -162,9 +162,9 @@ tr.data-row:hover td{background:var(--beige);cursor:pointer}
 #admin-main{height:calc(100vh - 110px);overflow-y:auto}
 /* Table scroll */
 .overflow-x-auto{overflow-x:auto;-webkit-overflow-scrolling:touch}
-/* Modal max height adaptive */
-.form-modal{max-height:calc(100vh - 40px)}
-#cfg-body{max-height:calc(100vh - 160px);overflow-y:auto}
+/* Modal — sempre sopra tutto, position:fixed non risente di overflow dei parent */
+.form-overlay{z-index:1000 !important}
+#modal-cfg{z-index:1100 !important}
 /* Grid responsive */
 @media(max-width:1200px){
   .grid-4{grid-template-columns:repeat(2,1fr)}
