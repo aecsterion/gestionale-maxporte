@@ -3362,7 +3362,7 @@ async function adminCompatibilita(){
   ] = await Promise.all([
     sb.from('serie').select('codice,nome').eq('attiva',true).order('nome'),
     sb.from('modelli').select('codice,nome').eq('attivo',true).order('nome'),
-    sb.from('finiture').select('codice_finitura as codice,nome_finitura as nome').eq('attiva',true).order('nome_finitura'),
+    sb.from('finiture').select('codice_finitura,nome_finitura').order('nome_finitura'),
     sb.from('tipologie_apertura').select('codice,nome').eq('attiva',true).order('codice'),
     sb.from('ferramenta').select('codice,nome').eq('attivo',true).order('nome'),
     sb.from('maniglie').select('codice,nome').eq('attivo',true).order('nome'),
@@ -3375,7 +3375,14 @@ async function adminCompatibilita(){
   const ENTITA = {
     serie:    {label:'Serie',      items:serie||[],   codKey:'codice',nameKey:'nome'},
     modello:  {label:'Modello',    items:modelli||[],  codKey:'codice',nameKey:'nome'},
-    finitura: {label:'Finitura',   items:finiture||[], codKey:'codice',nameKey:'nome'},
+    finitura: {label:'Finitura', items: (() => {
+      // Deduplica per codice_finitura
+      const seen = new Set();
+      return (finiture||[]).filter(f => {
+        if(seen.has(f.codice_finitura)) return false;
+        seen.add(f.codice_finitura); return true;
+      });
+    })(), codKey:'codice_finitura', nameKey:'nome_finitura'},
     apertura: {label:'Apertura',   items:aperture||[], codKey:'codice',nameKey:'nome'},
     ferramenta:{label:'Ferramenta',items:ferramenta||[],codKey:'codice',nameKey:'nome'},
     maniglia: {label:'Maniglia',   items:maniglie||[], codKey:'codice',nameKey:'nome'},
@@ -3858,7 +3865,4 @@ function ensureModalInBody(id) {
 </body>
 </html>
 `;
-http.createServer((req,res)=>{
-  res.writeHead(200,{'Content-Type':'text/html;charset=utf-8','Cache-Control':'no-store'});
-  res.end(HTML);
-}).listen(PORT,()=>console.log('OK '+PORT));
+http.createServer((req,res)=>{res.writeHead(200,{'Content-Type':'text/html;charset=utf-8','Cache-Control':'no-store'});res.end(HTML);}).listen(PORT,()=>console.log('OK '+PORT));
