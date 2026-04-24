@@ -1358,7 +1358,8 @@ function openConfiguratore(mode, targetId, listino_in){
   window._prevListino = listino_in || 'A';
   resetCFG();
   renderCfgStep('serie');
-  document.getElementById('modal-cfg').classList.add('open');
+  const el = ensureModalInBody('modal-cfg');
+  el.classList.add('open');
 }
 
 function closeCfg(){
@@ -2172,7 +2173,7 @@ async function nuovoPreventivo(){
       sb.from('agenti').select('*').eq('attivo',true).order('cognome'),
     ]);
     CFG_RIGHE=[];
-    const modal = document.getElementById('modal-nuovo-doc');
+    const modal = ensureModalInBody('modal-nuovo-doc');
     if(!modal){ toast('Errore: modal non trovato','err'); return; }
     modal.dataset.mode='preventivo';
     document.getElementById('ndoc-title').textContent='Nuovo preventivo';
@@ -2248,7 +2249,7 @@ function ndocAggiungiPorta(){
   CFG_MODE=document.getElementById('modal-nuovo-doc').dataset.mode;
   resetCFG();
   renderCfgStep('serie');
-  document.getElementById('modal-cfg').classList.add('open');
+  ensureModalInBody('modal-cfg').classList.add('open');
 }
 
 function renderNuovoDocBozza(){ aggiornaTotaleNdoc(); }
@@ -2484,7 +2485,7 @@ async function nuovoOrdineDiretto(){
       sb.from('agenti').select('*').eq('attivo',true).order('cognome'),
     ]);
     CFG_RIGHE=[];
-    const modal=document.getElementById('modal-nuovo-doc');
+    const modal=ensureModalInBody('modal-nuovo-doc');
     if(!modal){ toast('Errore: modal non trovato','err'); return; }
     modal.dataset.mode='ordine';
     document.getElementById('ndoc-title').textContent='Nuovo ordine diretto';
@@ -3688,6 +3689,24 @@ async function aggiungiUtente(){
   renderUtentiInline();
 }
 
+
+// Sposta i modal nel body per evitare problemi di z-index e display
+document.addEventListener('DOMContentLoaded', function() {
+  ['modal-cfg', 'modal-nuovo-doc'].forEach(function(id) {
+    const el = document.getElementById(id);
+    if (el && el.parentElement !== document.body) {
+      document.body.appendChild(el);
+    }
+  });
+});
+
+function ensureModalInBody(id) {
+  const el = document.getElementById(id);
+  if (el && el.parentElement !== document.body) {
+    document.body.appendChild(el);
+  }
+  return el;
+}
 </script>
 
 
@@ -3839,4 +3858,7 @@ async function aggiungiUtente(){
 </body>
 </html>
 `;
-http.createServer((req,res)=>{res.writeHead(200,{'Content-Type':'text/html;charset=utf-8','Cache-Control':'no-store'});res.end(HTML);}).listen(PORT,()=>console.log('OK '+PORT));
+http.createServer((req,res)=>{
+  res.writeHead(200,{'Content-Type':'text/html;charset=utf-8','Cache-Control':'no-store'});
+  res.end(HTML);
+}).listen(PORT,()=>console.log('OK '+PORT));
