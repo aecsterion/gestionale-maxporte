@@ -163,6 +163,9 @@ tr.data-row:hover td{background:var(--beige);cursor:pointer}
 /* Table scroll */
 .overflow-x-auto{overflow-x:auto;-webkit-overflow-scrolling:touch}
 .form-overlay{z-index:1000 !important}
+#form-anagrafica{z-index:1000 !important}
+#form-ordine{z-index:1000 !important}
+#modal-nuovo-doc{z-index:1050 !important}
 #modal-cfg{z-index:1100 !important}
 /* Grid responsive */
 @media(max-width:1200px){
@@ -653,106 +656,6 @@ tr.data-row:hover td{background:var(--beige);cursor:pointer}
   </div>
 </div>
 
-<!-- MODAL CONFIGURATORE PORTA -->
-<div class="form-overlay" id="modal-cfg" style="background:rgba(0,0,0,0.75)">
-  <div class="form-modal" style="width:min(820px,100%);max-height:90vh;display:flex;flex-direction:column">
-    <div class="form-modal-head">
-      <div style="display:flex;flex-direction:column;gap:6px;flex:1">
-        <span class="form-modal-title">Configuratore porta</span>
-        <div id="cfg-stepper" style="display:flex;align-items:center;gap:4px;flex-wrap:wrap"></div>
-      </div>
-      <div style="display:flex;align-items:center;gap:16px">
-        <div style="text-align:right">
-          <div style="font-size:11px;color:rgba(255,255,255,0.5)">Prezzo unitario</div>
-          <div id="cfg-prezzo-unitario" style="font-size:18px;font-weight:500;color:#fff">€ 0,00</div>
-        </div>
-        <button class="form-close" onclick="closeCfg()">×</button>
-      </div>
-    </div>
-    <div id="cfg-body" style="padding:20px;overflow-y:auto;flex:1">
-      <div class="loading"><div class="spinner"></div></div>
-    </div>
-  </div>
-</div>
-
-<!-- MODAL NUOVO DOCUMENTO (preventivo o ordine diretto) -->
-<div class="form-overlay" id="modal-nuovo-doc">
-  <div class="form-modal" style="width:min(860px,100%);max-height:92vh;display:flex;flex-direction:column">
-    <div class="form-modal-head">
-      <span class="form-modal-title" id="ndoc-title">Nuovo preventivo</span>
-      <button class="form-close" onclick="document.getElementById('modal-nuovo-doc').classList.remove('open')">×</button>
-    </div>
-    <div style="padding:18px 20px;overflow-y:auto;flex:1">
-      <!-- Intestazione -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
-        <div class="form-field">
-          <label>Cliente <span class="req">*</span></label>
-          <select id="ndoc-clienti" onchange="ndocClienteChange(this)">
-            <option value="">Seleziona cliente...</option>
-          </select>
-        </div>
-        <div class="form-field">
-          <label>Agente Max Porte</label>
-          <select id="ndoc-agenti"><option value="">Nessun agente</option></select>
-        </div>
-        <div class="form-field">
-          <label>Listino</label>
-          <select id="ndoc-listino" onchange="aggiornaTotaleNdoc()">
-            <option value="A">Listino A</option>
-            <option value="P">Listino P (Piemonte/VdA)</option>
-          </select>
-        </div>
-        <div class="form-field">
-          <label>Trasporto</label>
-          <select id="ndoc-trasporto">
-            <option value="Max Porte">A cura Max Porte</option>
-            <option value="Cliente">A cura del cliente</option>
-            <option value="Vettore">A cura del vettore</option>
-          </select>
-        </div>
-        <div class="form-field">
-          <label>Sconto 1 (%)</label>
-          <input type="number" id="ndoc-sconto1" value="0" min="0" max="100" step="0.5" oninput="aggiornaTotaleNdoc()">
-        </div>
-        <div class="form-field">
-          <label>Sconto 2 (%) — doppio sconto</label>
-          <input type="number" id="ndoc-sconto2" value="0" min="0" max="100" step="0.5" oninput="aggiornaTotaleNdoc()">
-        </div>
-      </div>
-      <!-- Destinazione merce -->
-      <div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:var(--mid);margin-bottom:8px">Destinazione merce</div>
-      <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:10px;margin-bottom:16px">
-        <div class="form-field"><label>Indirizzo</label><input type="text" id="ndoc-ind" placeholder="Via/Piazza..."></div>
-        <div class="form-field"><label>CAP</label><input type="text" id="ndoc-cap" maxlength="5"></div>
-        <div class="form-field"><label>Città</label><input type="text" id="ndoc-cit"></div>
-        <div class="form-field"><label>Prov.</label><input type="text" id="ndoc-prv" maxlength="2" style="text-transform:uppercase"></div>
-      </div>
-      <!-- Note -->
-      <div class="form-field" style="margin-bottom:16px">
-        <label>Note</label>
-        <textarea id="ndoc-note" placeholder="Note per il cliente..." style="min-height:50px"></textarea>
-      </div>
-      <!-- Porte aggiunte -->
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-        <div style="font-size:13px;font-weight:500">Porte configurate</div>
-        <button class="btn btn-red btn-sm" onclick="ndocAggiungiPorta()">+ Aggiungi porta</button>
-      </div>
-      <div id="ndoc-righe-list" style="min-height:60px;border:0.5px solid var(--border);border-radius:var(--radius);padding:8px 12px;margin-bottom:14px"></div>
-    </div>
-    <div class="form-modal-foot" style="justify-content:space-between">
-      <div>
-        <div style="font-size:11px;color:var(--mid)">Totale netto stimato:</div>
-        <div id="ndoc-totale" style="font-size:20px;font-weight:500;color:var(--red)">€ 0,00</div>
-        <div id="ndoc-sconto-detail"></div>
-      </div>
-      <div style="display:flex;gap:10px">
-        <button class="btn" onclick="document.getElementById('modal-nuovo-doc').classList.remove('open')">Annulla</button>
-        <button class="btn btn-red" onclick="salvaNuovoDoc()">Salva</button>
-      </div>
-    </div>
-  </div>
-</div>
-
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
@@ -899,13 +802,14 @@ function openForm(){
 }
 
 function loadSection(s){
-  // Protezione sezioni admin
   if((s==='admin'||s==='utenti') && !isAdmin()){
     toast('Accesso non autorizzato','err'); return;
   }
   if(s==='utenti' && !isSuperAdmin()){
     toast('Accesso riservato al Super Admin','err'); return;
   }
+  // Chiudi tutti i modal aperti quando si cambia sezione
+  document.querySelectorAll('.form-overlay.open').forEach(m=>m.classList.remove('open'));
   const c=document.getElementById('main-content');
   c.innerHTML='<div class="loading"><div class="spinner"></div>Caricamento...</div>';
   if(s==='dashboard') renderDashboard();
@@ -3791,5 +3695,106 @@ async function aggiungiUtente(){
 }
 
 </script>
+
+<!-- MODAL CONFIGURATORE PORTA -->
+<div class="form-overlay" id="modal-cfg" style="background:rgba(0,0,0,0.75)">
+  <div class="form-modal" style="width:min(820px,100%);max-height:90vh;display:flex;flex-direction:column">
+    <div class="form-modal-head">
+      <div style="display:flex;flex-direction:column;gap:6px;flex:1">
+        <span class="form-modal-title">Configuratore porta</span>
+        <div id="cfg-stepper" style="display:flex;align-items:center;gap:4px;flex-wrap:wrap"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:16px">
+        <div style="text-align:right">
+          <div style="font-size:11px;color:rgba(255,255,255,0.5)">Prezzo unitario</div>
+          <div id="cfg-prezzo-unitario" style="font-size:18px;font-weight:500;color:#fff">€ 0,00</div>
+        </div>
+        <button class="form-close" onclick="closeCfg()">×</button>
+      </div>
+    </div>
+    <div id="cfg-body" style="padding:20px;overflow-y:auto;flex:1">
+      <div class="loading"><div class="spinner"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL NUOVO DOCUMENTO (preventivo o ordine diretto) -->
+<div class="form-overlay" id="modal-nuovo-doc">
+  <div class="form-modal" style="width:min(860px,100%);max-height:92vh;display:flex;flex-direction:column">
+    <div class="form-modal-head">
+      <span class="form-modal-title" id="ndoc-title">Nuovo preventivo</span>
+      <button class="form-close" onclick="document.getElementById('modal-nuovo-doc').classList.remove('open')">×</button>
+    </div>
+    <div style="padding:18px 20px;overflow-y:auto;flex:1">
+      <!-- Intestazione -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
+        <div class="form-field">
+          <label>Cliente <span class="req">*</span></label>
+          <select id="ndoc-clienti" onchange="ndocClienteChange(this)">
+            <option value="">Seleziona cliente...</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label>Agente Max Porte</label>
+          <select id="ndoc-agenti"><option value="">Nessun agente</option></select>
+        </div>
+        <div class="form-field">
+          <label>Listino</label>
+          <select id="ndoc-listino" onchange="aggiornaTotaleNdoc()">
+            <option value="A">Listino A</option>
+            <option value="P">Listino P (Piemonte/VdA)</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label>Trasporto</label>
+          <select id="ndoc-trasporto">
+            <option value="Max Porte">A cura Max Porte</option>
+            <option value="Cliente">A cura del cliente</option>
+            <option value="Vettore">A cura del vettore</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label>Sconto 1 (%)</label>
+          <input type="number" id="ndoc-sconto1" value="0" min="0" max="100" step="0.5" oninput="aggiornaTotaleNdoc()">
+        </div>
+        <div class="form-field">
+          <label>Sconto 2 (%) — doppio sconto</label>
+          <input type="number" id="ndoc-sconto2" value="0" min="0" max="100" step="0.5" oninput="aggiornaTotaleNdoc()">
+        </div>
+      </div>
+      <!-- Destinazione merce -->
+      <div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:var(--mid);margin-bottom:8px">Destinazione merce</div>
+      <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:10px;margin-bottom:16px">
+        <div class="form-field"><label>Indirizzo</label><input type="text" id="ndoc-ind" placeholder="Via/Piazza..."></div>
+        <div class="form-field"><label>CAP</label><input type="text" id="ndoc-cap" maxlength="5"></div>
+        <div class="form-field"><label>Città</label><input type="text" id="ndoc-cit"></div>
+        <div class="form-field"><label>Prov.</label><input type="text" id="ndoc-prv" maxlength="2" style="text-transform:uppercase"></div>
+      </div>
+      <!-- Note -->
+      <div class="form-field" style="margin-bottom:16px">
+        <label>Note</label>
+        <textarea id="ndoc-note" placeholder="Note per il cliente..." style="min-height:50px"></textarea>
+      </div>
+      <!-- Porte aggiunte -->
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div style="font-size:13px;font-weight:500">Porte configurate</div>
+        <button class="btn btn-red btn-sm" onclick="ndocAggiungiPorta()">+ Aggiungi porta</button>
+      </div>
+      <div id="ndoc-righe-list" style="min-height:60px;border:0.5px solid var(--border);border-radius:var(--radius);padding:8px 12px;margin-bottom:14px"></div>
+    </div>
+    <div class="form-modal-foot" style="justify-content:space-between">
+      <div>
+        <div style="font-size:11px;color:var(--mid)">Totale netto stimato:</div>
+        <div id="ndoc-totale" style="font-size:20px;font-weight:500;color:var(--red)">€ 0,00</div>
+        <div id="ndoc-sconto-detail"></div>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn" onclick="document.getElementById('modal-nuovo-doc').classList.remove('open')">Annulla</button>
+        <button class="btn btn-red" onclick="salvaNuovoDoc()">Salva</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
