@@ -1539,6 +1539,16 @@ async function selFinitura(cod, nome, sovr, consenteBugna){
 
 async function cfgOpzioni(){
   const f = CFG._flags || {};
+  
+  // Se non ci sono opzioni disponibili, salta direttamente all'apertura
+  const haOpzioni = f.ha_pannello_o_bugna || f.ha_inserto_alluminio || 
+                    f.ha_inserto_pietra || (f.ha_vetro && !CFG._vetroIncluso) || 
+                    f.ha_pantografatura;
+  if(!haOpzioni){
+    await renderCfgStep('apertura');
+    return;
+  }
+
   let html = \`<div style="font-size:13px;font-weight:500;margin-bottom:14px">Opzioni aggiuntive <span style="color:var(--mid);font-weight:400">— \${CFG.nome_modello} / \${CFG.nome_finitura}</span></div>\`;
 
   // PANNELLO O BUGNA
