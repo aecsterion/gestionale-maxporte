@@ -3394,22 +3394,24 @@ async function nuovaFasciaScalaAgente(agenteId){
 // Calcola provvigione in base allo sconto effettivo
 async function calcolaProvvigione(agenteId, scontoEffettivoPct){
   if(!agenteId) return 0;
-  // Prima cerca scala personalizzata
-  const {data:pers} = await sb.from('provvigioni_scala_agente')
-    .select('provvigione_pct')
-    .eq('agente_id',agenteId)
-    .lte('sconto_da_pct',scontoEffettivoPct)
-    .gte('sconto_a_pct',scontoEffettivoPct)
-    .single();
-  if(pers?.provvigione_pct!=null) return pers.provvigione_pct;
-  // Fallback scala globale
-  const {data:glob} = await sb.from('provvigioni_scala')
-    .select('provvigione_pct')
-    .eq('attivo',true)
-    .lte('sconto_da_pct',scontoEffettivoPct)
-    .gte('sconto_a_pct',scontoEffettivoPct)
-    .single();
-  return glob?.provvigione_pct || 0;
+  try {
+    // Cerca scala personalizzata
+    const {data:pers} = await sb.from('provvigioni_scala_agente')
+      .select('provvigione_pct')
+      .eq('agente_id',agenteId)
+      .lte('sconto_da_pct',scontoEffettivoPct)
+      .gte('sconto_a_pct',scontoEffettivoPct)
+      .limit(1);
+    if(pers&&pers.length>0) return pers[0].provvigione_pct||0;
+    // Fallback scala globale
+    const {data:glob} = await sb.from('provvigioni_scala')
+      .select('provvigione_pct')
+      .eq('attivo',true)
+      .lte('sconto_da_pct',scontoEffettivoPct)
+      .gte('sconto_a_pct',scontoEffettivoPct)
+      .limit(1);
+    return (glob&&glob.length>0) ? glob[0].provvigione_pct||0 : 0;
+  } catch(e) { return 0; }
 }
 
 // ══════════════════════════════════════════════════════
