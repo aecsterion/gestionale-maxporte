@@ -783,7 +783,7 @@ const pageInfo = {
   dashboard:{title:'Dashboard',bc:'Panoramica generale',action:false},
   anagrafiche:{title:'Anagrafiche',bc:'Clienti e fornitori',action:true,label:'+ Nuova anagrafica'},
   preventivi:{title:'Preventivi',bc:'Gestione offerte commerciali',action:false,label:''},
-  ordini_vendita:{title:'Conferme d'ordine',bc:'Ordini senza preventivo',action:false,label:''},
+  ordini_vendita:{title:"Conferme d'ordine",bc:'Ordini senza preventivo',action:false,label:''},
   fatture:{title:'Fatture',bc:'Ciclo attivo',action:false},
   magazzino:{title:'Magazzino',bc:'Giacenze e componenti',action:false},
   produzione:{title:'Produzione MRP',bc:'Ciclo produttivo',action:false},
@@ -2549,7 +2549,7 @@ async function nuovoOrdineDiretto(){
     const modal=ensureModalInBody('modal-nuovo-doc');
     if(!modal){ toast('Errore: modal non trovato','err'); return; }
     modal.dataset.mode='ordine';
-    document.getElementById('ndoc-title').textContent='Nuova conferma d'ordine';
+    document.getElementById('ndoc-title').textContent="Nuova conferma d'ordine";
     document.getElementById('ndoc-clienti').innerHTML='<option value="">Seleziona cliente...</option>'+(clienti||[]).map(c=>\`<option value="\${c.id}" data-listino="\${c.listino||'A'}" data-sa="\${c.sconto_dedicato_A||0}" data-sp="\${c.sconto_dedicato_P||0}" data-ind="\${c.indirizzo||''}" data-cap="\${c.cap||''}" data-cit="\${c.citta||''}" data-prv="\${c.provincia||''}">\${c.ragione_sociale}</option>\`).join('');
     document.getElementById('ndoc-agenti').innerHTML='<option value="">Nessun agente</option>'+(agenti||[]).map(a=>\`<option value="\${a.id}">\${a.cognome} \${a.nome}</option>\`).join('');
     document.getElementById('ndoc-righe-list').innerHTML='<div style="text-align:center;padding:20px;color:var(--mid);font-size:13px;font-style:italic">Nessuna porta ancora</div>';
