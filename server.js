@@ -293,8 +293,8 @@ tr.data-row:hover td{background:var(--beige);cursor:pointer}
 </div>
 
 <!-- FORM ANAGRAFICA -->
-<div class="form-overlay" id="form-anagrafica">
-  <div class="form-modal">
+<div class="form-overlay" id="form-anagrafica" style="justify-content:center;align-items:flex-start;padding:20px">
+  <div class="form-modal" style="width:min(860px,100%);max-height:92vh;display:flex;flex-direction:column">
     <div class="form-modal-head">
       <span class="form-modal-title" id="form-ana-title">Nuova anagrafica</span>
       <button class="form-close" onclick="closeForm('form-anagrafica')">×</button>
@@ -583,8 +583,8 @@ tr.data-row:hover td{background:var(--beige);cursor:pointer}
 </div>
 
 <!-- FORM ORDINE -->
-<div class="form-overlay" id="form-ordine">
-  <div class="form-modal">
+<div class="form-overlay" id="form-ordine" style="justify-content:center;align-items:flex-start;padding:20px">
+  <div class="form-modal" style="width:min(680px,100%);max-height:92vh;display:flex;flex-direction:column">
     <div class="form-modal-head">
       <span class="form-modal-title" id="form-ord-title">Nuovo ordine</span>
       <button class="form-close" onclick="closeForm('form-ordine')">×</button>
@@ -996,7 +996,8 @@ async function openFormAnagrafica(data){
   // Aggiorna campi condizionali in base al tipo
   aggiornaCampiPerTipo(data?.tipo||'');
   anaTab('generale', document.querySelector('.form-tab'));
-  document.getElementById('form-anagrafica').classList.add('open');
+  const formEl = ensureModalInBody('form-anagrafica');
+  formEl.classList.add('open');
 }
 
 function aggiornaCampiPerTipo(tipo){
@@ -2201,16 +2202,43 @@ async function nuovoPreventivo(){
   }
 }
 
-function ndocClienteChange(sel){
+async function ndocClienteChange(sel){
   const opt = sel.options[sel.selectedIndex];
-  const listino = opt.dataset.listino||'A';
-  document.getElementById('ndoc-listino').value=listino;
-  const sc = listino==='A'?opt.dataset.sa:opt.dataset.sp;
-  document.getElementById('ndoc-sconto1').value=sc||0;
-  document.getElementById('ndoc-ind').value=opt.dataset.ind||'';
-  document.getElementById('ndoc-cap').value=opt.dataset.cap||'';
-  document.getElementById('ndoc-cit').value=opt.dataset.cit||'';
-  document.getElementById('ndoc-prv').value=opt.dataset.prv||'';
+  if(!opt.value) return;
+
+  // Carica dati completi del cliente da Supabase
+  const {data:cliente} = await sb.from('anagrafiche').select('*').eq('id',opt.value).single();
+  if(!cliente) return;
+
+  // Listino e sconti
+  const listino = cliente.listino||'A';
+  document.getElementById('ndoc-listino').value = listino;
+  const sconto = listino==='A' ? (cliente.sconto_dedicato_A||0) : (cliente.sconto_dedicato_P||0);
+  document.getElementById('ndoc-sconto1').value = sconto;
+
+  // Indirizzo destinazione
+  document.getElementById('ndoc-ind').value = cliente.indirizzo||'';
+  document.getElementById('ndoc-cap').value = cliente.cap||'';
+  document.getElementById('ndoc-cit').value = cliente.citta||'';
+  document.getElementById('ndoc-prv').value = cliente.provincia||'';
+
+  // Agente collegato al cliente
+  if(cliente.agente_id){
+    const agenteSel = document.getElementById('ndoc-agenti');
+    if(agenteSel){
+      // Seleziona l'agente se presente nella lista
+      const opt = Array.from(agenteSel.options).find(o=>o.value===cliente.agente_id);
+      if(opt) agenteSel.value = cliente.agente_id;
+    }
+  }
+
+  // Feedback visivo — mostra tooltip con dati compilati
+  const info = [];
+  if(listino) info.push(\`Listino \${listino}\`);
+  if(sconto>0) info.push(\`Sconto \${sconto}%\`);
+  if(cliente.condizioni_pagamento) info.push(cliente.condizioni_pagamento);
+  if(info.length>0) toast('Cliente: '+info.join(' · '),'ok');
+
   aggiornaTotaleNdoc();
 }
 
