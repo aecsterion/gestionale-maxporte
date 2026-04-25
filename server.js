@@ -235,7 +235,7 @@ tr.data-row:hover td{background:var(--beige);cursor:pointer}
     </div>
     <div class="sb-item" onclick="nav('ordini_vendita',this)">
       <svg class="sb-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3h12l-1.5 7H3.5L2 3z"/><circle cx="6" cy="13" r="1"/><circle cx="11" cy="13" r="1"/></svg>
-      Ordini diretti
+      Conferme d'ordine
     </div>
     <div class="sb-item" onclick="nav('fatture',this)">
       <svg class="sb-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="1" width="12" height="14" rx="1"/><path d="M5 5h6M5 8h6M5 11h4"/></svg>
@@ -783,7 +783,7 @@ const pageInfo = {
   dashboard:{title:'Dashboard',bc:'Panoramica generale',action:false},
   anagrafiche:{title:'Anagrafiche',bc:'Clienti e fornitori',action:true,label:'+ Nuova anagrafica'},
   preventivi:{title:'Preventivi',bc:'Gestione offerte commerciali',action:false,label:''},
-  ordini_vendita:{title:'Ordini diretti',bc:'Ordini senza preventivo',action:false,label:''},
+  ordini_vendita:{title:'Conferme d'ordine',bc:'Ordini senza preventivo',action:false,label:''},
   fatture:{title:'Fatture',bc:'Ciclo attivo',action:false},
   magazzino:{title:'Magazzino',bc:'Giacenze e componenti',action:false},
   produzione:{title:'Produzione MRP',bc:'Ciclo produttivo',action:false},
@@ -2302,65 +2302,77 @@ function ndocAggiungiPorta(){
 function renderNuovoDocBozza(){ aggiornaTotaleNdoc(); }
 
 async function salvaNuovoDoc(){
-  const mode = document.getElementById('modal-nuovo-doc').dataset.mode;
-  const clienteId=document.getElementById('ndoc-clienti').value;
-  if(!clienteId){ toast('Seleziona un cliente','err'); return; }
-  if(CFG_RIGHE.length===0){ toast('Aggiungi almeno una porta','err'); return; }
+  try {
+    const mode = document.getElementById('modal-nuovo-doc').dataset.mode;
+    const clienteId=document.getElementById('ndoc-clienti').value;
+    if(!clienteId){ toast('Seleziona un cliente','err'); return; }
+    if(CFG_RIGHE.length===0){ toast('Aggiungi almeno una porta','err'); return; }
 
-  const listino=document.getElementById('ndoc-listino').value||'A';
-  const sc1=parseFloat(document.getElementById('ndoc-sconto1').value||0);
-  const sc2=parseFloat(document.getElementById('ndoc-sconto2').value||0);
-  const agenteId=document.getElementById('ndoc-agenti').value||null;
-  const trasporto=document.getElementById('ndoc-trasporto').value||'Max Porte';
-  const note=document.getElementById('ndoc-note').value||null;
-  const ind=document.getElementById('ndoc-ind').value||null;
-  const cap=document.getElementById('ndoc-cap').value||null;
-  const cit=document.getElementById('ndoc-cit').value||null;
-  const prv=document.getElementById('ndoc-prv').value||null;
+    const listino=document.getElementById('ndoc-listino').value||'A';
+    const sc1=parseFloat(document.getElementById('ndoc-sconto1').value||0);
+    const sc2=parseFloat(document.getElementById('ndoc-sconto2').value||0);
+    const agenteId=document.getElementById('ndoc-agenti').value||null;
+    const trasporto=document.getElementById('ndoc-trasporto').value||'Max Porte';
+    const note=document.getElementById('ndoc-note').value||null;
+    const ind=document.getElementById('ndoc-ind').value||null;
+    const cap=document.getElementById('ndoc-cap').value||null;
+    const cit=document.getElementById('ndoc-cit').value||null;
+    const prv=document.getElementById('ndoc-prv').value||null;
 
-  const imponibile=CFG_RIGHE.reduce((s,r)=>s+(r.prezzo_totale_riga||0),0);
-  const netto=imponibile*(1-(sc1/100))*(1-(sc2/100));
-  const haCustom=CFG_RIGHE.some(r=>r.misura_custom);
+    const imponibile=CFG_RIGHE.reduce((s,r)=>s+(r.prezzo_totale_riga||0),0);
+    const netto=imponibile*(1-(sc1/100))*(1-(sc2/100));
+    const haCustom=CFG_RIGHE.some(r=>r.misura_custom);
 
-  // Calcola sconto effettivo e provvigione agente
-  const scontoEff = ((1-(1-sc1/100)*(1-sc2/100))*100);
-  let provvPct=0; let provvEuro=0;
-  if(agenteId){
-    provvPct = await calcolaProvvigione(agenteId, scontoEff);
-    provvEuro = Math.round(netto*(provvPct/100)*100)/100;
+    // Provvigione agente
+    const scontoEff=((1-(1-sc1/100)*(1-sc2/100))*100);
+    let provvPct=0, provvEuro=0;
+    if(agenteId){
+      try {
+        provvPct = await calcolaProvvigione(agenteId, scontoEff);
+        provvEuro = Math.round(netto*(provvPct/100)*100)/100;
+      } catch(e){ provvPct=0; provvEuro=0; }
+    }
+
+    // Numerazione semplice: anno + timestamp ultimi 5 cifre
+    const anno = new Date().getFullYear();
+    const seq = String(Date.now()).slice(-5);
+    const prefisso = mode==='preventivo'?'PRV':'ORD';
+    const numero = \`\${prefisso}-\${anno}-\${seq}\`;
+
+    const tabDoc = mode==='preventivo'?'preventivi':'ordini_vendita';
+    const docData = {
+      numero, anagrafica_id:clienteId, agente_id:agenteId||null,
+      listino, sconto1:sc1, sconto2:sc2,
+      indirizzo_destinazione:ind, cap_destinazione:cap,
+      citta_destinazione:cit, provincia_destinazione:prv,
+      trasporto, note,
+      totale_imponibile:imponibile, totale_netto:netto,
+      provvigione_pct:provvPct, provvigione_euro:provvEuro,
+      creato_da:currentUser?.id,
+      nome_compilatore:currentNomeUtente||currentUser?.email||'—',
+      ...(mode==='ordine'?{richiede_approvazione_tecnica:haCustom}:{})
+    };
+
+    const {data:doc,error} = await sb.from(tabDoc).insert([docData]).select().single();
+    if(error){ toast('Errore salvataggio: '+error.message,'err'); return; }
+
+    // Salva righe
+    const tabRighe = mode==='preventivo'?'righe_preventivo':'righe_ordine';
+    const fk = mode==='preventivo'?'preventivo_id':'ordine_id';
+    const righe = CFG_RIGHE.map((r,i)=>({...r,[fk]:doc.id,riga_numero:i+1}));
+    const {error:errRighe} = await sb.from(tabRighe).insert(righe);
+    if(errRighe){ toast('Errore salvataggio righe: '+errRighe.message,'err'); return; }
+
+    toast(numero+' salvato con successo','ok');
+    document.getElementById('modal-nuovo-doc').classList.remove('open');
+    CFG_RIGHE=[];
+    if(mode==='preventivo') renderPreventivi();
+    else renderOrdiniDiretti();
+
+  } catch(e) {
+    console.error('salvaNuovoDoc error:', e);
+    toast('Errore imprevisto: '+e.message,'err');
   }
-
-  const tabDoc = mode==='preventivo'?'preventivi':'ordini_vendita';
-  const numSeq = await sb.rpc('nextval',{sequence_name:\`seq_\${mode==='preventivo'?'preventivi':'ordini'}\`}).then(r=>r.data).catch(()=>Date.now());
-  const numero = (mode==='preventivo'?'PRV':'ORD')+'-'+new Date().getFullYear()+'-'+(String(numSeq||Date.now()).slice(-4));
-
-  const docData = {
-    numero, anagrafica_id:clienteId, agente_id:agenteId||null,
-    listino, sconto1:sc1, sconto2:sc2,
-    indirizzo_destinazione:ind, cap_destinazione:cap,
-    citta_destinazione:cit, provincia_destinazione:prv,
-    trasporto, note,
-    totale_imponibile:imponibile, totale_netto:netto,
-    provvigione_pct:provvPct, provvigione_euro:provvEuro,
-    creato_da:currentUser?.id,
-    nome_compilatore:currentNomeUtente||currentUser?.email||'—',
-    ...(mode==='ordine'?{richiede_approvazione_tecnica:haCustom}:{})
-  };
-
-  const {data:doc,error} = await sb.from(tabDoc).insert([docData]).select().single();
-  if(error){ toast('Errore salvataggio: '+error.message,'err'); return; }
-
-  // Salva righe
-  const tabRighe = mode==='preventivo'?'righe_preventivo':'righe_ordine';
-  const fk = mode==='preventivo'?'preventivo_id':'ordine_id';
-  const righe = CFG_RIGHE.map((r,i)=>({...r,[fk]:doc.id,riga_numero:i+1}));
-  await sb.from(tabRighe).insert(righe);
-
-  toast(numero+' salvato con successo','ok');
-  document.getElementById('modal-nuovo-doc').classList.remove('open');
-  CFG_RIGHE=[];
-  if(mode==='preventivo') renderPreventivi();
-  else renderOrdiniDiretti();
 }
 
 async function renderPreventivoDetail(id){
@@ -2509,7 +2521,7 @@ async function renderOrdiniDiretti(){
   <div class="card">
     <div class="card-header">
       <span class="card-title">Ordini</span>
-      <button class="btn btn-red btn-sm" onclick="nuovoOrdineDiretto()">+ Nuovo ordine diretto</button>
+      <button class="btn btn-red btn-sm" onclick="nuovoOrdineDiretto()">+ Nuova conferma d'ordine</button>
     </div>
     <table>
       <thead><tr><th>N°</th><th>Cliente</th><th>Agente</th><th>Origine</th><th>Data</th><th>Totale netto</th><th>Stato</th><th>Approvazione</th></tr></thead>
@@ -2521,7 +2533,7 @@ async function renderOrdiniDiretti(){
     document.getElementById('main-content').innerHTML=\`<div class="card">
       <div style="padding:20px">
         <p style="color:var(--red);margin-bottom:12px">Errore caricamento ordini: \${e.message}</p>
-        <button class="btn btn-red btn-sm" onclick="nuovoOrdineDiretto()">+ Nuovo ordine diretto</button>
+        <button class="btn btn-red btn-sm" onclick="nuovoOrdineDiretto()">+ Nuova conferma d'ordine</button>
       </div>
     </div>\`;
   }
@@ -2537,7 +2549,7 @@ async function nuovoOrdineDiretto(){
     const modal=ensureModalInBody('modal-nuovo-doc');
     if(!modal){ toast('Errore: modal non trovato','err'); return; }
     modal.dataset.mode='ordine';
-    document.getElementById('ndoc-title').textContent='Nuovo ordine diretto';
+    document.getElementById('ndoc-title').textContent='Nuova conferma d'ordine';
     document.getElementById('ndoc-clienti').innerHTML='<option value="">Seleziona cliente...</option>'+(clienti||[]).map(c=>\`<option value="\${c.id}" data-listino="\${c.listino||'A'}" data-sa="\${c.sconto_dedicato_A||0}" data-sp="\${c.sconto_dedicato_P||0}" data-ind="\${c.indirizzo||''}" data-cap="\${c.cap||''}" data-cit="\${c.citta||''}" data-prv="\${c.provincia||''}">\${c.ragione_sociale}</option>\`).join('');
     document.getElementById('ndoc-agenti').innerHTML='<option value="">Nessun agente</option>'+(agenti||[]).map(a=>\`<option value="\${a.id}">\${a.cognome} \${a.nome}</option>\`).join('');
     document.getElementById('ndoc-righe-list').innerHTML='<div style="text-align:center;padding:20px;color:var(--mid);font-size:13px;font-style:italic">Nessuna porta ancora</div>';
