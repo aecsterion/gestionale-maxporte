@@ -672,6 +672,7 @@ let currentUser = null;
 let currentRuolo = null;      // ruolo principale
 let currentRuoli = [];        // tutti i ruoli dell'utente
 let currentPermessi = new Set();
+let currentNomeUtente = null; // nome+cognome del compilatore
 
 // ── DATE ──────────────────────────────────────────────
 document.getElementById('topbar-date').textContent = new Date().toLocaleDateString('it-IT',{day:'numeric',month:'long',year:'numeric'});
@@ -693,10 +694,15 @@ function puoVedereAgenti(){ return isAdmin()||isRespComm()||currentRuoli.include
 
 async function loadRuolo(userId){
   try {
-    const {data:ruoliUtente} = await sb.from('utenti_ruoli').select('codice_ruolo').eq('user_id',userId);
+    const {data:ruoliUtente} = await sb.from('utenti_ruoli').select('codice_ruolo,nome,cognome').eq('user_id',userId);
     currentRuoli = (ruoliUtente||[]).map(r=>r.codice_ruolo);
     if(currentRuoli.length===0) currentRuoli=['agente'];
     currentRuolo = currentRuoli.includes('super_admin')?'super_admin':currentRuoli[0];
+    // Salva nome compilatore
+    const primoRuolo = ruoliUtente?.[0];
+    currentNomeUtente = primoRuolo?.nome && primoRuolo?.cognome 
+      ? primoRuolo.nome + ' ' + primoRuolo.cognome 
+      : null;
     if(!isSuperAdmin() && currentRuoli.length>0){
       const {data:perms} = await sb.from('ruoli_permessi').select('permesso').in('codice_ruolo',currentRuoli);
       currentPermessi = new Set((perms||[]).map(p=>p.permesso));
@@ -776,8 +782,8 @@ async function doLogout(){
 const pageInfo = {
   dashboard:{title:'Dashboard',bc:'Panoramica generale',action:false},
   anagrafiche:{title:'Anagrafiche',bc:'Clienti e fornitori',action:true,label:'+ Nuova anagrafica'},
-  preventivi:{title:'Preventivi',bc:'Gestione offerte commerciali',action:true,label:'+ Nuovo preventivo'},
-  ordini_vendita:{title:'Ordini diretti',bc:'Ordini senza preventivo',action:true,label:'+ Nuovo ordine'},
+  preventivi:{title:'Preventivi',bc:'Gestione offerte commerciali',action:false,label:''},
+  ordini_vendita:{title:'Ordini diretti',bc:'Ordini senza preventivo',action:false,label:''},
   fatture:{title:'Fatture',bc:'Ciclo attivo',action:false},
   magazzino:{title:'Magazzino',bc:'Giacenze e componenti',action:false},
   produzione:{title:'Produzione MRP',bc:'Ciclo produttivo',action:false},
@@ -2337,6 +2343,7 @@ async function salvaNuovoDoc(){
     totale_imponibile:imponibile, totale_netto:netto,
     provvigione_pct:provvPct, provvigione_euro:provvEuro,
     creato_da:currentUser?.id,
+    nome_compilatore:currentNomeUtente||currentUser?.email||'—',
     ...(mode==='ordine'?{richiede_approvazione_tecnica:haCustom}:{})
   };
 
@@ -2403,7 +2410,8 @@ async function renderPreventivoDetail(id){
         <tr><td style="color:var(--mid);padding:3px 0">Data</td><td>\${fmtData(prev.data_creazione)}</td></tr>
         <tr><td style="color:var(--mid);padding:3px 0">Listino</td><td><span class="tag">\${prev.listino}</span></td></tr>
         <tr><td style="color:var(--mid);padding:3px 0">Trasporto</td><td>\${prev.trasporto||'—'}</td></tr>
-        <tr><td style="color:var(--mid);padding:3px 0">Stato</td><td>\${badgeStato(prev.stato)}</td></tr>
+        <tr><td style="color:var(--mid);padding:3px 0;width:130px">Stato</td><td>\${badgeStato(prev.stato)}</td></tr>
+        \${prev.nome_compilatore?\`<tr><td style="color:var(--mid);padding:3px 0">Compilato da</td><td style="font-size:12px">\${prev.nome_compilatore}</td></tr>\`:''}
       </table>
     </div>
     <div class="card">
@@ -2460,7 +2468,7 @@ async function firmaPreventivo(prevId){
     totale_imponibile:prev.totale_imponibile,
     totale_netto:prev.totale_netto||prev.totale_imponibile,
     richiede_approvazione_tecnica:haCustom,
-    stato:'in_attesa', creato_da:currentUser?.id
+    stato:'in_attesa', creato_da:currentUser?.id, nome_compilatore:currentNomeUtente||currentUser?.email||'—'
   }]).select().single();
 
   if(ord?.data||ord){
@@ -2597,6 +2605,7 @@ async function renderOrdineDetail(id){
         <tr><td style="color:var(--mid);padding:3px 0">Trasporto</td><td>\${ord.trasporto||'—'}</td></tr>
         <tr><td style="color:var(--mid);padding:3px 0">Approvazione</td><td>\${ord.richiede_approvazione_tecnica?'<span class="badge br">Tecnica richiesta</span>':'<span class="badge bg">Solo commerciale</span>'}</td></tr>
         <tr><td style="color:var(--mid);padding:3px 0">Stato</td><td>\${badgeStato(ord.stato)}</td></tr>
+        \${ord.nome_compilatore?\`<tr><td style="color:var(--mid);padding:3px 0">Compilato da</td><td style="font-size:12px">\${ord.nome_compilatore}</td></tr>\`:''}
       </table>
     </div>
     <div class="card">
@@ -3537,7 +3546,8 @@ async function aggiungiRegola(aTipo, aCodice, aNome, bTipo, bCodice, bNome){
   const {error}=await sb.from('regole_compatibilita').insert([{
     entita_a_tipo:aTipo, entita_a_codice:aCodice, entita_a_nome:aNome,
     entita_b_tipo:bTipo, entita_b_codice:bCodice, entita_b_nome:bNome,
-    creato_da:currentUser?.id
+    creato_da:currentUser?.id,
+    nome_compilatore:currentNomeUtente||currentUser?.email||'—'
   }]);
   if(error){toast('Già esiste o errore: '+error.message,'err');return;}
   toast('Regola aggiunta','ok');
@@ -3599,6 +3609,8 @@ async function renderUtentiInline(){
       </span>\`).join('');
     return \`<tr>
       <td style="font-size:11px;color:var(--mid);font-family:monospace">\${uid.slice(0,20)}...</td>
+      <td><input type="text" placeholder="Nome" value="\${info.ruoli[0]?.nome||''}" style="width:80px;padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px" onchange="aggiornaNomeCognome('\${info.ruoli[0]?.id}','nome',this.value)"></td>
+      <td><input type="text" placeholder="Cognome" value="\${info.ruoli[0]?.cognome||''}" style="width:90px;padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px" onchange="aggiornaNomeCognome('\${info.ruoli[0]?.id}','cognome',this.value)"></td>
       <td style="max-width:280px">
         \${ruoliBadge}
         <br><div style="display:flex;gap:4px;margin-top:4px">
@@ -3616,7 +3628,7 @@ async function renderUtentiInline(){
     Ogni utente può avere più ruoli. I permessi vengono aggregati da tutti i ruoli assegnati. Il super_admin ha accesso completo a tutto.
   </div>
   <table style="margin-bottom:16px">
-    <thead><tr><th>User ID</th><th>Ruoli assegnati</th><th>Dal</th><th></th></tr></thead>
+    <thead><tr><th>User ID</th><th>Nome</th><th>Cognome</th><th>Ruoli assegnati</th><th>Dal</th><th></th></tr></thead>
     <tbody>\${rows||'<tr><td colspan="4" style="text-align:center;color:var(--mid);padding:16px">Nessun utente</td></tr>'}</tbody>
   </table>
   <div style="border-top:0.5px solid var(--border);padding-top:14px">
@@ -3727,6 +3739,13 @@ async function renderUtenti(){
 }
 
 // aggiornaRuolo mantenuto per compatibilità (non più usato direttamente)
+async function aggiornaNomeCognome(rigaId, campo, valore){
+  if(!rigaId) return;
+  const {error} = await sb.from('utenti_ruoli').update({[campo]:valore}).eq('id',rigaId);
+  if(error){ toast('Errore: '+error.message,'err'); return; }
+  toast('Aggiornato','ok');
+}
+
 async function aggiornaRuolo(id, ruolo){
   const {error} = await sb.from('utenti_ruoli').update({codice_ruolo:ruolo}).eq('id',id);
   if(error){toast('Errore: '+error.message,'err');return;}
