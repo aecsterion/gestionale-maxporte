@@ -1322,20 +1322,28 @@ let CFG_RIGHE = [];    // righe accumulate prima del salvataggio testata
 
 function resetCFG(){
   CFG = {
-    serie:null, modello:null, finitura:null,
+    serie:null, modello:null, finitura:null, colore_speciale:null,
     pannello_bugna:null, colore_alu:null, colore_pietra:null,
     tipo_vetro:null, apertura:null, senso:null,
+    serratura:null, cilindro:null, pomolino:null,
     larghezza:null, altezza:null, misura_custom:false,
     spessore:null, spalla:null, accessorio_telaio:null,
-    ferramenta:null, maniglia:null, quantita:1, note_riga:'',
+    ferramenta:null, maniglia:null, colore_maniglia:null,
+    quantita:1, note_riga:'',
     // prezzi componenti
     p_base:0, p_vetro:0, p_finitura:0, p_bugna:0,
     p_inserto:0, p_apertura:0, p_telaio:0, p_acc_telaio:0,
     p_ferramenta:0, p_maniglia:0, p_extra_incisioni:0,
+    p_serratura:0, p_cilindro:0, p_pomolino:0,
     // nomi per descrizione
     nome_serie:'', nome_modello:'', nome_finitura:'',
     nome_apertura:'', nome_colore_alu:'', nome_colore_pietra:'',
-    nome_tipo_vetro:'', nome_ferramenta:'', nome_maniglia:''
+    nome_tipo_vetro:'', nome_ferramenta:'', nome_maniglia:'',
+    nome_serratura:'', nome_cilindro:'', nome_pomolino:'',
+    nome_colore_maniglia:'',
+    // flags
+    _flags:{}, _richiede_cilindro:false, _richiede_pomolino:false, _maniglia_esclusa:false,
+    _vetroIncluso:false, _haExtraIncisioni:false
   };
 }
 resetCFG();
@@ -1344,7 +1352,8 @@ function cfgTotale(){
   return (CFG.p_base||0)+(CFG.p_vetro||0)+(CFG.p_finitura||0)+
     (CFG.p_bugna||0)+(CFG.p_inserto||0)+(CFG.p_apertura||0)+
     (CFG.p_telaio||0)+(CFG.p_acc_telaio||0)+
-    (CFG.p_ferramenta||0)+(CFG.p_maniglia||0)+(CFG.p_extra_incisioni||0);
+    (CFG.p_ferramenta||0)+(CFG.p_maniglia||0)+(CFG.p_extra_incisioni||0)+
+    (CFG.p_serratura||0)+(CFG.p_cilindro||0)+(CFG.p_pomolino||0);
 }
 
 function listino(){ return window._prevListino || 'A'; }
@@ -1383,13 +1392,18 @@ async function renderCfgStep(step){
   else if(step==='finitura') await cfgFinitura();
   else if(step==='opzioni') await cfgOpzioni();
   else if(step==='apertura') await cfgApertura();
+  else if(step==='serratura') await cfgSerratura();
+  else if(step==='cilindro') await cfgCilindro();
   else if(step==='misure') await cfgMisure();
   else if(step==='spessore') await cfgSpessore();
   else if(step==='ferramenta') await cfgFerramenta();
+  else if(step==='maniglia') await cfgManiglia();
+  else if(step==='colore_maniglia') await cfgColoreManiglia();
+  else if(step==='pomolino') await cfgPomolino();
   else if(step==='riepilogo') await cfgRiepilogo();
 }
 
-const CFG_STEPS = ['serie','modello','finitura','opzioni','apertura','misure','spessore','ferramenta','riepilogo'];
+const CFG_STEPS = ['serie','modello','finitura','opzioni','apertura','serratura','misure','spessore','ferramenta','maniglia','riepilogo'];
 const CFG_LABELS = {serie:'Serie',modello:'Modello',finitura:'Finitura',opzioni:'Opzioni',apertura:'Apertura',misure:'Misure',spessore:'Spessore muro',ferramenta:'Ferramenta',riepilogo:'Riepilogo'};
 
 function updateCfgStepper(current){
@@ -1781,7 +1795,7 @@ async function cfgSenso(sensi){
 
 async function selSenso(senso, desc){
   CFG.senso=senso;
-  await renderCfgStep('misure');
+  await renderCfgStep('serratura');
 }
 
 async function cfgMisure(){
@@ -1954,16 +1968,89 @@ function avanzaAFerramenta(){
   renderCfgStep('ferramenta');
 }
 
+async function cfgSerratura(){
+  const fam = CFG.apertura||'';
+  const {data:defaults} = await sb.from('apertura_serrature').select('codice_serratura,is_default').eq('codice_apertura',fam);
+  const codiciDisp = (defaults||[]).map(d=>d.codice_serratura);
+  const defaultSerr = (defaults||[]).find(d=>d.is_default)?.codice_serratura;
+  const {data:tutte} = await sb.from('tipi_serratura').select('*').eq('attiva',true).eq('is_automatica',false);
+  let serrature = (tutte||[]).filter(s=>{
+    if(!s.famiglie_apertura) return true;
+    const fams=s.famiglie_apertura.split(',').map(x=>x.trim());
+    return fams.some(f=>fam.startsWith(f)||fam.replace(/[0-9QAS]/g,'').trim().startsWith(f));
+  });
+  if(codiciDisp.length>0) serrature=serrature.filter(s=>codiciDisp.includes(s.codice));
+  if(!CFG.serratura&&defaultSerr){
+    const def=serrature.find(s=>s.codice===defaultSerr);
+    if(def){CFG.serratura=def.codice;CFG.nome_serratura=def.nome;CFG._serratura_obj=def;}
+  }
+  const cards=serrature.map(s=>{
+    const sp=s[\`sovrapprezzo_\${listino()}\`]||0;
+    const sel=CFG.serratura===s.codice;
+    const tags=[];
+    if(s.richiede_cilindro) tags.push('<span style="font-size:10px;background:var(--blue-bg);color:var(--blue-tx);padding:1px 5px;border-radius:3px">+ cilindro</span>');
+    if(s.richiede_pomolino) tags.push('<span style="font-size:10px;background:var(--amber-bg);color:var(--amber-tx);padding:1px 5px;border-radius:3px">+ pomolino se no maniglia</span>');
+    return \`<div onclick="selSerratura('\${s.codice}','\${s.nome.replace(/'/g,"\\'")}',\${sp},\${s.richiede_cilindro},\${s.richiede_pomolino})"
+      style="border:\${sel?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:10px 12px;cursor:pointer;background:\${sel?'var(--red-bg)':'var(--white)'}">
+      <div style="font-size:13px;font-weight:500;color:\${sel?'var(--red)':'var(--dark)'};margin-bottom:4px">\${s.nome}</div>
+      <div style="font-size:11px;color:var(--mid);margin-bottom:4px">\${s.descrizione||''}</div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap">\${tags.join('')}</div>
+      <div style="font-size:11px;color:var(--mid);margin-top:4px">\${sp>0?'+€'+sp:'Inclusa'}</div>
+    </div>\`;
+  }).join('');
+  document.getElementById('cfg-body').innerHTML=\`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:500">Serratura <span style="color:var(--mid);font-weight:400">— \${CFG.nome_apertura||''} \${CFG.senso||''}</span></div>
+      <button class="btn btn-sm" onclick="renderCfgStep('apertura')">← Indietro</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+      \${cards||'<p style="color:var(--mid);font-size:12px;grid-column:1/-1">Nessuna serratura configurata per questa apertura</p>'}
+    </div>\`;
+}
+
+async function selSerratura(cod,nome,sovr,richiede_cilindro,richiede_pomolino){
+  CFG.serratura=cod;CFG.nome_serratura=nome;CFG.p_serratura=sovr||0;
+  CFG._richiede_cilindro=richiede_cilindro;CFG._richiede_pomolino=richiede_pomolino;
+  cfgUpdatePrice();
+  await renderCfgStep(richiede_cilindro?'cilindro':'misure');
+}
+
+async function cfgCilindro(){
+  const fam=CFG.apertura||'';
+  const {data:tutti}=await sb.from('tipi_cilindro').select('*').eq('attivo',true).order('misura_mm');
+  const cilindri=(tutti||[]).filter(c=>{
+    if(!c.famiglie_apertura) return true;
+    return c.famiglie_apertura.split(',').map(x=>x.trim()).some(f=>fam.startsWith(f));
+  });
+  const cards=cilindri.map(c=>{
+    const sp=c[\`sovrapprezzo_\${listino()}\`]||0;
+    const sel=CFG.cilindro===c.codice;
+    return \`<div onclick="selCilindro('\${c.codice}','\${c.nome.replace(/'/g,"\\'")}',\${sp})"
+      style="border:\${sel?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:10px 12px;cursor:pointer;background:\${sel?'var(--red-bg)':'var(--white)'}">
+      <div style="font-size:13px;font-weight:500;color:\${sel?'var(--red)':'var(--dark)'}">\${c.nome}</div>
+      \${c.misura_mm?\`<div style="font-size:11px;color:var(--mid)">\${c.misura_mm}mm</div>\`:''}
+      \${c.fornitore?\`<div style="font-size:11px;color:var(--mid)">\${c.fornitore}</div>\`:''}
+      <div style="font-size:11px;color:var(--mid);margin-top:4px">\${sp>0?'+€'+sp:'Incluso'}</div>
+    </div>\`;
+  }).join('');
+  document.getElementById('cfg-body').innerHTML=\`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:500">Cilindro <span style="color:var(--mid);font-weight:400">— \${CFG.nome_serratura||''}</span></div>
+      <button class="btn btn-sm" onclick="renderCfgStep('serratura')">← Indietro</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+      \${cards||'<p style="color:var(--mid);font-size:12px;grid-column:1/-1">Nessun cilindro disponibile</p>'}
+    </div>\`;
+}
+
+function selCilindro(cod,nome,sovr){
+  CFG.cilindro=cod;CFG.nome_cilindro=nome;CFG.p_cilindro=sovr||0;
+  cfgUpdatePrice();renderCfgStep('misure');
+}
+
 async function cfgFerramenta(){
-  const [{data:tuttaFerr},{data:tutteMan}] = await Promise.all([
-    sb.from('ferramenta').select('*').eq('attivo',true).order('nome'),
-    sb.from('maniglie').select('*').eq('attivo',true).order('nome'),
-  ]);
-
-  // Applica filtro compatibilità
-  const ferr = await filtraPerCompatibilita(tuttaFerr||[], 'ferramenta', 'codice');
-  const man = await filtraPerCompatibilita(tutteMan||[], 'maniglia', 'codice');
-
+  const {data:tuttaFerr}=await sb.from('ferramenta').select('*').eq('attivo',true).order('nome');
+  const ferr=await filtraPerCompatibilita(tuttaFerr||[],'ferramenta','codice');
   const rowsFerr=(ferr||[]).map(f=>{
     const sp=f[\`sovrapprezzo_\${listino()}\`]||0;
     const hex=f.colore_hex||'CCCCCC';
@@ -1976,42 +2063,104 @@ async function cfgFerramenta(){
       </div>
     </div>\`;
   }).join('');
-
-  const rowsMan=(man||[]).map(m=>{
-    const pr=m[\`prezzo_\${listino()}\`]||0;
-    return \`<div onclick="selManiglia('\${m.codice}','\${m.nome.replace(/'/g,"\\\\'")}',\${pr})"
-      style="border:\${CFG.maniglia===m.codice?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:8px 10px;cursor:pointer;background:\${CFG.maniglia===m.codice?'var(--red-bg)':'var(--white)'}">
-      <div style="font-size:13px;font-weight:500;color:\${CFG.maniglia===m.codice?'var(--red)':'var(--dark)'}">\${m.nome}</div>
-      <div style="font-size:11px;color:var(--mid)">\${pr>0?'€ '+pr:'Inclusa'}</div>
-    </div>\`;
-  }).join('');
-
   document.getElementById('cfg-body').innerHTML=\`
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-      <div style="font-size:13px;font-weight:500">Ferramenta e maniglia</div>
+      <div style="font-size:13px;font-weight:500">Colore ferramenta</div>
       <button class="btn btn-sm" onclick="renderCfgStep('spessore')">← Indietro</button>
     </div>
-    <div style="margin-bottom:16px">
-      <div style="font-size:12px;font-weight:500;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.4px;color:var(--mid)">Colore ferramenta</div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">\${rowsFerr||'<p style="color:var(--mid);font-size:12px">Nessuna ferramenta configurata — aggiungila dal pannello admin</p>'}</div>
-    </div>
-    <div style="margin-bottom:16px">
-      <div style="font-size:12px;font-weight:500;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.4px;color:var(--mid)">Maniglia <span style="font-weight:400;text-transform:none">(opzionale)</span></div>
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">
-        <div onclick="CFG.maniglia=null;CFG.nome_maniglia='';CFG.p_maniglia=0;cfgFerramenta()" style="border:\${!CFG.maniglia?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:8px 10px;cursor:pointer;background:\${!CFG.maniglia?'var(--red-bg)':'var(--white)'}">
-          <div style="font-size:13px;font-weight:500">Senza maniglia</div>
-        </div>
-        \${rowsMan}
-      </div>
-    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:16px">\${rowsFerr||'<p style="color:var(--mid);font-size:12px">Nessuna ferramenta configurata</p>'}</div>
     <div style="display:flex;justify-content:flex-end">
-      <button class="btn btn-red btn-sm" onclick="renderCfgStep('riepilogo')">Riepilogo →</button>
+      <button class="btn btn-red btn-sm" onclick="renderCfgStep('maniglia')" \${!CFG.ferramenta?'disabled':''}>Avanti →</button>
     </div>\`;
   cfgUpdatePrice();
 }
 
-function selFerramenta(cod,nome,sovr){ CFG.ferramenta=cod;CFG.nome_ferramenta=nome;CFG.p_ferramenta=sovr; cfgUpdatePrice(); cfgFerramenta(); }
-function selManiglia(cod,nome,pr){ CFG.maniglia=cod;CFG.nome_maniglia=nome;CFG.p_maniglia=pr; cfgUpdatePrice(); cfgFerramenta(); }
+function selFerramenta(cod,nome,sovr){CFG.ferramenta=cod;CFG.nome_ferramenta=nome;CFG.p_ferramenta=sovr;cfgUpdatePrice();cfgFerramenta();}
+
+async function cfgManiglia(){
+  const {data:tutteMan}=await sb.from('maniglie').select('*').eq('attivo',true).order('nome');
+  const manAll=await filtraPerCompatibilita(tutteMan||[],'maniglia','codice');
+  let versioneFiltro=null;
+  if(CFG._richiede_cilindro) versioneFiltro='CILINDRO';
+  else if(CFG._richiede_pomolino) versioneFiltro='WC';
+  else if(!['WC','TIR','L-O'].includes(CFG.serratura)) versioneFiltro='CHIAVE';
+  const man=versioneFiltro?manAll.filter(m=>!m.versione||m.versione===versioneFiltro||m.codice==='NESSUNA'):manAll;
+  const rowsMan=man.map(m=>{
+    const pr=m[\`prezzo_\${listino()}\`]||0;
+    const sel=CFG.maniglia===m.codice;
+    return \`<div onclick="selManiglia('\${m.codice}','\${m.nome.replace(/'/g,"\\'")}',\${pr})"
+      style="border:\${sel?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:8px 10px;cursor:pointer;background:\${sel?'var(--red-bg)':'var(--white)'}">
+      <div style="font-size:12px;font-weight:500;color:\${sel?'var(--red)':'var(--dark)'}">\${m.nome}</div>
+      \${m.versione?\`<div style="font-size:10px;color:var(--mid)">\${m.versione}</div>\`:''}
+      <div style="font-size:11px;color:var(--mid);margin-top:2px">\${m.codice==='NESSUNA'?'—':pr>0?'da €'+pr:'Inclusa'}</div>
+    </div>\`;
+  }).join('');
+  document.getElementById('cfg-body').innerHTML=\`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:500">Maniglia\${versioneFiltro?\` <span style="font-size:11px;color:var(--mid);font-weight:400">vers. \${versioneFiltro}</span>\`:''}</div>
+      <button class="btn btn-sm" onclick="renderCfgStep('ferramenta')">← Indietro</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">\${rowsMan}</div>\`;
+}
+
+async function selManiglia(cod,nome,pr){
+  CFG.maniglia=cod;CFG.nome_maniglia=nome;CFG.p_maniglia=pr;
+  CFG._maniglia_esclusa=(cod==='NESSUNA');
+  cfgUpdatePrice();
+  if(cod==='NESSUNA'){
+    CFG.colore_maniglia=null;CFG.nome_colore_maniglia='';
+    await renderCfgStep(CFG._richiede_pomolino?'pomolino':'riepilogo');
+  } else {
+    await renderCfgStep('colore_maniglia');
+  }
+}
+
+async function cfgColoreManiglia(){
+  const {data:colori}=await sb.from('colori_maniglia').select('*').eq('codice_maniglia',CFG.maniglia).eq('attivo',true).order('nome_colore');
+  const cards=(colori||[]).map(c=>{
+    const sel=CFG.colore_maniglia===c.codice_colore;
+    const hex=c.colore_hex;
+    return \`<div onclick="selColoreManiglia('\${c.codice_colore}','\${c.nome_colore.replace(/'/g,"\\'")}',\${c.prezzo_maniglia||0})"
+      style="border:\${sel?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:8px 10px;cursor:pointer;background:\${sel?'var(--red-bg)':'var(--white)'}">
+      \${hex?\`<div style="width:100%;height:18px;border-radius:4px;background:#\${hex};border:0.5px solid rgba(0,0,0,0.1);margin-bottom:4px"></div>\`:''}
+      <div style="font-size:11px;font-weight:500;color:\${sel?'var(--red)':'var(--dark)'}">\${c.nome_colore}</div>
+      <div style="font-size:10px;color:var(--mid)">\${c.prezzo_maniglia>0?'€'+c.prezzo_maniglia:'Incluso'}</div>
+    </div>\`;
+  }).join('');
+  document.getElementById('cfg-body').innerHTML=\`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:500">Colore maniglia <span style="color:var(--mid);font-weight:400">— \${CFG.nome_maniglia||''}</span></div>
+      <button class="btn btn-sm" onclick="renderCfgStep('maniglia')">← Indietro</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">\${cards||'<p style="color:var(--mid);font-size:12px;grid-column:1/-1">Nessun colore disponibile</p>'}</div>\`;
+}
+
+async function selColoreManiglia(cod,nome,prezzo){
+  CFG.colore_maniglia=cod;CFG.nome_colore_maniglia=nome;CFG.p_maniglia=prezzo;
+  cfgUpdatePrice();await cfgRiepilogo();
+}
+
+async function cfgPomolino(){
+  const {data:pomolini}=await sb.from('pomolini_wc').select('*').eq('attivo',true);
+  const cards=(pomolini||[]).map(p=>{
+    const sel=CFG.pomolino===p.codice;
+    return \`<div onclick="selPomolino('\${p.codice}','\${p.nome.replace(/'/g,"\\'")}',\${p[\`prezzo_\${listino()}\`]||0})"
+      style="border:\${sel?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:10px 12px;cursor:pointer;background:\${sel?'var(--red-bg)':'var(--white)'}">
+      <div style="font-size:13px;font-weight:500;color:\${sel?'var(--red)':'var(--dark)'}">\${p.nome}</div>
+    </div>\`;
+  }).join('');
+  document.getElementById('cfg-body').innerHTML=\`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:500">Pomolino WC <span style="color:var(--mid);font-weight:400;font-size:12px">— maniglia esclusa</span></div>
+      <button class="btn btn-sm" onclick="renderCfgStep('maniglia')">← Indietro</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">\${cards||'<p style="color:var(--mid);font-size:12px">Nessun pomolino configurato</p>'}</div>\`;
+}
+
+function selPomolino(cod,nome,prezzo){
+  CFG.pomolino=cod;CFG.nome_pomolino=nome;CFG.p_pomolino=prezzo;
+  cfgUpdatePrice();cfgRiepilogo();
+}
 
 async function cfgRiepilogo(){
   const tot = cfgTotale();
