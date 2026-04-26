@@ -1684,6 +1684,7 @@ async function confColoreSpeciale(sovrVal, sovrTipo){
   await renderCfgStep(haOpzioni?'opzioni':'apertura');
 }
 
+async function cfgOpzioni(){
   const f = CFG._flags || {};
   
   // Se non ci sono opzioni disponibili, salta direttamente all'apertura
