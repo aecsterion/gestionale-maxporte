@@ -3072,7 +3072,14 @@ async function adminSerie(){
 // MODELLI
 async function adminModelli(){
   const {data:serie} = await sb.from('serie').select('codice,nome').order('nome');
-  const {data:modelli} = await sb.from('modelli').select('*,prezzi_modello(listino,prezzo_base,prezzo_vetro,vetro_incluso,ha_extra_incisioni,prezzo_extra_incisioni)').order('codice_serie').order('nome');
+  
+  // Filtro serie corrente
+  const serieFilter = document.getElementById('admin-modelli-serie-filter')?.value || serie?.[0]?.codice || '';
+  
+  const {data:modelli} = await sb.from('modelli')
+    .select('*,prezzi_modello(listino,prezzo_base,prezzo_vetro,vetro_incluso,ha_extra_incisioni,prezzo_extra_incisioni)')
+    .eq('codice_serie', serieFilter)
+    .order('nome');
 
   const rows=(modelli||[]).map(m=>{
     const pa=m.prezzi_modello?.find(p=>p.listino==='A');
@@ -3112,13 +3119,22 @@ async function adminModelli(){
     </tr>\`;
   }).join('');
 
-  document.getElementById('admin-sub').innerHTML=adminCard('Modelli',\`
+  const serieOpts = (serie||[]).map(s=>\`<option value="\${s.codice}" \${s.codice===serieFilter?'selected':''}>\${s.codice} — \${s.nome}</option>\`).join('');
+
+  document.getElementById('admin-sub').innerHTML=\`
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+    <label style="font-size:12px;color:var(--mid)">Serie:</label>
+    <select id="admin-modelli-serie-filter" onchange="adminModelli()" style="padding:5px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit">\${serieOpts}</select>
+    <span style="font-size:12px;color:var(--mid)">\${(modelli||[]).length} modelli</span>
+    <button class="btn btn-red btn-sm" onclick="nuovoModello('\${serieFilter}')">+ Aggiungi modello</button>
+  </div>
+  \${adminCard(\`Modelli — \${serieFilter}\`,\`
     <div style="font-size:11px;color:var(--mid);margin-bottom:8px">Flag cliccabili: <b>V</b>=vetro <b>P</b>=pannello/bugna <b>A</b>=inserto alluminio <b>I</b>=inserto pietra <b>T</b>=pantografatura</div>
     <div style="overflow-x:auto"><table>
       <thead><tr><th>Codice</th><th>Nome</th><th>Serie</th><th>Variante</th><th>Flag</th><th>Prezzo A</th><th>Prezzo P</th><th>Vetro A</th><th>Extra incis.</th><th>Img</th><th>Stato</th><th></th></tr></thead>
       <tbody>\${rows}</tbody>
-    </table></div>\`,
-    \`<button class="btn btn-red btn-sm" onclick="nuovoModello()">+ Aggiungi modello</button>\`);
+    </table></div>\`)}\`;
+}
 }
 
 async function toggleVetroIncluso(codModello, attualeIncluso){
@@ -3127,14 +3143,11 @@ async function toggleVetroIncluso(codModello, attualeIncluso){
   adminModelli();
 }
 
-async function nuovoModello(){
+async function nuovoModello(seriePreselezionata){
   const {data:serie} = await sb.from('serie').select('codice,nome').order('nome');
-  const opts=(serie||[]).map(s=>\`<option value="\${s.codice}">\${s.codice} — \${s.nome}</option>\`).join('');
   const cod=prompt('Codice modello (es. TAM-048):'); if(!cod) return;
   const nome=prompt('Nome modello:'); if(!nome) return;
-  const serieEl=document.createElement('select');
-  serieEl.innerHTML=opts;
-  const serie_cod = prompt('Codice serie ('+( serie||[]).map(s=>s.codice).join('/')+'):');
+  const serie_cod = seriePreselezionata || prompt('Codice serie ('+( serie||[]).map(s=>s.codice).join('/')+'):');
   if(!serie_cod) return;
   const {error}=await sb.from('modelli').insert([{codice:cod.toUpperCase(),nome,codice_serie:serie_cod.toUpperCase(),attivo:true}]);
   if(error){toast(msgErrore(error,cod),'err');return;}
