@@ -3135,7 +3135,6 @@ async function adminModelli(){
       <tbody>\${rows}</tbody>
     </table></div>\`)}\`;
 }
-}
 
 async function toggleVetroIncluso(codModello, attualeIncluso){
   await sb.from('prezzi_modello').update({vetro_incluso:!attualeIncluso}).eq('codice_modello',codModello);
