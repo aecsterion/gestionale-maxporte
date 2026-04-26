@@ -1617,9 +1617,18 @@ async function selFinitura(cod, nome, sovrVal, sovrTipo, consenteBugna){
 
 async function cfgColoreSpeciale(){
   const {data:specFin} = await sb.from('finiture')
-    .select('sovrapprezzo_a,sovrapprezzo_p')
+    .select('sovrapprezzo_a,sovrapprezzo_p,sovrapprezzo_pct_a,sovrapprezzo_pct_p')
     .eq('codice_serie',CFG.serie).eq('codice_finitura','SPECIALE').limit(1);
-  const sovr = specFin?.[0]?.[\`sovrapprezzo_\${listino().toLowerCase()}\`]||0;
+  const sf = specFin?.[0];
+  const lst = listino().toLowerCase();
+  const sovr_fisso = sf?.[\`sovrapprezzo_\${lst}\`]||0;
+  const sovr_pct = sf?.[\`sovrapprezzo_pct_\${lst}\`]||0;
+  const sovrTipo = sovr_pct > 0 ? 'pct' : 'fisso';
+  const sovrVal = sovr_pct > 0 ? sovr_pct : sovr_fisso;
+  const sovrLabel = sovrVal===0?'Incluso nel prezzo base'
+    : sovrTipo==='pct'?\`<strong>Sovrapprezzo: +\${sovrVal}% sul prezzo base</strong>\`
+    : \`<strong>Sovrapprezzo: +€\${sovrVal}</strong>\`;
+
   const valoreCorrente = CFG.colore_speciale||'';
   const sistemaCorrente = valoreCorrente.startsWith('NCS')?'NCS':valoreCorrente.startsWith('PANTONE')?'PANTONE':'RAL';
   const codiceCorrente = valoreCorrente.replace(/^(RAL|NCS|PANTONE)\\s*/i,'');
@@ -1630,8 +1639,7 @@ async function cfgColoreSpeciale(){
       <button class="btn btn-sm" onclick="renderCfgStep('finitura')">← Indietro</button>
     </div>
     <div style="background:var(--blue-bg);border-radius:var(--radius);padding:12px 14px;font-size:12px;color:var(--blue-tx);margin-bottom:20px">
-      Inserisci il codice del colore speciale. Verrà riportato esattamente su preventivo e conferma d'ordine.
-      \${sovr>0?\`<br><strong>Sovrapprezzo: +€\${sovr}</strong>\`:''}
+      Inserisci il codice del colore speciale. Verrà riportato esattamente su preventivo e conferma d'ordine.<br>\${sovrLabel}
     </div>
     <div style="display:flex;gap:12px;align-items:flex-end;margin-bottom:16px">
       <div style="flex:0 0 160px">
@@ -1652,39 +1660,30 @@ async function cfgColoreSpeciale(){
     </div>
     <div id="cfg-spec-preview" style="margin-bottom:20px;min-height:36px"></div>
     <div style="display:flex;justify-content:flex-end">
-      <button class="btn btn-red btn-sm" onclick="confColoreSpeciale(\${sovr})">Conferma colore →</button>
+      <button class="btn btn-red btn-sm" onclick="confColoreSpeciale(\${sovrVal},'\${sovrTipo}')">Conferma colore →</button>
     </div>\`;
-
   if(codiceCorrente) aggiornaPreviewColoreSpec();
 }
 
-function aggiornaPreviewColoreSpec(){
-  const sistema = document.getElementById('cfg-spec-sistema')?.value||'RAL';
-  const codice = document.getElementById('cfg-spec-codice')?.value?.trim()||'';
-  const preview = document.getElementById('cfg-spec-preview');
-  if(!preview) return;
-  preview.innerHTML = codice ? \`<div style="display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:var(--radius);background:var(--beige);border:0.5px solid var(--border)">
-    <span style="font-size:11px;font-weight:600;color:var(--mid)">\${sistema}</span>
-    <span style="font-size:15px;font-weight:500;color:var(--dark)">\${codice}</span>
-  </div>\` : '';
-}
-
-async function confColoreSpeciale(sovr){
+async function confColoreSpeciale(sovrVal, sovrTipo){
   const sistema = document.getElementById('cfg-spec-sistema')?.value||'RAL';
   const codice = document.getElementById('cfg-spec-codice')?.value?.trim()||'';
   if(!codice){ toast('Inserisci il codice colore','err'); return; }
   CFG.finitura='SPECIALE';
   CFG.nome_finitura=\`Colore speciale \${sistema} \${codice}\`;
-  CFG.p_finitura=sovr;
   CFG.colore_speciale=\`\${sistema} \${codice}\`;
   CFG._consenteBugna=false;
+  if(sovrTipo==='pct'){
+    CFG._finitura_pct=sovrVal; CFG._finitura_fisso=0; CFG.p_finitura=0;
+  } else {
+    CFG._finitura_pct=0; CFG._finitura_fisso=sovrVal; CFG.p_finitura=sovrVal;
+  }
   cfgUpdatePrice();
   const f = CFG._flags||{};
   const haOpzioni = f.ha_vetro||f.ha_pannello_o_bugna||f.ha_inserto_alluminio||f.ha_inserto_pietra||f.ha_pantografatura;
   await renderCfgStep(haOpzioni?'opzioni':'apertura');
 }
 
-async function cfgOpzioni(){
   const f = CFG._flags || {};
   
   // Se non ci sono opzioni disponibili, salta direttamente all'apertura
