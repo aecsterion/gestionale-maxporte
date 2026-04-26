@@ -3074,7 +3074,8 @@ async function adminModelli(){
   const {data:serie} = await sb.from('serie').select('codice,nome').order('nome');
   
   // Filtro serie corrente
-  const serieFilter = document.getElementById('admin-modelli-serie-filter')?.value || serie?.[0]?.codice || '';
+  const serieFilter = window._adminModelliSerie || document.getElementById('admin-modelli-serie-filter')?.value || serie?.[0]?.codice || '';
+  window._adminModelliSerie = serieFilter;
   
   const {data:modelli} = await sb.from('modelli')
     .select('*,prezzi_modello(listino,prezzo_base,prezzo_vetro,vetro_incluso,ha_extra_incisioni,prezzo_extra_incisioni)')
@@ -3124,7 +3125,7 @@ async function adminModelli(){
   document.getElementById('admin-sub').innerHTML=\`
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
     <label style="font-size:12px;color:var(--mid)">Serie:</label>
-    <select id="admin-modelli-serie-filter" onchange="adminModelli()" style="padding:5px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit">\${serieOpts}</select>
+    <select id="admin-modelli-serie-filter" onchange="window._adminModelliSerie=this.value;adminModelli()" style="padding:5px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit">\${serieOpts}</select>
     <span style="font-size:12px;color:var(--mid)">\${(modelli||[]).length} modelli</span>
     <button class="btn btn-red btn-sm" onclick="nuovoModello('\${serieFilter}')">+ Aggiungi modello</button>
   </div>
