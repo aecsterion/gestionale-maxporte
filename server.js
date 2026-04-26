@@ -3249,7 +3249,6 @@ async function adminFiniture(){
     <tbody>\${rows}</tbody>
   </table></div>\`)}\`;
 }
-}
 
 async function nuovaFinitura(serieFilter){
   const cod=prompt('Codice finitura:'); if(!cod) return;
