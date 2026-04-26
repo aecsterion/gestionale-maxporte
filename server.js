@@ -1747,6 +1747,8 @@ async function cfgApertura(){
 }
 
 async function selApertura(cod, nome, logica, sovr, doppio, magg){
+  // Reset serratura quando cambia apertura
+  CFG.serratura=null; CFG.nome_serratura=''; CFG.cilindro=null; CFG.nome_cilindro='';
   CFG.apertura=cod; CFG.nome_apertura=nome;
   CFG._logicaApertura=logica; CFG._maggApertura=magg; CFG._doppioApertura=doppio;
   if(logica==='fisso') CFG.p_apertura=sovr;
@@ -2081,32 +2083,65 @@ async function cfgFerramenta(){
   cfgUpdatePrice();
 }
 
-function selFerramenta(cod,nome,sovr){CFG.ferramenta=cod;CFG.nome_ferramenta=nome;CFG.p_ferramenta=sovr;cfgUpdatePrice();cfgFerramenta();}
+function selFerramenta(cod,nome,sovr){CFG.ferramenta=cod;CFG.nome_ferramenta=nome;CFG.p_ferramenta=sovr;cfgUpdatePrice();renderCfgStep('maniglia');}
 
 async function cfgManiglia(){
+  const isScorrevole = CFG.apertura==='SI'||CFG.apertura==='SE'||
+    (CFG.apertura||'').startsWith('SI')||(CFG.apertura||'').startsWith('SE');
+
+  // Carica maniglie filtrate per tipologia apertura
   const {data:tutteMan}=await sb.from('maniglie').select('*').eq('attivo',true).order('nome');
   const manAll=await filtraPerCompatibilita(tutteMan||[],'maniglia','codice');
+
+  // Filtra per versione in base alla serratura
   let versioneFiltro=null;
   if(CFG._richiede_cilindro) versioneFiltro='CILINDRO';
-  else if(CFG._richiede_pomolino) versioneFiltro='WC';
-  else if(!['WC','TIR','L-O'].includes(CFG.serratura)) versioneFiltro='CHIAVE';
-  const man=versioneFiltro?manAll.filter(m=>!m.versione||m.versione===versioneFiltro||m.codice==='NESSUNA'):manAll;
+  else if(CFG.serratura==='L-O'||CFG.serratura==='WC'||CFG._richiede_pomolino) versioneFiltro='WC';
+  else if(CFG.serratura==='TIR') versioneFiltro=null;
+  else versioneFiltro='CHIAVE';
+
+  // Filtra per tipo apertura: scorrevoli vs battenti
+  // Le maniglie scorrevoli hanno serie_compatibili che contiene 'SCOR' o simile
+  // Per semplicità: filtra per versione e lascia che la compatibilità faccia il resto
+  let man = manAll.filter(m=>{
+    if(m.codice==='NESSUNA') return true;
+    // Filtro versione
+    if(versioneFiltro && m.versione && m.versione!==versioneFiltro) return false;
+    // Filtro scorrevoli/battenti tramite serie_compatibili
+    if(m.serie_compatibili){
+      const serieComp = m.serie_compatibili.toUpperCase();
+      const hasScor = serieComp.includes('SCOR')||serieComp.includes('SI')||serieComp.includes('SE');
+      const hasBat = !hasScor; // se non ha flag scorrevole è per battenti
+      if(isScorrevole && !hasScor) return false;
+      if(!isScorrevole && hasScor) return false;
+    }
+    return true;
+  });
+
+  // NESSUNA sempre prima
+  const nessuna = man.filter(m=>m.codice==='NESSUNA');
+  const resto = man.filter(m=>m.codice!=='NESSUNA');
+  man = [...nessuna, ...resto];
+
   const rowsMan=man.map(m=>{
     const pr=m[\`prezzo_\${listino()}\`]||0;
     const sel=CFG.maniglia===m.codice;
+    const isNessuna=m.codice==='NESSUNA';
     return \`<div onclick="selManiglia('\${m.codice}','\${m.nome.replace(/'/g,"\\'")}',\${pr})"
       style="border:\${sel?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:8px 10px;cursor:pointer;background:\${sel?'var(--red-bg)':'var(--white)'}">
-      <div style="font-size:12px;font-weight:500;color:\${sel?'var(--red)':'var(--dark)'}">\${m.nome}</div>
-      \${m.versione?\`<div style="font-size:10px;color:var(--mid)">\${m.versione}</div>\`:''}
-      <div style="font-size:11px;color:var(--mid);margin-top:2px">\${m.codice==='NESSUNA'?'—':pr>0?'da €'+pr:'Inclusa'}</div>
+      \${isNessuna?'<div style="font-size:12px;font-weight:500;color:var(--mid)">⊘ Senza maniglia</div><div style="font-size:10px;color:var(--mid)">non fornita da Max Porte</div>':''}
+      \${!isNessuna?\`<div style="font-size:12px;font-weight:500;color:\${sel?'var(--red)':'var(--dark)'}">\${m.nome}</div>\`:''}
+      \${!isNessuna&&m.versione?\`<div style="font-size:10px;color:var(--mid)">\${m.versione}</div>\`:''}
+      \${!isNessuna?\`<div style="font-size:11px;color:var(--mid);margin-top:2px">\${pr>0?'da €'+pr:'Inclusa'}</div>\`:''}
     </div>\`;
   }).join('');
+
   document.getElementById('cfg-body').innerHTML=\`
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-      <div style="font-size:13px;font-weight:500">Maniglia\${versioneFiltro?\` <span style="font-size:11px;color:var(--mid);font-weight:400">vers. \${versioneFiltro}</span>\`:''}</div>
+      <div style="font-size:13px;font-weight:500">Maniglia\${versioneFiltro?\` <span style="font-size:11px;color:var(--mid);font-weight:400">— vers. \${versioneFiltro}</span>\`:''}</div>
       <button class="btn btn-sm" onclick="renderCfgStep('ferramenta')">← Indietro</button>
     </div>
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">\${rowsMan}</div>\`;
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">\${rowsMan||'<p style="color:var(--mid);font-size:12px;grid-column:1/-1">Nessuna maniglia disponibile</p>'}</div>\`;
 }
 
 async function selManiglia(cod,nome,pr){
