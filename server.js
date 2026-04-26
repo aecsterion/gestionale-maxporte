@@ -3753,7 +3753,6 @@ async function adminCompatibilita(){
     })(), codKey:'codice_finitura', nameKey:'nome_finitura'},
     apertura: {label:'Apertura',   items:aperture||[], codKey:'codice',nameKey:'nome'},
     ferramenta:{label:'Ferramenta',items:ferramenta||[],codKey:'codice',nameKey:'nome'},
-    maniglia: {label:'Maniglia',   items:maniglie||[], codKey:'codice',nameKey:'nome'},
     vetro:    {label:'Vetro',      items:vetri||[],    codKey:'codice',nameKey:'nome'},
     inserto_alu:{label:'Inserto alluminio',items:alu||[],codKey:'codice',nameKey:'nome'},
     inserto_pietra:{label:'Inserto pietra',items:pietra||[],codKey:'codice',nameKey:'nome'},
