@@ -2137,7 +2137,7 @@ async function cfgManiglia(){
 
   document.getElementById('cfg-body').innerHTML=\`
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-      <div style="font-size:13px;font-weight:500">Maniglia\${versioneFiltro?\` <span style="font-size:11px;color:var(--mid);font-weight:400">— vers. \${versioneFiltro}</span>\`:''}</div>
+      <div style="font-size:13px;font-weight:500">Maniglia<span style="font-size:11px;color:var(--mid);font-weight:400"> — \${isScorrevole?'Scorrevole':isLibro?'Libro':'vers. '+[...versioniAmmesse].join('/')}</span></div>
       <button class="btn btn-sm" onclick="renderCfgStep('ferramenta')">← Indietro</button>
     </div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">\${rowsMan||'<p style="color:var(--mid);font-size:12px;grid-column:1/-1">Nessuna maniglia disponibile</p>'}</div>\`;
