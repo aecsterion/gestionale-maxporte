@@ -1346,15 +1346,20 @@ function resetCFG(){
     nome_colore_maniglia:'',
     // flags
     _flags:{}, _richiede_cilindro:false, _richiede_pomolino:false, _maniglia_esclusa:false,
-    _vetroIncluso:false, _haExtraIncisioni:false
+    _vetroIncluso:false, _haExtraIncisioni:false, _finitura_pct:0, _finitura_fisso:0
   };
 }
 resetCFG();
 
 function cfgTotale(){
-  return (CFG.p_base||0)+(CFG.p_vetro||0)+(CFG.p_finitura||0)+
-    (CFG.p_bugna||0)+(CFG.p_inserto||0)+(CFG.p_apertura||0)+
-    (CFG.p_telaio||0)+(CFG.p_acc_telaio||0)+
+  // Se la finitura è a percentuale, calcolala sul prezzo base
+  let p_fin = CFG.p_finitura||0;
+  if((CFG._finitura_pct||0) > 0 && (CFG.p_base||0) > 0){
+    p_fin = (CFG.p_base * CFG._finitura_pct / 100);
+  }
+  return (CFG.p_base||0)+(p_fin)+
+    (CFG.p_vetro||0)+(CFG.p_bugna||0)+(CFG.p_inserto||0)+
+    (CFG.p_apertura||0)+(CFG.p_telaio||0)+(CFG.p_acc_telaio||0)+
     (CFG.p_ferramenta||0)+(CFG.p_maniglia||0)+(CFG.p_extra_incisioni||0)+
     (CFG.p_serratura||0)+(CFG.p_cilindro||0)+(CFG.p_pomolino||0);
 }
@@ -1530,21 +1535,50 @@ async function cfgFinitura(){
     .eq('codice_serie',CFG.serie)
     .or(\`codice_modello.is.null,codice_modello.eq.\${CFG.modello}\`)
     .eq('attiva',true)
-    .order('nome_finitura');
+    .order('fascia').order('nome_finitura');
 
   const tutteNoSpec = (tutteFiniture||[]).filter(f=>f.codice_finitura!=='SPECIALE');
   const hasSpeciale = (tutteFiniture||[]).some(f=>f.codice_finitura==='SPECIALE');
   const data = await filtraPerCompatibilita(tutteNoSpec, 'finitura', 'codice_finitura');
 
-  const cards=(data||[]).map(f=>{
-    const sp = f[\`sovrapprezzo_\${listino().toLowerCase()}\`]||0;
-    const sel = CFG.finitura===f.codice_finitura && !CFG.colore_speciale;
-    return \`<div onclick="selFinitura('\${f.codice_finitura}','\${f.nome_finitura.replace(/'/g,"\\'")}',\${sp},\${!!f.consente_bugna})"
-      style="border:\${sel?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:10px 12px;cursor:pointer;background:\${sel?'var(--red-bg)':'var(--white)'}">
-      <div style="font-size:13px;font-weight:500;color:\${sel?'var(--red)':'var(--dark)'}">\${f.nome_finitura}</div>
-      <div style="font-size:11px;color:var(--mid);margin-top:2px">\${sp>0?'+€'+sp:'Inclusa'}</div>
-    </div>\`;
-  }).join('');
+  function calcSovr(f){
+    const pct = f[\`sovrapprezzo_pct_\${listino().toLowerCase()}\`]||0;
+    const fisso = f[\`sovrapprezzo_\${listino().toLowerCase()}\`]||0;
+    if(pct > 0) return {tipo:'pct', val:pct};
+    return {tipo:'fisso', val:fisso};
+  }
+
+  // Raggruppa per fascia
+  const fasce = [];
+  const fasciaMap = {};
+  data.forEach(f=>{
+    const fascia = f.fascia||'';
+    if(!fasciaMap[fascia]){ fasciaMap[fascia]=[]; fasce.push(fascia); }
+    fasciaMap[fascia].push(f);
+  });
+
+  const fasciaStyle = {
+    'MP CLASSIC': {bg:'var(--beige2)',tx:'var(--dark)',icon:'⬜'},
+    'MP LIGHT':   {bg:'#E8F4FD',tx:'#1A5276',icon:'🔵'},
+    'MP PREMIUM': {bg:'#FDF3E7',tx:'#784212',icon:'🟡'},
+    '': {bg:'transparent',tx:'var(--mid)',icon:''},
+  };
+
+  let html = '';
+  fasce.forEach(fascia=>{
+    const st = fasciaStyle[fascia]||fasciaStyle[''];
+    if(fascia) html += \`<div style="grid-column:1/-1;padding:6px 10px;border-radius:var(--radius);background:\${st.bg};color:\${st.tx};font-size:11px;font-weight:600;letter-spacing:0.5px;margin-top:4px">\${st.icon} \${fascia}</div>\`;
+    fasciaMap[fascia].forEach(f=>{
+      const {tipo, val} = calcSovr(f);
+      const sel = CFG.finitura===f.codice_finitura && !CFG.colore_speciale;
+      const prezzLabel = val===0?'Inclusa':tipo==='pct'?\`+\${val}% sul prezzo base\`:\`+€\${val}\`;
+      html += \`<div onclick="selFinitura('\${f.codice_finitura}','\${f.nome_finitura.replace(/'/g,"\\'")}',\${val},'\${tipo}',\${!!f.consente_bugna})"
+        style="border:\${sel?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:10px 12px;cursor:pointer;background:\${sel?'var(--red-bg)':'var(--white)'}">
+        <div style="font-size:13px;font-weight:500;color:\${sel?'var(--red)':'var(--dark)'}">\${f.nome_finitura}</div>
+        <div style="font-size:11px;color:var(--mid);margin-top:2px">\${prezzLabel}</div>
+      </div>\`;
+    });
+  });
 
   const specCard = hasSpeciale ? \`
     <div onclick="renderCfgStep('colore_speciale')"
@@ -1564,14 +1598,18 @@ async function cfgFinitura(){
       <button class="btn btn-sm" onclick="renderCfgStep('modello')">← Cambia modello</button>
     </div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;max-height:calc(60vh);overflow-y:auto">
-      \${cards}\${specCard}
+      \${html}\${specCard}
     </div>\`;
 }
 
-async function selFinitura(cod, nome, sovr, consenteBugna){
-  CFG.finitura=cod; CFG.nome_finitura=nome; CFG.p_finitura=sovr;
+async function selFinitura(cod, nome, sovrVal, sovrTipo, consenteBugna){
+  CFG._finitura_pct = sovrTipo==='pct' ? sovrVal : 0;
+  CFG._finitura_fisso = sovrTipo==='fisso' ? sovrVal : 0;
+  CFG.p_finitura = sovrTipo==='pct' ? 0 : (sovrVal||0); // pct calcolata in cfgUpdatePrice
+  CFG.finitura=cod; CFG.nome_finitura=nome;
   CFG._consenteBugna=consenteBugna;
   CFG.colore_speciale=null;
+  cfgUpdatePrice();
   const f = CFG._flags||{};
   const haOpzioni = f.ha_vetro||f.ha_pannello_o_bugna||f.ha_inserto_alluminio||f.ha_inserto_pietra||f.ha_pantografatura;
   await renderCfgStep(haOpzioni?'opzioni':'apertura');
@@ -3160,34 +3198,57 @@ async function nuovoModello(seriePreselezionata){
 // FINITURE
 async function adminFiniture(){
   const {data:serie} = await sb.from('serie').select('codice').order('codice');
-  const serieFilter = document.getElementById('admin-serie-filter')?.value || 'TAM';
+  const serieFilter = window._adminFinSerie || document.getElementById('admin-serie-filter')?.value || 'TAM';
+  window._adminFinSerie = serieFilter;
 
-  const {data} = await sb.from('finiture').select('*').eq('codice_serie',serieFilter).order('nome_finitura');
+  const {data} = await sb.from('finiture').select('*').eq('codice_serie',serieFilter).order('fascia').order('nome_finitura');
   const serieOpts=(serie||[]).map(s=>\`<option value="\${s.codice}" \${s.codice===serieFilter?'selected':''}>\${s.codice}</option>\`).join('');
+
+  // Serie laccate che usano fascia e pct
+  const isLaccata = ['LAC','GEO','GL','JAD','ACC','PAN-BL'].includes(serieFilter);
 
   const rows=(data||[]).map(f=>\`<tr>
     <td>\${inlineInput(f.codice_finitura,\`adminSalva('finiture','\${f.id}','codice_finitura',this.value)\`,'60px','text')}</td>
     <td>\${inlineInput(f.nome_finitura,\`adminSalva('finiture','\${f.id}','nome_finitura',this.value)\`,'150px','text')}</td>
     <td>\${inlineInput(f.codice_modello||'',\`adminSalva('finiture','\${f.id}','codice_modello',this.value)\`,'70px','text','Tutti')}</td>
-    <td>\${inlineInput(f.sovrapprezzo_a??0,\`adminSalva('finiture','\${f.id}','sovrapprezzo_a',this.value)\`,'65px')}</td>
-    <td>\${inlineInput(f.sovrapprezzo_p??0,\`adminSalva('finiture','\${f.id}','sovrapprezzo_p',this.value)\`,'65px')}</td>
+    \${isLaccata?\`<td>
+      <select onchange="adminSalva('finiture','\${f.id}','fascia',this.value);window._adminFinSerie='\${serieFilter}';adminFiniture();"
+        style="padding:3px 6px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:11px;font-family:inherit">
+        <option value="" \${!f.fascia?'selected':''}>— nessuna —</option>
+        <option value="MP CLASSIC" \${f.fascia==='MP CLASSIC'?'selected':''}>MP CLASSIC</option>
+        <option value="MP LIGHT" \${f.fascia==='MP LIGHT'?'selected':''}>MP LIGHT</option>
+        <option value="MP PREMIUM" \${f.fascia==='MP PREMIUM'?'selected':''}>MP PREMIUM</option>
+      </select>
+    </td>
+    <td>\${inlineInput(f.sovrapprezzo_a??0,\`adminSalva('finiture','\${f.id}','sovrapprezzo_a',this.value)\`,'60px','number','€ fisso A')}</td>
+    <td>\${inlineInput(f.sovrapprezzo_p??0,\`adminSalva('finiture','\${f.id}','sovrapprezzo_p',this.value)\`,'60px','number','€ fisso P')}</td>
+    <td>\${inlineInput(f.sovrapprezzo_pct_a??0,\`adminSalva('finiture','\${f.id}','sovrapprezzo_pct_a',this.value)\`,'55px','number','% A')}</td>
+    <td>\${inlineInput(f.sovrapprezzo_pct_p??0,\`adminSalva('finiture','\${f.id}','sovrapprezzo_pct_p',this.value)\`,'55px','number','% P')}</td>\`
+    :\`<td>\${inlineInput(f.sovrapprezzo_a??0,\`adminSalva('finiture','\${f.id}','sovrapprezzo_a',this.value)\`,'65px','number')}</td>
+    <td>\${inlineInput(f.sovrapprezzo_p??0,\`adminSalva('finiture','\${f.id}','sovrapprezzo_p',this.value)\`,'65px','number')}</td>\`}
     <td><span class="badge \${f.consente_bugna?'bg':'br'}" style="cursor:pointer" onclick="toggleCampo('finiture','\${f.id}','consente_bugna',\${f.consente_bugna})">\${f.consente_bugna?'Sì':'No'}</span></td>
-    <td>\${inlineInput(f.sovrapprezzo_bugna_A??0,\`adminSalva('finiture','\${f.id}','sovrapprezzo_bugna_A',this.value)\`,'65px')}</td>
-    <td>\${inlineInput(f.sovrapprezzo_bugna_P??0,\`adminSalva('finiture','\${f.id}','sovrapprezzo_bugna_P',this.value)\`,'65px')}</td>
+    <td>\${inlineInput(f.sovrapprezzo_bugna_a??0,\`adminSalva('finiture','\${f.id}','sovrapprezzo_bugna_a',this.value)\`,'55px','number')}</td>
+    <td>\${inlineInput(f.sovrapprezzo_bugna_p??0,\`adminSalva('finiture','\${f.id}','sovrapprezzo_bugna_p',this.value)\`,'55px','number')}</td>
     <td>\${adminToggle(f.attiva,\`toggleCampo('finiture','\${f.id}','attiva',\${f.attiva})\`)}</td>
     <td><button onclick="eliminaRigaAdmin('finiture','\${f.id}','adminFiniture')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px" title="Elimina">×</button></td>
   </tr>\`).join('');
 
+  const theadLaccata = isLaccata
+    ? '<th>Fascia</th><th>Sovr.€ A</th><th>Sovr.€ P</th><th>Sovr.% A</th><th>Sovr.% P</th>'
+    : '<th>Sovr.A</th><th>Sovr.P</th>';
+
   document.getElementById('admin-sub').innerHTML=\`
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
     <label style="font-size:12px;color:var(--mid)">Serie:</label>
-    <select id="admin-serie-filter" onchange="adminFiniture()" style="padding:5px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit">\${serieOpts}</select>
+    <select id="admin-serie-filter" onchange="window._adminFinSerie=this.value;adminFiniture()" style="padding:5px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit">\${serieOpts}</select>
+    <span style="font-size:12px;color:var(--mid)">\${(data||[]).length} finiture</span>
     <button class="btn btn-red btn-sm" onclick="nuovaFinitura('\${serieFilter}')">+ Aggiungi finitura</button>
   </div>
-  \${adminCard('Finiture',\`<div style="overflow-x:auto"><table>
-    <thead><tr><th>Codice</th><th>Nome</th><th>Modello</th><th>Sovr.A</th><th>Sovr.P</th><th>Bugna</th><th>Bugna A</th><th>Bugna P</th><th>Stato</th><th></th></tr></thead>
+  \${adminCard(\`Finiture — \${serieFilter}\`,\`<div style="overflow-x:auto"><table>
+    <thead><tr><th>Codice</th><th>Nome</th><th>Modello</th>\${theadLaccata}<th>Bugna</th><th>Bugna A</th><th>Bugna P</th><th>Stato</th><th></th></tr></thead>
     <tbody>\${rows}</tbody>
   </table></div>\`)}\`;
+}
 }
 
 async function nuovaFinitura(serieFilter){
