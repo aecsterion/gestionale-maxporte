@@ -3228,9 +3228,9 @@ async function adminSerrature(){
     <td>\${inlineInput(s.nome,\`adminSalva('tipi_serratura','\${s.id}','nome',this.value)\`,'180px','text')}</td>
     <td>\${inlineInput(s.famiglie_apertura||'',\`adminSalva('tipi_serratura','\${s.id}','famiglie_apertura',this.value)\`,'160px','text','es. BAT,CS,LIBRO')}</td>
     <td>\${inlineInput(s.descrizione||'',\`adminSalva('tipi_serratura','\${s.id}','descrizione',this.value)\`,'160px','text')}</td>
-    <td><span style="cursor:pointer" onclick="toggleCampo('tipi_serratura','\${s.id}','richiede_cilindro',\${s.richiede_cilindro})">\${adminToggle(s.richiede_cilindro,'')}</span></td>
-    <td><span style="cursor:pointer" onclick="toggleCampo('tipi_serratura','\${s.id}','richiede_pomolino',\${s.richiede_pomolino})">\${adminToggle(s.richiede_pomolino,'')}</span></td>
-    <td><span style="cursor:pointer" onclick="toggleCampo('tipi_serratura','\${s.id}','is_automatica',\${s.is_automatica})">\${adminToggle(s.is_automatica,'')}</span></td>
+    <td><span style="cursor:pointer" onclick="toggleCampo('tipi_serratura','\${s.id}','richiede_cilindro',\${s.richiede_cilindro})">\${s.richiede_cilindro?'<span class="badge bg">Sì</span>':'<span class="badge br">No</span>'}</span></td>
+    <td><span style="cursor:pointer" onclick="toggleCampo('tipi_serratura','\${s.id}','richiede_pomolino',\${s.richiede_pomolino})">\${s.richiede_pomolino?'<span class="badge bg">Sì</span>':'<span class="badge br">No</span>'}</span></td>
+    <td><span style="cursor:pointer" onclick="toggleCampo('tipi_serratura','\${s.id}','is_automatica',\${s.is_automatica})">\${s.is_automatica?'<span class="badge bg">Sì</span>':'<span class="badge br">No</span>'}</span></td>
     <td>\${inlineInput(s.sovrapprezzo_A??0,\`adminSalva('tipi_serratura','\${s.id}','sovrapprezzo_A',this.value)\`,'65px')}</td>
     <td>\${inlineInput(s.sovrapprezzo_P??0,\`adminSalva('tipi_serratura','\${s.id}','sovrapprezzo_P',this.value)\`,'65px')}</td>
     <td>\${adminToggle(s.attiva,\`toggleCampo('tipi_serratura','\${s.id}','attiva',\${s.attiva})\`)}</td>
@@ -3723,7 +3723,8 @@ async function adminCompatibilita(){
   // Carica tutte le entità disponibili per i menu
   const [
     {data:serie},{data:modelli},{data:finiture},{data:aperture},
-    {data:ferramenta},{data:maniglie},{data:vetri},{data:alu},{data:pietra},
+    {data:ferramenta},{data:vetri},{data:alu},{data:pietra},
+    {data:serratureC},{data:maniglie2},
     {data:regole}
   ] = await Promise.all([
     sb.from('serie').select('codice,nome').eq('attiva',true).order('nome'),
@@ -3731,7 +3732,6 @@ async function adminCompatibilita(){
     sb.from('finiture').select('codice_finitura,nome_finitura').order('nome_finitura'),
     sb.from('tipologie_apertura').select('codice,nome').eq('attiva',true).order('codice'),
     sb.from('ferramenta').select('codice,nome').eq('attivo',true).order('nome'),
-    sb.from('maniglie').select('codice,nome').eq('attivo',true).order('nome'),
     sb.from('tipi_vetro').select('codice,nome').eq('attivo',true).order('nome'),
     sb.from('colori_inserto_alluminio').select('codice,nome').order('nome'),
     sb.from('colori_pietra').select('codice,nome').order('nome'),
@@ -3758,7 +3758,7 @@ async function adminCompatibilita(){
     inserto_alu:{label:'Inserto alluminio',items:alu||[],codKey:'codice',nameKey:'nome'},
     inserto_pietra:{label:'Inserto pietra',items:pietra||[],codKey:'codice',nameKey:'nome'},
     serratura:{label:'Serratura',items:serratureC||[],codKey:'codice',nameKey:'nome'},
-    maniglia:{label:'Maniglia',items:maniglie||[],codKey:'codice',nameKey:'nome'},
+    maniglia:{label:'Maniglia',items:maniglie2||[],codKey:'codice',nameKey:'nome'},
   };
 
   // Stato filtri correnti
