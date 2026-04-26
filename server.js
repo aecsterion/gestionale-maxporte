@@ -1971,25 +1971,32 @@ function avanzaAFerramenta(){
 async function cfgSerratura(){
   const fam = CFG.apertura||'';
   const {data:defaults} = await sb.from('apertura_serrature').select('codice_serratura,is_default').eq('codice_apertura',fam);
-  const codiciDisp = (defaults||[]).map(d=>d.codice_serratura);
   const defaultSerr = (defaults||[]).find(d=>d.is_default)?.codice_serratura;
   const {data:tutte} = await sb.from('tipi_serratura').select('*').eq('attiva',true).eq('is_automatica',false);
-  let serrature = (tutte||[]).filter(s=>{
+  const isScorrevole = fam==='SI'||fam==='SE'||fam.startsWith('SI')||fam.startsWith('SE')||fam.startsWith('S/');
+  const isBattente = !isScorrevole;
+  const serrature = (tutte||[]).filter(s=>{
     if(!s.famiglie_apertura) return true;
-    const fams=s.famiglie_apertura.split(',').map(x=>x.trim());
-    return fams.some(f=>fam.startsWith(f)||fam.replace(/[0-9QAS]/g,'').trim().startsWith(f));
+    const fams=s.famiglie_apertura.split(',').map(x=>x.trim().toUpperCase());
+    if(fams.includes(fam.toUpperCase())) return true;
+    const famBase=fam.replace(/[0-9]/g,'').replace(/[QAS]$/,'').trim().toUpperCase();
+    if(fams.includes(famBase)) return true;
+    if(isScorrevole&&(fams.includes('SI')||fams.includes('SE'))) return true;
+    if(isBattente&&fams.some(f=>['BAT','CS','COM','FM','ROTO','LIBRO','SPECIALI'].includes(f))) return true;
+    return false;
   });
-  if(codiciDisp.length>0) serrature=serrature.filter(s=>codiciDisp.includes(s.codice));
   if(!CFG.serratura&&defaultSerr){
     const def=serrature.find(s=>s.codice===defaultSerr);
-    if(def){CFG.serratura=def.codice;CFG.nome_serratura=def.nome;CFG._serratura_obj=def;}
+    if(def){CFG.serratura=def.codice;CFG.nome_serratura=def.nome;}
   }
   const cards=serrature.map(s=>{
     const sp=s[\`sovrapprezzo_\${listino()}\`]||0;
     const sel=CFG.serratura===s.codice;
+    const isDefault=s.codice===defaultSerr;
     const tags=[];
     if(s.richiede_cilindro) tags.push('<span style="font-size:10px;background:var(--blue-bg);color:var(--blue-tx);padding:1px 5px;border-radius:3px">+ cilindro</span>');
-    if(s.richiede_pomolino) tags.push('<span style="font-size:10px;background:var(--amber-bg);color:var(--amber-tx);padding:1px 5px;border-radius:3px">+ pomolino se no maniglia</span>');
+    if(s.richiede_pomolino) tags.push('<span style="font-size:10px;background:var(--amber-bg);color:var(--amber-tx);padding:1px 5px;border-radius:3px">+ pomolino</span>');
+    if(isDefault) tags.push('<span style="font-size:10px;background:var(--green-bg);color:var(--green-tx);padding:1px 5px;border-radius:3px">★ standard</span>');
     return \`<div onclick="selSerratura('\${s.codice}','\${s.nome.replace(/'/g,"\\'")}',\${sp},\${s.richiede_cilindro},\${s.richiede_pomolino})"
       style="border:\${sel?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:10px 12px;cursor:pointer;background:\${sel?'var(--red-bg)':'var(--white)'}">
       <div style="font-size:13px;font-weight:500;color:\${sel?'var(--red)':'var(--dark)'};margin-bottom:4px">\${s.nome}</div>
@@ -2004,10 +2011,9 @@ async function cfgSerratura(){
       <button class="btn btn-sm" onclick="renderCfgStep('apertura')">← Indietro</button>
     </div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
-      \${cards||'<p style="color:var(--mid);font-size:12px;grid-column:1/-1">Nessuna serratura configurata per questa apertura</p>'}
+      \${cards||'<p style="color:var(--mid);font-size:12px;grid-column:1/-1">Nessuna serratura configurata</p>'}
     </div>\`;
 }
-
 async function selSerratura(cod,nome,sovr,richiede_cilindro,richiede_pomolino){
   CFG.serratura=cod;CFG.nome_serratura=nome;CFG.p_serratura=sovr||0;
   CFG._richiede_cilindro=richiede_cilindro;CFG._richiede_pomolino=richiede_pomolino;
