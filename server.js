@@ -2936,6 +2936,8 @@ function adminCatalogo(){
     {id:'serie',label:'Serie'},{id:'modelli',label:'Modelli'},
     {id:'finiture',label:'Finiture'},{id:'aperture',label:'Aperture e sensi'},
     {id:'ferramenta',label:'Ferramenta'},{id:'maniglie',label:'Maniglie'},
+    {id:'serrature',label:'Serrature'},{id:'cilindri',label:'Cilindri'},
+    {id:'colori_maniglia',label:'Colori maniglia'},{id:'pomolini',label:'Pomolini WC'},
   ];
   const el=document.getElementById('admin-main');
   el.innerHTML=adminSubTabs(tabs,adminSub,'switchAdminCat')+'<div id="admin-sub"></div>';
@@ -2956,6 +2958,10 @@ function switchAdminCat(sub){
   else if(sub==='aperture') adminAperture();
   else if(sub==='ferramenta') adminFerramenta();
   else if(sub==='maniglie') adminManiglie();
+  else if(sub==='serrature') adminSerrature();
+  else if(sub==='cilindri') adminCilindri();
+  else if(sub==='colori_maniglia') adminColoriManiglia();
+  else if(sub==='pomolini') adminPomolini();
 }
 
 // SERIE
@@ -3212,6 +3218,113 @@ async function adminManiglie(){
       <thead><tr><th>Codice</th><th>Nome</th><th>Serie compatibili</th><th>Descrizione</th><th>Prezzo A</th><th>Prezzo P</th><th>Immagine</th><th>Stato</th><th></th></tr></thead>
       <tbody>\${rows}</tbody></table></div>\`,
     \`<button class="btn btn-red btn-sm" onclick="nuovaRiga('maniglie',{codice:'MAN-NEW',nome:'Nuova maniglia',attivo:true,prezzo_A:0,prezzo_P:0},'adminManiglie')">+ Aggiungi maniglia</button>\`);
+}
+
+// ── SERRATURE ADMIN ───────────────────────────────────
+async function adminSerrature(){
+  const {data} = await sb.from('tipi_serratura').select('*').order('famiglie_apertura').order('codice');
+  const rows=(data||[]).map(s=>\`<tr>
+    <td>\${inlineInput(s.codice,\`adminSalva('tipi_serratura','\${s.id}','codice',this.value)\`,'70px','text')}</td>
+    <td>\${inlineInput(s.nome,\`adminSalva('tipi_serratura','\${s.id}','nome',this.value)\`,'180px','text')}</td>
+    <td>\${inlineInput(s.famiglie_apertura||'',\`adminSalva('tipi_serratura','\${s.id}','famiglie_apertura',this.value)\`,'160px','text','es. BAT,CS,LIBRO')}</td>
+    <td>\${inlineInput(s.descrizione||'',\`adminSalva('tipi_serratura','\${s.id}','descrizione',this.value)\`,'160px','text')}</td>
+    <td><span style="cursor:pointer" onclick="toggleCampo('tipi_serratura','\${s.id}','richiede_cilindro',\${s.richiede_cilindro})">\${adminToggle(s.richiede_cilindro,'')}</span></td>
+    <td><span style="cursor:pointer" onclick="toggleCampo('tipi_serratura','\${s.id}','richiede_pomolino',\${s.richiede_pomolino})">\${adminToggle(s.richiede_pomolino,'')}</span></td>
+    <td><span style="cursor:pointer" onclick="toggleCampo('tipi_serratura','\${s.id}','is_automatica',\${s.is_automatica})">\${adminToggle(s.is_automatica,'')}</span></td>
+    <td>\${inlineInput(s.sovrapprezzo_A??0,\`adminSalva('tipi_serratura','\${s.id}','sovrapprezzo_A',this.value)\`,'65px')}</td>
+    <td>\${inlineInput(s.sovrapprezzo_P??0,\`adminSalva('tipi_serratura','\${s.id}','sovrapprezzo_P',this.value)\`,'65px')}</td>
+    <td>\${adminToggle(s.attiva,\`toggleCampo('tipi_serratura','\${s.id}','attiva',\${s.attiva})\`)}</td>
+    <td><button onclick="eliminaRigaAdmin('tipi_serratura','\${s.id}','adminSerrature')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
+  </tr>\`).join('');
+  document.getElementById('admin-sub').innerHTML=adminCard('Serrature',\`
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>Codice</th><th>Nome</th><th>Famiglie apertura</th><th>Descrizione</th><th>Richiede cilindro</th><th>Richiede pomolino</th><th>Automatica</th><th>Sovr.A</th><th>Sovr.P</th><th>Stato</th><th></th></tr></thead>
+      <tbody>\${rows}</tbody>
+    </table></div>\`,
+    \`<button class="btn btn-red btn-sm" onclick="nuovaRiga('tipi_serratura',{codice:'NEW',nome:'Nuova serratura',attiva:true,richiede_cilindro:false,richiede_pomolino:false,is_automatica:false,sovrapprezzo_A:0,sovrapprezzo_P:0},'adminSerrature')">+ Aggiungi serratura</button>\`);
+}
+
+// ── CILINDRI ADMIN ────────────────────────────────────
+async function adminCilindri(){
+  const {data} = await sb.from('tipi_cilindro').select('*').order('misura_mm');
+  const rows=(data||[]).map(c=>\`<tr>
+    <td>\${inlineInput(c.codice,\`adminSalva('tipi_cilindro','\${c.id}','codice',this.value)\`,'80px','text')}</td>
+    <td>\${inlineInput(c.nome,\`adminSalva('tipi_cilindro','\${c.id}','nome',this.value)\`,'160px','text')}</td>
+    <td>\${inlineInput(c.misura_mm||'',\`adminSalva('tipi_cilindro','\${c.id}','misura_mm',this.value)\`,'60px','number')} mm</td>
+    <td>\${inlineInput(c.famiglie_apertura||'',\`adminSalva('tipi_cilindro','\${c.id}','famiglie_apertura',this.value)\`,'140px','text','es. BAT,CS')}</td>
+    <td>\${inlineInput(c.fornitore||'',\`adminSalva('tipi_cilindro','\${c.id}','fornitore',this.value)\`,'100px','text')}</td>
+    <td>\${inlineInput(c.sovrapprezzo_A??0,\`adminSalva('tipi_cilindro','\${c.id}','sovrapprezzo_A',this.value)\`,'65px')}</td>
+    <td>\${inlineInput(c.sovrapprezzo_P??0,\`adminSalva('tipi_cilindro','\${c.id}','sovrapprezzo_P',this.value)\`,'65px')}</td>
+    <td>\${adminToggle(c.attivo,\`toggleCampo('tipi_cilindro','\${c.id}','attivo',\${c.attivo})\`)}</td>
+    <td><button onclick="eliminaRigaAdmin('tipi_cilindro','\${c.id}','adminCilindri')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
+  </tr>\`).join('');
+  document.getElementById('admin-sub').innerHTML=adminCard('Cilindri',\`
+    <table><thead><tr><th>Codice</th><th>Nome</th><th>Misura</th><th>Famiglie apertura</th><th>Fornitore</th><th>Sovr.A</th><th>Sovr.P</th><th>Stato</th><th></th></tr></thead>
+    <tbody>\${rows}</tbody></table>\`,
+    \`<button class="btn btn-red btn-sm" onclick="nuovaRiga('tipi_cilindro',{codice:'CIL-NEW',nome:'Nuovo cilindro',attivo:true,sovrapprezzo_A:0,sovrapprezzo_P:0},'adminCilindri')">+ Aggiungi cilindro</button>\`);
+}
+
+// ── COLORI MANIGLIA ADMIN ─────────────────────────────
+async function adminColoriManiglia(){
+  const {data:maniglie} = await sb.from('maniglie').select('codice,nome').eq('attivo',true).order('nome');
+  const filtroMan = document.getElementById('admin-man-filter')?.value || maniglie?.[0]?.codice || '';
+  const {data} = await sb.from('colori_maniglia').select('*').eq('codice_maniglia',filtroMan).order('nome_colore');
+
+  const manOpts = (maniglie||[]).map(m=>\`<option value="\${m.codice}" \${m.codice===filtroMan?'selected':''}>\${m.codice} — \${m.nome}</option>\`).join('');
+
+  const rows=(data||[]).map(c=>\`<tr>
+    <td style="font-size:12px;color:var(--mid)">\${c.codice_maniglia}</td>
+    <td>\${inlineInput(c.codice_colore,\`adminSalva('colori_maniglia','\${c.id}','codice_colore',this.value)\`,'80px','text')}</td>
+    <td>\${inlineInput(c.nome_colore,\`adminSalva('colori_maniglia','\${c.id}','nome_colore',this.value)\`,'160px','text')}</td>
+    <td style="display:flex;align-items:center;gap:6px">
+      \${c.colore_hex?\`<div style="width:22px;height:22px;border-radius:4px;background:#\${c.colore_hex};border:0.5px solid var(--border)"></div>\`:''}
+      \${inlineInput(c.colore_hex||'',\`adminSalva('colori_maniglia','\${c.id}','colore_hex',this.value)\`,'80px','text','es. C0C0C0')}
+    </td>
+    <td>\${inlineInput(c.prezzo_maniglia??0,\`adminSalva('colori_maniglia','\${c.id}','prezzo_maniglia',this.value)\`,'70px')}</td>
+    <td>\${adminToggle(c.attivo,\`toggleCampo('colori_maniglia','\${c.id}','attivo',\${c.attivo})\`)}</td>
+    <td><button onclick="eliminaRigaAdmin('colori_maniglia','\${c.id}','adminColoriManiglia')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
+  </tr>\`).join('');
+
+  document.getElementById('admin-sub').innerHTML=\`
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+      <label style="font-size:12px;color:var(--mid)">Maniglia:</label>
+      <select id="admin-man-filter" onchange="adminColoriManiglia()" style="padding:5px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit">\${manOpts}</select>
+      <button class="btn btn-red btn-sm" onclick="nuovoColoreManiglia('\${filtroMan}')">+ Aggiungi colore</button>
+    </div>
+    \${adminCard('Colori maniglia',\`
+      <table><thead><tr><th>Maniglia</th><th>Cod. colore</th><th>Nome colore</th><th>Colore hex</th><th>Prezzo</th><th>Stato</th><th></th></tr></thead>
+      <tbody>\${rows||'<tr><td colspan="7" style="text-align:center;color:var(--mid);padding:16px">Nessun colore</td></tr>'}</tbody>
+    </table>\`)}\`;
+}
+
+async function nuovoColoreManiglia(codManiglia){
+  const cod=prompt('Codice colore (es. CRS, CRL):'); if(!cod) return;
+  const nome=prompt('Nome colore:'); if(!nome) return;
+  const {error}=await sb.from('colori_maniglia').insert([{codice_maniglia:codManiglia,codice_colore:cod.toUpperCase(),nome_colore:nome,prezzo_maniglia:0,attivo:true}]);
+  if(error){toast(msgErrore(error,cod),'err');return;}
+  toast('Colore aggiunto','ok'); adminColoriManiglia();
+}
+
+// ── POMOLINI WC ADMIN ─────────────────────────────────
+async function adminPomolini(){
+  const {data} = await sb.from('pomolini_wc').select('*').order('nome');
+  const rows=(data||[]).map(p=>\`<tr>
+    <td>\${inlineInput(p.codice,\`adminSalva('pomolini_wc','\${p.id}','codice',this.value)\`,'80px','text')}</td>
+    <td>\${inlineInput(p.nome,\`adminSalva('pomolini_wc','\${p.id}','nome',this.value)\`,'160px','text')}</td>
+    <td>\${inlineInput(p.descrizione||'',\`adminSalva('pomolini_wc','\${p.id}','descrizione',this.value)\`,'180px','text')}</td>
+    <td style="display:flex;align-items:center;gap:6px">
+      \${p.colore_hex?\`<div style="width:22px;height:22px;border-radius:4px;background:#\${p.colore_hex};border:0.5px solid var(--border)"></div>\`:''}
+      \${inlineInput(p.colore_hex||'',\`adminSalva('pomolini_wc','\${p.id}','colore_hex',this.value)\`,'80px','text')}
+    </td>
+    <td>\${inlineInput(p.prezzo_A??0,\`adminSalva('pomolini_wc','\${p.id}','prezzo_A',this.value)\`,'65px')}</td>
+    <td>\${inlineInput(p.prezzo_P??0,\`adminSalva('pomolini_wc','\${p.id}','prezzo_P',this.value)\`,'65px')}</td>
+    <td>\${adminToggle(p.attivo,\`toggleCampo('pomolini_wc','\${p.id}','attivo',\${p.attivo})\`)}</td>
+    <td><button onclick="eliminaRigaAdmin('pomolini_wc','\${p.id}','adminPomolini')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
+  </tr>\`).join('');
+  document.getElementById('admin-sub').innerHTML=adminCard('Pomolini WC',\`
+    <table><thead><tr><th>Codice</th><th>Nome</th><th>Descrizione</th><th>Colore hex</th><th>Prezzo A</th><th>Prezzo P</th><th>Stato</th><th></th></tr></thead>
+    <tbody>\${rows||'<tr><td colspan="8" style="text-align:center;color:var(--mid);padding:16px">Nessun pomolino</td></tr>'}</tbody></table>\`,
+    \`<button class="btn btn-red btn-sm" onclick="nuovaRiga('pomolini_wc',{codice:'POM-NEW',nome:'Nuovo pomolino',attivo:true,prezzo_A:0,prezzo_P:0},'adminPomolini')">+ Aggiungi pomolino</button>\`);
 }
 
 async function eliminaRigaAdmin(tabella, id, callback){
@@ -3622,6 +3735,8 @@ async function adminCompatibilita(){
     sb.from('tipi_vetro').select('codice,nome').eq('attivo',true).order('nome'),
     sb.from('colori_inserto_alluminio').select('codice,nome').order('nome'),
     sb.from('colori_pietra').select('codice,nome').order('nome'),
+    sb.from('tipi_serratura').select('codice,nome').eq('attiva',true).eq('is_automatica',false).order('nome'),
+    sb.from('maniglie').select('codice,nome').eq('attivo',true).order('nome'),
     sb.from('regole_compatibilita').select('*').order('entita_a_tipo').order('entita_a_codice').limit(200),
   ]);
 
@@ -3642,6 +3757,8 @@ async function adminCompatibilita(){
     vetro:    {label:'Vetro',      items:vetri||[],    codKey:'codice',nameKey:'nome'},
     inserto_alu:{label:'Inserto alluminio',items:alu||[],codKey:'codice',nameKey:'nome'},
     inserto_pietra:{label:'Inserto pietra',items:pietra||[],codKey:'codice',nameKey:'nome'},
+    serratura:{label:'Serratura',items:serratureC||[],codKey:'codice',nameKey:'nome'},
+    maniglia:{label:'Maniglia',items:maniglie||[],codKey:'codice',nameKey:'nome'},
   };
 
   // Stato filtri correnti
