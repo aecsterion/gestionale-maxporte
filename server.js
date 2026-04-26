@@ -1390,6 +1390,7 @@ async function renderCfgStep(step){
   if(step==='serie') await cfgSerie();
   else if(step==='modello') await cfgModello();
   else if(step==='finitura') await cfgFinitura();
+  else if(step==='colore_speciale') await cfgColoreSpeciale();
   else if(step==='opzioni') await cfgOpzioni();
   else if(step==='apertura') await cfgApertura();
   else if(step==='serratura') await cfgSerratura();
@@ -1528,34 +1529,118 @@ async function cfgFinitura(){
     .eq('attiva',true)
     .order('nome_finitura');
 
-  // Applica filtro compatibilità
-  const data = await filtraPerCompatibilita(tutteFiniture||[], 'finitura', 'codice_finitura');
+  const tutteNoSpec = (tutteFiniture||[]).filter(f=>f.codice_finitura!=='SPECIALE');
+  const hasSpeciale = (tutteFiniture||[]).some(f=>f.codice_finitura==='SPECIALE');
+  const data = await filtraPerCompatibilita(tutteNoSpec, 'finitura', 'codice_finitura');
 
   const cards=(data||[]).map(f=>{
     const sp = f[\`sovrapprezzo_\${listino()}\`]||0;
-    return \`<div onclick="selFinitura('\${f.codice_finitura}','\${f.nome_finitura.replace(/'/g,"\\\\'")}',\${sp},\${!!f.consente_bugna})"
-      style="border:\${CFG.finitura===f.codice_finitura?'2px solid var(--red)':'0.5px solid var(--border)'};
-        border-radius:var(--radius);padding:10px 12px;cursor:pointer;
-        background:\${CFG.finitura===f.codice_finitura?'var(--red-bg)':'var(--white)'}">
-      <div style="font-size:13px;font-weight:500;color:\${CFG.finitura===f.codice_finitura?'var(--red)':'var(--dark)'}">\${f.nome_finitura}</div>
+    const sel = CFG.finitura===f.codice_finitura && !CFG.colore_speciale;
+    return \`<div onclick="selFinitura('\${f.codice_finitura}','\${f.nome_finitura.replace(/'/g,"\\'")}',\${sp},\${!!f.consente_bugna})"
+      style="border:\${sel?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:10px 12px;cursor:pointer;background:\${sel?'var(--red-bg)':'var(--white)'}">
+      <div style="font-size:13px;font-weight:500;color:\${sel?'var(--red)':'var(--dark)'}">\${f.nome_finitura}</div>
       <div style="font-size:11px;color:var(--mid);margin-top:2px">\${sp>0?'+€'+sp:'Inclusa'}</div>
     </div>\`;
   }).join('');
+
+  const specCard = hasSpeciale ? \`
+    <div onclick="renderCfgStep('colore_speciale')"
+      style="border:\${CFG.colore_speciale?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:10px 12px;cursor:pointer;background:\${CFG.colore_speciale?'var(--red-bg)':'var(--white)'};grid-column:1/-1;display:flex;align-items:center;gap:12px">
+      <div style="width:36px;height:36px;border-radius:6px;background:linear-gradient(135deg,#e8d5f5,#d5e8f5,#f5e8d5);border:0.5px solid var(--border);flex-shrink:0"></div>
+      <div>
+        <div style="font-size:13px;font-weight:500;color:\${CFG.colore_speciale?'var(--red)':'var(--dark)'}">
+          Colore speciale \${CFG.colore_speciale?\`<span style="font-weight:400">— \${CFG.colore_speciale}</span>\`:''}
+        </div>
+        <div style="font-size:11px;color:var(--mid);margin-top:2px">RAL · NCS · PANTONE — inserisci il codice colore personalizzato</div>
+      </div>
+    </div>\` : '';
+
   document.getElementById('cfg-body').innerHTML=\`
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
       <div style="font-size:13px;font-weight:500">Seleziona la finitura <span style="color:var(--mid);font-weight:400">— \${CFG.nome_modello}</span></div>
       <button class="btn btn-sm" onclick="renderCfgStep('modello')">← Cambia modello</button>
     </div>
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;max-height:calc(60vh);overflow-y:auto">\${cards}</div>\`;
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;max-height:calc(60vh);overflow-y:auto">
+      \${cards}\${specCard}
+    </div>\`;
 }
 
 async function selFinitura(cod, nome, sovr, consenteBugna){
   CFG.finitura=cod; CFG.nome_finitura=nome; CFG.p_finitura=sovr;
   CFG._consenteBugna=consenteBugna;
-  // Salta le opzioni se il modello non ha nessuna opzione disponibile
+  CFG.colore_speciale=null;
   const f = CFG._flags||{};
-  const haOpzioni = f.ha_vetro || f.ha_pannello_o_bugna || f.ha_inserto_alluminio || f.ha_inserto_pietra || f.ha_pantografatura;
-  await renderCfgStep(haOpzioni ? 'opzioni' : 'apertura');
+  const haOpzioni = f.ha_vetro||f.ha_pannello_o_bugna||f.ha_inserto_alluminio||f.ha_inserto_pietra||f.ha_pantografatura;
+  await renderCfgStep(haOpzioni?'opzioni':'apertura');
+}
+
+async function cfgColoreSpeciale(){
+  const {data:specFin} = await sb.from('finiture')
+    .select('sovrapprezzo_A,sovrapprezzo_P')
+    .eq('codice_serie',CFG.serie).eq('codice_finitura','SPECIALE').limit(1);
+  const sovr = specFin?.[0]?.[\`sovrapprezzo_\${listino()}\`]||0;
+  const valoreCorrente = CFG.colore_speciale||'';
+  const sistemaCorrente = valoreCorrente.startsWith('NCS')?'NCS':valoreCorrente.startsWith('PANTONE')?'PANTONE':'RAL';
+  const codiceCorrente = valoreCorrente.replace(/^(RAL|NCS|PANTONE)\\s*/i,'');
+
+  document.getElementById('cfg-body').innerHTML=\`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div style="font-size:13px;font-weight:500">Colore speciale <span style="color:var(--mid);font-weight:400">— \${CFG.nome_serie||''} \${CFG.nome_modello||''}</span></div>
+      <button class="btn btn-sm" onclick="renderCfgStep('finitura')">← Indietro</button>
+    </div>
+    <div style="background:var(--blue-bg);border-radius:var(--radius);padding:12px 14px;font-size:12px;color:var(--blue-tx);margin-bottom:20px">
+      Inserisci il codice del colore speciale. Verrà riportato esattamente su preventivo e conferma d'ordine.
+      \${sovr>0?\`<br><strong>Sovrapprezzo: +€\${sovr}</strong>\`:''}
+    </div>
+    <div style="display:flex;gap:12px;align-items:flex-end;margin-bottom:16px">
+      <div style="flex:0 0 160px">
+        <div style="font-size:11px;color:var(--mid);margin-bottom:6px;font-weight:500">SISTEMA COLORE</div>
+        <select id="cfg-spec-sistema" style="width:100%;padding:9px 12px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px;font-family:inherit">
+          <option value="RAL" \${sistemaCorrente==='RAL'?'selected':''}>RAL</option>
+          <option value="NCS" \${sistemaCorrente==='NCS'?'selected':''}>NCS</option>
+          <option value="PANTONE" \${sistemaCorrente==='PANTONE'?'selected':''}>PANTONE</option>
+        </select>
+      </div>
+      <div style="flex:1">
+        <div style="font-size:11px;color:var(--mid);margin-bottom:6px;font-weight:500">CODICE COLORE</div>
+        <input id="cfg-spec-codice" type="text" value="\${codiceCorrente}"
+          placeholder="es. 9010 · S 0500-N · 7540 C"
+          style="width:100%;padding:9px 12px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px;font-family:inherit;box-sizing:border-box"
+          oninput="aggiornaPreviewColoreSpec()">
+      </div>
+    </div>
+    <div id="cfg-spec-preview" style="margin-bottom:20px;min-height:36px"></div>
+    <div style="display:flex;justify-content:flex-end">
+      <button class="btn btn-red btn-sm" onclick="confColoreSpeciale(\${sovr})">Conferma colore →</button>
+    </div>\`;
+
+  if(codiceCorrente) aggiornaPreviewColoreSpec();
+}
+
+function aggiornaPreviewColoreSpec(){
+  const sistema = document.getElementById('cfg-spec-sistema')?.value||'RAL';
+  const codice = document.getElementById('cfg-spec-codice')?.value?.trim()||'';
+  const preview = document.getElementById('cfg-spec-preview');
+  if(!preview) return;
+  preview.innerHTML = codice ? \`<div style="display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:var(--radius);background:var(--beige);border:0.5px solid var(--border)">
+    <span style="font-size:11px;font-weight:600;color:var(--mid)">\${sistema}</span>
+    <span style="font-size:15px;font-weight:500;color:var(--dark)">\${codice}</span>
+  </div>\` : '';
+}
+
+async function confColoreSpeciale(sovr){
+  const sistema = document.getElementById('cfg-spec-sistema')?.value||'RAL';
+  const codice = document.getElementById('cfg-spec-codice')?.value?.trim()||'';
+  if(!codice){ toast('Inserisci il codice colore','err'); return; }
+  CFG.finitura='SPECIALE';
+  CFG.nome_finitura=\`Colore speciale \${sistema} \${codice}\`;
+  CFG.p_finitura=sovr;
+  CFG.colore_speciale=\`\${sistema} \${codice}\`;
+  CFG._consenteBugna=false;
+  cfgUpdatePrice();
+  const f = CFG._flags||{};
+  const haOpzioni = f.ha_vetro||f.ha_pannello_o_bugna||f.ha_inserto_alluminio||f.ha_inserto_pietra||f.ha_pantografatura;
+  await renderCfgStep(haOpzioni?'opzioni':'apertura');
 }
 
 async function cfgOpzioni(){
