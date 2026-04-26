@@ -3241,7 +3241,7 @@ async function adminSerrature(){
       <thead><tr><th>Codice</th><th>Nome</th><th>Famiglie apertura</th><th>Descrizione</th><th>Richiede cilindro</th><th>Richiede pomolino</th><th>Automatica</th><th>Sovr.A</th><th>Sovr.P</th><th>Stato</th><th></th></tr></thead>
       <tbody>\${rows}</tbody>
     </table></div>\`,
-    \`<button class="btn btn-red btn-sm" onclick="nuovaRiga('tipi_serratura',{codice:'NEW',nome:'Nuova serratura',attiva:true,richiede_cilindro:false,richiede_pomolino:false,is_automatica:false,sovrapprezzo_A:0,sovrapprezzo_P:0},'adminSerrature')">+ Aggiungi serratura</button>\`);
+    \`<button class="btn btn-red btn-sm" onclick="nuovaSerratura()">+ Aggiungi serratura</button>\`);
 }
 
 // ── CILINDRI ADMIN ────────────────────────────────────
@@ -3325,6 +3325,21 @@ async function adminPomolini(){
     <table><thead><tr><th>Codice</th><th>Nome</th><th>Descrizione</th><th>Colore hex</th><th>Prezzo A</th><th>Prezzo P</th><th>Stato</th><th></th></tr></thead>
     <tbody>\${rows||'<tr><td colspan="8" style="text-align:center;color:var(--mid);padding:16px">Nessun pomolino</td></tr>'}</tbody></table>\`,
     \`<button class="btn btn-red btn-sm" onclick="nuovaRiga('pomolini_wc',{codice:'POM-NEW',nome:'Nuovo pomolino',attivo:true,prezzo_A:0,prezzo_P:0},'adminPomolini')">+ Aggiungi pomolino</button>\`);
+}
+
+async function nuovaSerratura(){
+  const codice = prompt('Codice serratura (es. PAT, YALE, WC, L-O):');
+  if(!codice) return;
+  const nome = prompt('Nome serratura:');
+  if(!nome) return;
+  const {error} = await sb.from('tipi_serratura').insert([{
+    codice:codice.toUpperCase().trim(), nome,
+    attiva:true, richiede_cilindro:false,
+    richiede_pomolino:false, is_automatica:false,
+    sovrapprezzo_A:0, sovrapprezzo_P:0
+  }]);
+  if(error){toast(msgErrore(error,codice),'err');return;}
+  toast('Serratura aggiunta','ok'); adminSerrature();
 }
 
 async function eliminaRigaAdmin(tabella, id, callback){
