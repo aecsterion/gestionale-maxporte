@@ -1349,7 +1349,8 @@ function resetCFG(){
     _vetroIncluso:false, _haExtraIncisioni:false, _finitura_pct:0, _finitura_fisso:0,
     _isDoppiaAnta:false, _needsComFmSuppl:false,
     _isFuoriH:false, _isFuoriL:false, _p_fuori_h:0, _p_fuori_l:0,
-    _fuori_h_pct:0, _fuori_l_pct:0, _p_varsavia:0
+    _fuori_h_pct:0, _fuori_l_pct:0, _p_varsavia:0,
+    _p_misura:0, _pct_misura:0
   };
 }
 resetCFG();
@@ -1374,6 +1375,10 @@ function cfgTotale(){
     if(CFG.apertura==='CS2A') p_doppia += 124;
   }
 
+  // Sovrapprezzo misura specifica (fisso o % sul sub)
+  let p_misura = CFG._p_misura||0;
+  if((CFG._pct_misura||0)>0) p_misura = Math.round(sub*(CFG._pct_misura/100)*100)/100;
+
   // Supplemento fuori misura H (+20% su sub, oppure fisso €45)
   let p_fh=0;
   if(CFG._isFuoriH){
@@ -1391,7 +1396,7 @@ function cfgTotale(){
   const tot_porta = CFG._isDoppiaAnta ? sub + p_doppia : sub;
 
   return Math.round((
-    tot_porta + p_fh + p_fl +
+    tot_porta + p_misura + p_fh + p_fl +
     (CFG.p_vetro||0)+(CFG.p_bugna||0)+(CFG.p_inserto||0)+
     (CFG.p_acc_telaio||0)+
     (CFG.p_ferramenta||0)+(CFG.p_maniglia||0)+(CFG.p_extra_incisioni||0)+
@@ -2033,21 +2038,24 @@ async function cfgMisure(){
   const larghezze = [...new Set((misure||[]).map(m=>m.larghezza_cm))].sort((a,b)=>a-b);
   const altezze = [...new Set((misure||[]).map(m=>m.altezza_cm))].sort((a,b)=>a-b);
 
+  // Serializza misure per passarle ai click handler
+  const misureJson = JSON.stringify(misure||[]).replace(/'/g,"\\\\'");
+
   let html=\`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-    <div style="font-size:13px;font-weight:500">Misure porta <span style="color:var(--mid);font-weight:400">— \${CFG.nome_apertura}</span></div>
+    <div style="font-size:13px;font-weight:500">Misure porta <span style="color:var(--mid);font-weight:400">— \${CFG.nome_apertura} (\${famMisure})</span></div>
     <button class="btn btn-sm" onclick="renderCfgStep('apertura')">← Indietro</button>
   </div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
     <div>
       <div style="font-size:12px;font-weight:500;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.4px;color:var(--mid)">Larghezza (cm)</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px">
-        \${larghezze.map(l=>\`<div onclick="selLarghezza(\${l})" style="padding:6px 12px;border-radius:var(--radius);border:\${CFG.larghezza===l?'2px solid var(--red)':'0.5px solid var(--border)'};cursor:pointer;font-size:13px;font-weight:500;background:\${CFG.larghezza===l?'var(--red-bg)':'var(--white)'};">\${l}</div>\`).join('')}
+        \${larghezze.map(l=>\`<div onclick="selLarghezza(\${l},\${misureJson})" style="padding:6px 12px;border-radius:var(--radius);border:\${CFG.larghezza===l?'2px solid var(--red)':'0.5px solid var(--border)'};cursor:pointer;font-size:13px;font-weight:500;background:\${CFG.larghezza===l?'var(--red-bg)':'var(--white)'};">\${l}</div>\`).join('')}
       </div>
     </div>
     <div>
       <div style="font-size:12px;font-weight:500;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.4px;color:var(--mid)">Altezza (cm)</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px">
-        \${altezze.map(a=>\`<div onclick="selAltezza(\${a})" style="padding:6px 12px;border-radius:var(--radius);border:\${CFG.altezza===a?'2px solid var(--red)':'0.5px solid var(--border)'};cursor:pointer;font-size:13px;font-weight:500;background:\${CFG.altezza===a?'var(--red-bg)':'var(--white)'};">\${a}</div>\`).join('')}
+        \${altezze.map(a=>\`<div onclick="selAltezza(\${a},\${misureJson})" style="padding:6px 12px;border-radius:var(--radius);border:\${CFG.altezza===a?'2px solid var(--red)':'0.5px solid var(--border)'};cursor:pointer;font-size:13px;font-weight:500;background:\${CFG.altezza===a?'var(--red-bg)':'var(--white)'};">\${a}</div>\`).join('')}
       </div>
     </div>
   </div>
@@ -2074,10 +2082,30 @@ async function cfgMisure(){
   document.getElementById('cfg-body').innerHTML=html;
 }
 
-function selLarghezza(v){ CFG.larghezza=v; CFG.misura_custom=false; cfgMisure(); }
-function selAltezza(v){ CFG.altezza=v; CFG.misura_custom=false; cfgMisure(); }
-function selLarghezzaCustom(v){ if(v){ CFG.larghezza=parseFloat(v); CFG.misura_custom=true; } }
-function selAltezzaCustom(v){ if(v){ CFG.altezza=parseFloat(v); CFG.misura_custom=true; } }
+function selLarghezza(v, misure){ 
+  CFG.larghezza=v; CFG.misura_custom=false;
+  // Trova sovrapprezzo misura se altezza già selezionata
+  aggiornaSuprMisura(misure); 
+  cfgMisure(); 
+}
+function selAltezza(v, misure){ 
+  CFG.altezza=v; CFG.misura_custom=false;
+  aggiornaSuprMisura(misure);
+  cfgMisure(); 
+}
+function aggiornaSuprMisura(misure){
+  if(!misure||!CFG.larghezza||!CFG.altezza){ return; }
+  const m = misure.find(x=>x.larghezza_cm===CFG.larghezza && x.altezza_cm===CFG.altezza);
+  if(!m){ CFG._p_misura=0; CFG._pct_misura=0; return; }
+  const lst = listino().toLowerCase();
+  const pct = m[\`sovrapprezzo_pct_\${lst}\`]||0;
+  const fisso = m[\`sovrapprezzo_\${lst}\`]||0;
+  if(pct>0){ CFG._pct_misura=pct; CFG._p_misura=0; }
+  else { CFG._p_misura=fisso; CFG._pct_misura=0; }
+  cfgUpdatePrice();
+}
+function selLarghezzaCustom(v){ if(v){ CFG.larghezza=parseFloat(v); CFG.misura_custom=true; CFG._p_misura=0; CFG._pct_misura=0; } }
+function selAltezzaCustom(v){ if(v){ CFG.altezza=parseFloat(v); CFG.misura_custom=true; CFG._p_misura=0; CFG._pct_misura=0; } }
 async function avanzaASpessore(){
   if(!CFG.larghezza||!CFG.altezza){ toast('Seleziona larghezza e altezza','err'); return; }
 
@@ -2503,6 +2531,7 @@ async function cfgRiepilogo(){
   // Calcola valori effettivi per riepilogo
   const p_fin_eff = (CFG._finitura_pct||0)>0 ? Math.round((CFG.p_base||0)*CFG._finitura_pct/100*100)/100 : (CFG.p_finitura||0);
   const sub_eff = (CFG.p_base||0)+p_fin_eff+(CFG.p_apertura||0)+(CFG.p_telaio||0);
+  const p_misura_eff = (CFG._pct_misura||0)>0 ? Math.round(sub_eff*(CFG._pct_misura/100)*100)/100 : (CFG._p_misura||0);
   const p_fh_eff = CFG._isFuoriH ? (CFG._fuori_h_pct ? Math.round(sub_eff*CFG._fuori_h_pct/100*100)/100 : CFG._p_fuori_h||0) : 0;
   const p_fl_eff = CFG._isFuoriL ? Math.round((sub_eff+p_fh_eff)*CFG._fuori_l_pct/100*100)/100 : 0;
   const p_doppia_eff = CFG._isDoppiaAnta ? ((CFG.p_base||0)+p_fin_eff+(CFG.p_telaio||0)+(CFG.apertura==='CS2A'?124:0)) : 0;
@@ -2514,6 +2543,7 @@ async function cfgRiepilogo(){
     CFG.p_bugna>0&&{label:'Bugna',val:CFG.p_bugna},
     CFG.p_inserto>0&&{label:'Inserto '+(CFG.nome_colore_alu||CFG.nome_colore_pietra),val:CFG.p_inserto},
     CFG.p_apertura>0&&{label:'Supplemento apertura ('+CFG.nome_apertura+')',val:CFG.p_apertura},
+    (p_misura_eff)>0&&{label:'Supplemento misura'+(CFG._pct_misura>0?\` (+\${CFG._pct_misura}%)\`:''),val:p_misura_eff},
     CFG.p_telaio>0&&{label:'Telaio / Spalla ('+CFG.spalla+')',val:CFG.p_telaio},
     CFG.p_acc_telaio>0&&{label:'Accessorio telaio ('+CFG.accessorio_telaio+')',val:CFG.p_acc_telaio},
     p_doppia_eff>0&&{label:'Supplemento doppia anta'+(CFG.apertura==='CS2A'?' incl. €124':''),val:p_doppia_eff},
@@ -3450,6 +3480,10 @@ async function adminMisure(){
     <td>\${inlineInput(m.larghezza_cm,\`adminSalva('misure_standard','\${m.id}','larghezza_cm',this.value)\`,'70px','number')} cm</td>
     <td>\${inlineInput(m.altezza_cm,\`adminSalva('misure_standard','\${m.id}','altezza_cm',this.value)\`,'70px','number')} cm</td>
     <td style="font-size:12px;color:var(--mid)">\${m.famiglia_apertura}</td>
+    <td>\${inlineInput(m.sovrapprezzo_a??0,\`adminSalva('misure_standard','\${m.id}','sovrapprezzo_a',this.value)\`,'65px','number','€ A')}</td>
+    <td>\${inlineInput(m.sovrapprezzo_p??0,\`adminSalva('misure_standard','\${m.id}','sovrapprezzo_p',this.value)\`,'65px','number','€ P')}</td>
+    <td>\${inlineInput(m.sovrapprezzo_pct_a??0,\`adminSalva('misure_standard','\${m.id}','sovrapprezzo_pct_a',this.value)\`,'55px','number','% A')}</td>
+    <td>\${inlineInput(m.sovrapprezzo_pct_p??0,\`adminSalva('misure_standard','\${m.id}','sovrapprezzo_pct_p',this.value)\`,'55px','number','% P')}</td>
     <td><button onclick="eliminaRigaAdmin('misure_standard','\${m.id}','adminMisure')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
   </tr>\`).join('');
 
@@ -3460,7 +3494,7 @@ async function adminMisure(){
       <button class="btn btn-red btn-sm" onclick="nuovaMisura('\${famFilter}')">+ Aggiungi misura</button>
     </div>
     \${adminCard(\`Misure standard — \${famFilter}\`,\`
-      <table><thead><tr><th>Larghezza</th><th>Altezza</th><th>Famiglia</th><th></th></tr></thead>
+      <table><thead><tr><th>Larghezza</th><th>Altezza</th><th>Famiglia</th><th>Sovr.€ A</th><th>Sovr.€ P</th><th>Sovr.% A</th><th>Sovr.% P</th><th></th></tr></thead>
       <tbody>\${rows||'<tr><td colspan="4" style="text-align:center;color:var(--mid);padding:16px">Nessuna misura</td></tr>'}</tbody>
     </table>\`)}\`;
 }
