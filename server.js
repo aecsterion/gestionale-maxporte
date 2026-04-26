@@ -4146,12 +4146,19 @@ async function adminSalva(tabella, id, campo, valore){
 async function salvaPrezzo(codModello, listino, campo, valore){
   const val = parseFloat(valore);
   if(isNaN(val)) return;
-  const {error} = await sb.from('prezzi_modello').update({[campo]:val}).eq('codice_modello',codModello).eq('listino',listino);
-  if(error){
-    // Se non esiste ancora la riga, creala
-    await sb.from('prezzi_modello').insert([{codice_modello:codModello,listino,[campo]:val}]);
+  const {data:existing, error:errCheck} = await sb.from('prezzi_modello')
+    .select('id').eq('codice_modello',codModello).eq('listino',listino).limit(1);
+  console.log('Existing row:', existing, 'Error check:', errCheck);
+  if(existing && existing.length > 0){
+    const {error} = await sb.from('prezzi_modello').update({[campo]:val}).eq('codice_modello',codModello).eq('listino',listino);
+    console.log('Update error:', error);
+    if(error){toast('Errore update: '+error.message,'err');return;}
+  } else {
+    const {error} = await sb.from('prezzi_modello').insert([{codice_modello:codModello,listino,[campo]:val}]);
+    console.log('Insert error:', error);
+    if(error){toast('Errore insert: '+error.message,'err');return;}
   }
-  toast(\`Prezzo aggiornato\`,'ok');
+  toast('Prezzo salvato','ok');
 }
 
 async function toggleCampo(tabella, id, campo, attualeStr){
