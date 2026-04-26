@@ -4146,19 +4146,17 @@ async function adminSalva(tabella, id, campo, valore){
 async function salvaPrezzo(codModello, listino, campo, valore){
   const val = parseFloat(valore);
   if(isNaN(val)) return;
-  const {data:existing, error:errCheck} = await sb.from('prezzi_modello')
+  const {data:existing} = await sb.from('prezzi_modello')
     .select('id').eq('codice_modello',codModello).eq('listino',listino).limit(1);
-  console.log('Existing row:', existing, 'Error check:', errCheck);
   if(existing && existing.length > 0){
     const {error} = await sb.from('prezzi_modello').update({[campo]:val}).eq('codice_modello',codModello).eq('listino',listino);
-    console.log('Update error:', error);
-    if(error){toast('Errore update: '+error.message,'err');return;}
+    if(error){toast('Errore: '+error.message,'err');return;}
   } else {
     const {error} = await sb.from('prezzi_modello').insert([{codice_modello:codModello,listino,[campo]:val}]);
-    console.log('Insert error:', error);
-    if(error){toast('Errore insert: '+error.message,'err');return;}
+    if(error){toast('Errore: '+error.message,'err');return;}
   }
   toast('Prezzo salvato','ok');
+  adminModelli();
 }
 
 async function toggleCampo(tabella, id, campo, attualeStr){
