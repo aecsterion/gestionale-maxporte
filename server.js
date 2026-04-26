@@ -1924,7 +1924,7 @@ async function selApertura(cod, nome, logica, sovr, doppio, magg){
   if(CFG.modello==='VAR'){
     const isScorrevole=['SI','SE'].some(x=>cod.startsWith(x));
     if(isScorrevole){
-      const isDoppia=cod.endsWith('2A')||cod.endsWith('AS');
+      const isDoppia = cod.includes('2A');
       const {data:varMod}=await sb.from('modelli').select('supplemento_staffe_a,supplemento_staffe_p').eq('codice','VAR').limit(1);
       const lst=listino().toLowerCase();
       const staffe=varMod?.[0]?.[\`supplemento_staffe_\${lst}\`]||0;
@@ -1933,7 +1933,7 @@ async function selApertura(cod, nome, logica, sovr, doppio, magg){
   }
 
   // Flag doppia anta
-  CFG._isDoppiaAnta = cod==='BAT2A'||cod==='CS2A'||cod.endsWith('2A');
+  CFG._isDoppiaAnta = cod==='BAT2A'||cod==='CS2A'||cod.includes('2A');
 
   // Per COM e FM: il supplemento dipende dalla famiglia serie+finitura
   // Verrà (ri)calcolato in calcolaSupplementoComFm() dopo la scelta della finitura
