@@ -1537,7 +1537,7 @@ async function cfgFinitura(){
   const data = await filtraPerCompatibilita(tutteNoSpec, 'finitura', 'codice_finitura');
 
   const cards=(data||[]).map(f=>{
-    const sp = f[\`sovrapprezzo_\${listino()}\`]||0;
+    const sp = f[\`sovrapprezzo_\${listino().toLowerCase()}\`]||0;
     const sel = CFG.finitura===f.codice_finitura && !CFG.colore_speciale;
     return \`<div onclick="selFinitura('\${f.codice_finitura}','\${f.nome_finitura.replace(/'/g,"\\'")}',\${sp},\${!!f.consente_bugna})"
       style="border:\${sel?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:10px 12px;cursor:pointer;background:\${sel?'var(--red-bg)':'var(--white)'}">
@@ -1579,9 +1579,9 @@ async function selFinitura(cod, nome, sovr, consenteBugna){
 
 async function cfgColoreSpeciale(){
   const {data:specFin} = await sb.from('finiture')
-    .select('sovrapprezzo_A,sovrapprezzo_P')
+    .select('sovrapprezzo_a,sovrapprezzo_p')
     .eq('codice_serie',CFG.serie).eq('codice_finitura','SPECIALE').limit(1);
-  const sovr = specFin?.[0]?.[\`sovrapprezzo_\${listino()}\`]||0;
+  const sovr = specFin?.[0]?.[\`sovrapprezzo_\${listino().toLowerCase()}\`]||0;
   const valoreCorrente = CFG.colore_speciale||'';
   const sistemaCorrente = valoreCorrente.startsWith('NCS')?'NCS':valoreCorrente.startsWith('PANTONE')?'PANTONE':'RAL';
   const codiceCorrente = valoreCorrente.replace(/^(RAL|NCS|PANTONE)\\s*/i,'');
@@ -1679,10 +1679,10 @@ async function cfgOpzioni(){
   if(f.ha_inserto_alluminio){
     const {data:colAlu} = await sb.from('colori_inserto_alluminio').select('*').order('nome');
     const optsAlu = (colAlu||[]).map(c=>\`
-      <div onclick="selAlu('\${c.codice}','\${c.nome}',\${c.incluso?0:(c.sovrapprezzo_A||0)})"
+      <div onclick="selAlu('\${c.codice}','\${c.nome}',\${c.incluso?0:(c.sovrapprezzo_a||0)})"
         style="border:\${CFG.colore_alu===c.codice?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:8px 12px;cursor:pointer;background:\${CFG.colore_alu===c.codice?'var(--red-bg)':'var(--white)'}">
         <div style="font-size:13px;font-weight:500">\${c.nome}</div>
-        <div style="font-size:11px;color:var(--mid)">\${c.incluso?'Incluso':c.sovrapprezzo_A?'+€'+c.sovrapprezzo_A:'€ 0'}</div>
+        <div style="font-size:11px;color:var(--mid)">\${c.incluso?'Incluso':c.sovrapprezzo_a?'+€'+c.sovrapprezzo_a:'€ 0'}</div>
       </div>\`).join('');
     html+=\`<div style="margin-bottom:16px">
       <div style="font-size:12px;font-weight:500;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.4px;color:var(--mid)">Colore inserto alluminio</div>
@@ -1694,10 +1694,10 @@ async function cfgOpzioni(){
   if(f.ha_inserto_pietra){
     const {data:colPietra} = await sb.from('colori_pietra').select('*').order('nome');
     const optsPietra = (colPietra||[]).map(c=>\`
-      <div onclick="selPietra('\${c.codice}','\${c.nome}',\${c[\`sovrapprezzo_\${listino()}\`]||0})"
+      <div onclick="selPietra('\${c.codice}','\${c.nome}',\${c[\`sovrapprezzo_\${listino().toLowerCase()}\`]||0})"
         style="border:\${CFG.colore_pietra===c.codice?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:8px 12px;cursor:pointer;background:\${CFG.colore_pietra===c.codice?'var(--red-bg)':'var(--white)'}">
         <div style="font-size:13px;font-weight:500">\${c.nome}</div>
-        <div style="font-size:11px;color:var(--mid)">\${c[\`sovrapprezzo_\${listino()}\`]?'+€'+c[\`sovrapprezzo_\${listino()}\`]:'Incluso'}</div>
+        <div style="font-size:11px;color:var(--mid)">\${c[\`sovrapprezzo_\${listino().toLowerCase()}\`]?'+€'+c[\`sovrapprezzo_\${listino().toLowerCase()}\`]:'Incluso'}</div>
       </div>\`).join('');
     html+=\`<div style="margin-bottom:16px">
       <div style="font-size:12px;font-weight:500;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.4px;color:var(--mid)">Colore pietra</div>
@@ -1711,7 +1711,7 @@ async function cfgOpzioni(){
     const prezzoVetroBase = pm?.prezzo_vetro||0;
     const {data:tipiV} = await sb.from('tipi_vetro').select('*').eq('attivo',true).order('nome');
     const optsV = (tipiV||[]).map(tv=>{
-      const totV = prezzoVetroBase + (tv[\`sovrapprezzo_\${listino()}\`]||0);
+      const totV = prezzoVetroBase + (tv[\`sovrapprezzo_\${listino().toLowerCase()}\`]||0);
       return \`<div onclick="selVetro('\${tv.codice}','\${tv.nome}',\${totV})"
         style="border:\${CFG.tipo_vetro===tv.codice?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:8px 12px;cursor:pointer;background:\${CFG.tipo_vetro===tv.codice?'var(--red-bg)':'var(--white)'}">
         <div style="font-size:13px;font-weight:500">\${tv.nome}</div>
@@ -1813,7 +1813,7 @@ async function cfgApertura(){
     html+=\`<div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:var(--mid);margin:14px 0 6px;padding-bottom:4px;border-bottom:0.5px solid var(--border)">\${famLabels[fam]||fam}</div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:4px">\`;
     aps.forEach(a=>{
-      const sp = a.logica_prezzo==='fisso'?(a[\`sovrapprezzo_\${listino()}\`]||0):null;
+      const sp = a.logica_prezzo==='fisso'?(a[\`sovrapprezzo_\${listino().toLowerCase()}\`]||0):null;
       const prezzoLabel = a.logica_prezzo==='spessore'?'Prezzo dipende dallo spessore muro':
         a.logica_prezzo==='percentuale'?'Maggiorazione +'+a.maggiorazione_pct+'%':
         a.logica_prezzo==='doppio'?'Prezzo doppio':
@@ -1988,7 +1988,7 @@ async function calcolaTelaio(spessore, fam){
     let html=\`<div style="font-size:12px;font-weight:500;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.4px;color:var(--mid)">Seleziona il cassone</div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">\`;
     kits.forEach(k=>{
-      const prezzo = k[\`prezzo_\${listino()}\`]||0;
+      const prezzo = k[\`prezzo_\${listino().toLowerCase()}\`]||0;
       html+=\`<div onclick="selCassone('\${k.kit_telaio_codice}',\${prezzo},'\${k.codice_cassone}')"
         style="border:\${CFG.spalla===k.kit_telaio_codice?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:8px 10px;cursor:pointer;background:\${CFG.spalla===k.kit_telaio_codice?'var(--red-bg)':'var(--white)'}">
         <div style="font-size:12px;font-weight:500">\${k.codice_cassone}</div>
@@ -2013,7 +2013,7 @@ async function calcolaTelaio(spessore, fam){
   const regola = regole[0];
   const {data:spalla} = await sb.from('telai_spalle')
     .select('*').eq('codice',regola.codice_spalla).eq('famiglia_apertura',fam).single();
-  const prezzoSpalla = spalla?.[\`prezzo_\${listino()}\`]||0;
+  const prezzoSpalla = spalla?.[\`prezzo_\${listino().toLowerCase()}\`]||0;
   const prezzoAcc = regola[\`prezzo_access_\${listino()}\`]||0;
 
   CFG.spalla=regola.codice_spalla;
@@ -2080,7 +2080,7 @@ async function cfgSerratura(){
     if(def){CFG.serratura=def.codice;CFG.nome_serratura=def.nome;}
   }
   const cards=serrature.map(s=>{
-    const sp=s[\`sovrapprezzo_\${listino()}\`]||0;
+    const sp=s[\`sovrapprezzo_\${listino().toLowerCase()}\`]||0;
     const sel=CFG.serratura===s.codice;
     const isDefault=s.codice===defaultSerr;
     const tags=[];
@@ -2119,7 +2119,7 @@ async function cfgCilindro(){
     return c.famiglie_apertura.split(',').map(x=>x.trim()).some(f=>fam.startsWith(f));
   });
   const cards=cilindri.map(c=>{
-    const sp=c[\`sovrapprezzo_\${listino()}\`]||0;
+    const sp=c[\`sovrapprezzo_\${listino().toLowerCase()}\`]||0;
     const sel=CFG.cilindro===c.codice;
     return \`<div onclick="selCilindro('\${c.codice}','\${c.nome.replace(/'/g,"\\'")}',\${sp})"
       style="border:\${sel?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:10px 12px;cursor:pointer;background:\${sel?'var(--red-bg)':'var(--white)'}">
@@ -2148,7 +2148,7 @@ async function cfgFerramenta(){
   const {data:tuttaFerr}=await sb.from('ferramenta').select('*').eq('attivo',true).order('nome');
   const ferr=await filtraPerCompatibilita(tuttaFerr||[],'ferramenta','codice');
   const rowsFerr=(ferr||[]).map(f=>{
-    const sp=f[\`sovrapprezzo_\${listino()}\`]||0;
+    const sp=f[\`sovrapprezzo_\${listino().toLowerCase()}\`]||0;
     const hex=f.colore_hex||'CCCCCC';
     return \`<div onclick="selFerramenta('\${f.codice}','\${f.nome}',\${sp})"
       style="border:\${CFG.ferramenta===f.codice?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:8px 10px;cursor:pointer;background:\${CFG.ferramenta===f.codice?'var(--red-bg)':'var(--white)'};display:flex;align-items:center;gap:8px">
@@ -2211,7 +2211,7 @@ async function cfgManiglia(){
   man = [...nessuna, ...resto];
 
   const rowsMan=man.map(m=>{
-    const pr=m[\`prezzo_\${listino()}\`]||0;
+    const pr=m[\`prezzo_\${listino().toLowerCase()}\`]||0;
     const sel=CFG.maniglia===m.codice;
     const isNessuna=m.codice==='NESSUNA';
     return \`<div onclick="selManiglia('\${m.codice}','\${m.nome.replace(/'/g,"\\'")}',\${pr})"
@@ -2272,7 +2272,7 @@ async function cfgPomolino(){
   const {data:pomolini}=await sb.from('pomolini_wc').select('*').eq('attivo',true);
   const cards=(pomolini||[]).map(p=>{
     const sel=CFG.pomolino===p.codice;
-    return \`<div onclick="selPomolino('\${p.codice}','\${p.nome.replace(/'/g,"\\'")}',\${p[\`prezzo_\${listino()}\`]||0})"
+    return \`<div onclick="selPomolino('\${p.codice}','\${p.nome.replace(/'/g,"\\'")}',\${p[\`prezzo_\${listino().toLowerCase()}\`]||0})"
       style="border:\${sel?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:10px 12px;cursor:pointer;background:\${sel?'var(--red-bg)':'var(--white)'}">
       <div style="font-size:13px;font-weight:500;color:\${sel?'var(--red)':'var(--dark)'}">\${p.nome}</div>
     </div>\`;
@@ -3169,8 +3169,8 @@ async function adminFiniture(){
     <td>\${inlineInput(f.codice_finitura,\`adminSalva('finiture','\${f.id}','codice_finitura',this.value)\`,'60px','text')}</td>
     <td>\${inlineInput(f.nome_finitura,\`adminSalva('finiture','\${f.id}','nome_finitura',this.value)\`,'150px','text')}</td>
     <td>\${inlineInput(f.codice_modello||'',\`adminSalva('finiture','\${f.id}','codice_modello',this.value)\`,'70px','text','Tutti')}</td>
-    <td>\${inlineInput(f.sovrapprezzo_A??0,\`adminSalva('finiture','\${f.id}','sovrapprezzo_A',this.value)\`,'65px')}</td>
-    <td>\${inlineInput(f.sovrapprezzo_P??0,\`adminSalva('finiture','\${f.id}','sovrapprezzo_P',this.value)\`,'65px')}</td>
+    <td>\${inlineInput(f.sovrapprezzo_a??0,\`adminSalva('finiture','\${f.id}','sovrapprezzo_a',this.value)\`,'65px')}</td>
+    <td>\${inlineInput(f.sovrapprezzo_p??0,\`adminSalva('finiture','\${f.id}','sovrapprezzo_p',this.value)\`,'65px')}</td>
     <td><span class="badge \${f.consente_bugna?'bg':'br'}" style="cursor:pointer" onclick="toggleCampo('finiture','\${f.id}','consente_bugna',\${f.consente_bugna})">\${f.consente_bugna?'Sì':'No'}</span></td>
     <td>\${inlineInput(f.sovrapprezzo_bugna_A??0,\`adminSalva('finiture','\${f.id}','sovrapprezzo_bugna_A',this.value)\`,'65px')}</td>
     <td>\${inlineInput(f.sovrapprezzo_bugna_P??0,\`adminSalva('finiture','\${f.id}','sovrapprezzo_bugna_P',this.value)\`,'65px')}</td>
@@ -3212,9 +3212,9 @@ async function adminAperture(){
         \${s.codice_senso}
         <span onclick="eliminaSenso('\${s.id}','\${a.codice}')" style="cursor:pointer;color:var(--mid);margin-left:2px;font-size:11px" title="Rimuovi">×</span>
       </span>\`).join('');
-    const sp = a.logica_prezzo==='fisso'?inlineInput(a.sovrapprezzo_A??'',\`adminSalva('tipologie_apertura','\${a.id}','sovrapprezzo_A',this.value)\`,'65px'):
+    const sp = a.logica_prezzo==='fisso'?inlineInput(a.sovrapprezzo_a??'',\`adminSalva('tipologie_apertura','\${a.id}','sovrapprezzo_a',this.value)\`,'65px'):
               a.logica_prezzo==='percentuale'?inlineInput(a.maggiorazione_pct??'',\`adminSalva('tipologie_apertura','\${a.id}','maggiorazione_pct',this.value)\`,'55px')+'%':'variabile';
-    const spP = a.logica_prezzo==='fisso'?inlineInput(a.sovrapprezzo_P??'',\`adminSalva('tipologie_apertura','\${a.id}','sovrapprezzo_P',this.value)\`,'65px'):'—';
+    const spP = a.logica_prezzo==='fisso'?inlineInput(a.sovrapprezzo_p??'',\`adminSalva('tipologie_apertura','\${a.id}','sovrapprezzo_p',this.value)\`,'65px'):'—';
     return \`<tr>
       <td>\${inlineInput(a.codice,\`adminSalva('tipologie_apertura','\${a.id}','codice',this.value)\`,'80px','text')}</td>
       <td>\${inlineInput(a.nome||'',\`adminSalva('tipologie_apertura','\${a.id}','nome',this.value)\`,'180px','text')}</td>
@@ -3279,15 +3279,15 @@ async function adminFerramenta(){
       \${f.colore_hex?\`<div style="width:24px;height:24px;border-radius:4px;background:#\${f.colore_hex};border:0.5px solid var(--border);flex-shrink:0"></div>\`:''}
       \${inlineInput(f.colore_hex||'',\`adminSalvaFerramenta('\${f.id}','colore_hex',this.value,this)\`,'80px','text','es. C0C0C0')}
     </td>
-    <td>\${inlineInput(f.sovrapprezzo_A??0,\`adminSalva('ferramenta','\${f.id}','sovrapprezzo_A',this.value)\`,'65px')}</td>
-    <td>\${inlineInput(f.sovrapprezzo_P??0,\`adminSalva('ferramenta','\${f.id}','sovrapprezzo_P',this.value)\`,'65px')}</td>
+    <td>\${inlineInput(f.sovrapprezzo_a??0,\`adminSalva('ferramenta','\${f.id}','sovrapprezzo_a',this.value)\`,'65px')}</td>
+    <td>\${inlineInput(f.sovrapprezzo_p??0,\`adminSalva('ferramenta','\${f.id}','sovrapprezzo_p',this.value)\`,'65px')}</td>
     <td>\${adminToggle(f.attivo,\`toggleCampo('ferramenta','\${f.id}','attivo',\${f.attivo})\`)}</td>
     <td><button onclick="eliminaRigaAdmin('ferramenta','\${f.id}','adminFerramenta')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
   </tr>\`).join('');
   document.getElementById('admin-sub').innerHTML=adminCard('Ferramenta',\`
     <table><thead><tr><th>Codice</th><th>Nome</th><th>Colore hex</th><th>Sovr.A (€)</th><th>Sovr.P (€)</th><th>Stato</th><th></th></tr></thead>
     <tbody>\${rows}</tbody></table>\`,
-    \`<button class="btn btn-red btn-sm" onclick="nuovaConCodiceNome('ferramenta','Codice colore (es. NER-L):','Nome colore:',{attivo:true,sovrapprezzo_A:0,sovrapprezzo_P:0},'adminFerramenta')">+ Aggiungi colore</button>\`);
+    \`<button class="btn btn-red btn-sm" onclick="nuovaConCodiceNome('ferramenta','Codice colore (es. NER-L):','Nome colore:',{attivo:true,sovrapprezzo_a:0,sovrapprezzo_p:0},'adminFerramenta')">+ Aggiungi colore</button>\`);
 }
 
 async function adminSalvaFerramenta(id, campo, valore, el){
@@ -3305,8 +3305,8 @@ async function adminManiglie(){
     <td>\${inlineInput(m.nome,\`adminSalva('maniglie','\${m.id}','nome',this.value)\`,'160px','text')}</td>
     <td>\${inlineInput(m.serie_compatibili||'',\`adminSalva('maniglie','\${m.id}','serie_compatibili',this.value)\`,'100px','text','Tutte')}</td>
     <td>\${inlineInput(m.descrizione||'',\`adminSalva('maniglie','\${m.id}','descrizione',this.value)\`,'150px','text','Descrizione')}</td>
-    <td>\${inlineInput(m.prezzo_A??0,\`adminSalva('maniglie','\${m.id}','prezzo_A',this.value)\`,'65px')}</td>
-    <td>\${inlineInput(m.prezzo_P??0,\`adminSalva('maniglie','\${m.id}','prezzo_P',this.value)\`,'65px')}</td>
+    <td>\${inlineInput(m.prezzo_a??0,\`adminSalva('maniglie','\${m.id}','prezzo_a',this.value)\`,'65px')}</td>
+    <td>\${inlineInput(m.prezzo_p??0,\`adminSalva('maniglie','\${m.id}','prezzo_p',this.value)\`,'65px')}</td>
     <td>
       \${m.immagine_url?\`<img src="\${m.immagine_url}" style="width:32px;height:32px;object-fit:cover;border-radius:4px;margin-right:4px">\`:''}
       <label style="cursor:pointer"><input type="file" accept="image/*" style="display:none" onchange="uploadImmagine('maniglie','\${m.id}',this)"><span style="font-size:11px;cursor:pointer;color:var(--red)">📷</span></label>
@@ -3318,7 +3318,7 @@ async function adminManiglie(){
     <div style="overflow-x:auto"><table>
       <thead><tr><th>Codice</th><th>Nome</th><th>Serie compatibili</th><th>Descrizione</th><th>Prezzo A</th><th>Prezzo P</th><th>Immagine</th><th>Stato</th><th></th></tr></thead>
       <tbody>\${rows}</tbody></table></div>\`,
-    \`<button class="btn btn-red btn-sm" onclick="nuovaConCodiceNome('maniglie','Codice maniglia (es. ASC-CH):','Nome maniglia:',{attivo:true,prezzo_A:0,prezzo_P:0},'adminManiglie')">+ Aggiungi maniglia</button>\`);
+    \`<button class="btn btn-red btn-sm" onclick="nuovaConCodiceNome('maniglie','Codice maniglia (es. ASC-CH):','Nome maniglia:',{attivo:true,prezzo_a:0,prezzo_p:0},'adminManiglie')">+ Aggiungi maniglia</button>\`);
 }
 
 // ── SERRATURE ADMIN ───────────────────────────────────
@@ -3332,8 +3332,8 @@ async function adminSerrature(){
     <td><span style="cursor:pointer" onclick="toggleCampo('tipi_serratura','\${s.id}','richiede_cilindro',\${s.richiede_cilindro})">\${s.richiede_cilindro?'<span class="badge bg">Sì</span>':'<span class="badge br">No</span>'}</span></td>
     <td><span style="cursor:pointer" onclick="toggleCampo('tipi_serratura','\${s.id}','richiede_pomolino',\${s.richiede_pomolino})">\${s.richiede_pomolino?'<span class="badge bg">Sì</span>':'<span class="badge br">No</span>'}</span></td>
     <td><span style="cursor:pointer" onclick="toggleCampo('tipi_serratura','\${s.id}','is_automatica',\${s.is_automatica})">\${s.is_automatica?'<span class="badge bg">Sì</span>':'<span class="badge br">No</span>'}</span></td>
-    <td>\${inlineInput(s.sovrapprezzo_A??0,\`adminSalva('tipi_serratura','\${s.id}','sovrapprezzo_A',this.value)\`,'65px')}</td>
-    <td>\${inlineInput(s.sovrapprezzo_P??0,\`adminSalva('tipi_serratura','\${s.id}','sovrapprezzo_P',this.value)\`,'65px')}</td>
+    <td>\${inlineInput(s.sovrapprezzo_a??0,\`adminSalva('tipi_serratura','\${s.id}','sovrapprezzo_a',this.value)\`,'65px')}</td>
+    <td>\${inlineInput(s.sovrapprezzo_p??0,\`adminSalva('tipi_serratura','\${s.id}','sovrapprezzo_p',this.value)\`,'65px')}</td>
     <td>\${adminToggle(s.attiva,\`toggleCampo('tipi_serratura','\${s.id}','attiva',\${s.attiva})\`)}</td>
     <td><button onclick="eliminaRigaAdmin('tipi_serratura','\${s.id}','adminSerrature')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
   </tr>\`).join('');
@@ -3354,15 +3354,15 @@ async function adminCilindri(){
     <td>\${inlineInput(c.misura_mm||'',\`adminSalva('tipi_cilindro','\${c.id}','misura_mm',this.value)\`,'60px','number')} mm</td>
     <td>\${inlineInput(c.famiglie_apertura||'',\`adminSalva('tipi_cilindro','\${c.id}','famiglie_apertura',this.value)\`,'140px','text','es. BAT,CS')}</td>
     <td>\${inlineInput(c.fornitore||'',\`adminSalva('tipi_cilindro','\${c.id}','fornitore',this.value)\`,'100px','text')}</td>
-    <td>\${inlineInput(c.sovrapprezzo_A??0,\`adminSalva('tipi_cilindro','\${c.id}','sovrapprezzo_A',this.value)\`,'65px')}</td>
-    <td>\${inlineInput(c.sovrapprezzo_P??0,\`adminSalva('tipi_cilindro','\${c.id}','sovrapprezzo_P',this.value)\`,'65px')}</td>
+    <td>\${inlineInput(c.sovrapprezzo_a??0,\`adminSalva('tipi_cilindro','\${c.id}','sovrapprezzo_a',this.value)\`,'65px')}</td>
+    <td>\${inlineInput(c.sovrapprezzo_p??0,\`adminSalva('tipi_cilindro','\${c.id}','sovrapprezzo_p',this.value)\`,'65px')}</td>
     <td>\${adminToggle(c.attivo,\`toggleCampo('tipi_cilindro','\${c.id}','attivo',\${c.attivo})\`)}</td>
     <td><button onclick="eliminaRigaAdmin('tipi_cilindro','\${c.id}','adminCilindri')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
   </tr>\`).join('');
   document.getElementById('admin-sub').innerHTML=adminCard('Cilindri',\`
     <table><thead><tr><th>Codice</th><th>Nome</th><th>Misura</th><th>Famiglie apertura</th><th>Fornitore</th><th>Sovr.A</th><th>Sovr.P</th><th>Stato</th><th></th></tr></thead>
     <tbody>\${rows}</tbody></table>\`,
-    \`<button class="btn btn-red btn-sm" onclick="nuovaConCodiceNome('tipi_cilindro','Codice cilindro (es. CIL-3535):','Nome cilindro:',{attivo:true,sovrapprezzo_A:0,sovrapprezzo_P:0},'adminCilindri')">+ Aggiungi cilindro</button>\`);
+    \`<button class="btn btn-red btn-sm" onclick="nuovaConCodiceNome('tipi_cilindro','Codice cilindro (es. CIL-3535):','Nome cilindro:',{attivo:true,sovrapprezzo_a:0,sovrapprezzo_p:0},'adminCilindri')">+ Aggiungi cilindro</button>\`);
 }
 
 // ── COLORI MANIGLIA ADMIN ─────────────────────────────
@@ -3417,15 +3417,15 @@ async function adminPomolini(){
       \${p.colore_hex?\`<div style="width:22px;height:22px;border-radius:4px;background:#\${p.colore_hex};border:0.5px solid var(--border)"></div>\`:''}
       \${inlineInput(p.colore_hex||'',\`adminSalva('pomolini_wc','\${p.id}','colore_hex',this.value)\`,'80px','text')}
     </td>
-    <td>\${inlineInput(p.prezzo_A??0,\`adminSalva('pomolini_wc','\${p.id}','prezzo_A',this.value)\`,'65px')}</td>
-    <td>\${inlineInput(p.prezzo_P??0,\`adminSalva('pomolini_wc','\${p.id}','prezzo_P',this.value)\`,'65px')}</td>
+    <td>\${inlineInput(p.prezzo_a??0,\`adminSalva('pomolini_wc','\${p.id}','prezzo_a',this.value)\`,'65px')}</td>
+    <td>\${inlineInput(p.prezzo_p??0,\`adminSalva('pomolini_wc','\${p.id}','prezzo_p',this.value)\`,'65px')}</td>
     <td>\${adminToggle(p.attivo,\`toggleCampo('pomolini_wc','\${p.id}','attivo',\${p.attivo})\`)}</td>
     <td><button onclick="eliminaRigaAdmin('pomolini_wc','\${p.id}','adminPomolini')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
   </tr>\`).join('');
   document.getElementById('admin-sub').innerHTML=adminCard('Pomolini WC',\`
     <table><thead><tr><th>Codice</th><th>Nome</th><th>Descrizione</th><th>Colore hex</th><th>Prezzo A</th><th>Prezzo P</th><th>Stato</th><th></th></tr></thead>
     <tbody>\${rows||'<tr><td colspan="8" style="text-align:center;color:var(--mid);padding:16px">Nessun pomolino</td></tr>'}</tbody></table>\`,
-    \`<button class="btn btn-red btn-sm" onclick="nuovaConCodiceNome('pomolini_wc','Codice pomolino (es. POM-WC-T):','Nome pomolino:',{attivo:true,prezzo_A:0,prezzo_P:0},'adminPomolini')">+ Aggiungi pomolino</button>\`);
+    \`<button class="btn btn-red btn-sm" onclick="nuovaConCodiceNome('pomolini_wc','Codice pomolino (es. POM-WC-T):','Nome pomolino:',{attivo:true,prezzo_a:0,prezzo_p:0},'adminPomolini')">+ Aggiungi pomolino</button>\`);
 }
 
 
@@ -3525,26 +3525,26 @@ async function adminColoriExtra(){
   const rowsV=(tv||[]).map(v=>\`<tr>
     <td>\${inlineInput(v.codice,\`adminSalva('tipi_vetro','\${v.id}','codice',this.value)\`,'70px','text')}</td>
     <td>\${inlineInput(v.nome,\`adminSalva('tipi_vetro','\${v.id}','nome',this.value)\`,'150px','text')}</td>
-    <td>\${inlineInput(v.sovrapprezzo_A??0,\`adminSalva('tipi_vetro','\${v.id}','sovrapprezzo_A',this.value)\`,'65px')}</td>
-    <td>\${inlineInput(v.sovrapprezzo_P??0,\`adminSalva('tipi_vetro','\${v.id}','sovrapprezzo_P',this.value)\`,'65px')}</td>
+    <td>\${inlineInput(v.sovrapprezzo_a??0,\`adminSalva('tipi_vetro','\${v.id}','sovrapprezzo_a',this.value)\`,'65px')}</td>
+    <td>\${inlineInput(v.sovrapprezzo_p??0,\`adminSalva('tipi_vetro','\${v.id}','sovrapprezzo_p',this.value)\`,'65px')}</td>
     <td>\${adminToggle(v.attivo,\`toggleCampo('tipi_vetro','\${v.id}','attivo',\${v.attivo})\`)}</td>
   </tr>\`).join('');
   const rowsA=(alu||[]).map(a=>\`<tr>
     <td>\${inlineInput(a.codice,\`adminSalva('colori_inserto_alluminio','\${a.id}','codice',this.value)\`,'70px','text')}</td>
     <td>\${inlineInput(a.nome,\`adminSalva('colori_inserto_alluminio','\${a.id}','nome',this.value)\`,'150px','text')}</td>
     <td><span class="badge \${a.incluso?'bg':'ba'}" style="cursor:pointer;font-size:10px" onclick="toggleCampo('colori_inserto_alluminio','\${a.id}','incluso',\${a.incluso})">\${a.incluso?'Incluso':'A pagamento'}</span></td>
-    <td>\${inlineInput(a.sovrapprezzo_A??'',\`adminSalva('colori_inserto_alluminio','\${a.id}','sovrapprezzo_A',this.value)\`,'65px','number','0')}</td>
-    <td>\${inlineInput(a.sovrapprezzo_P??'',\`adminSalva('colori_inserto_alluminio','\${a.id}','sovrapprezzo_P',this.value)\`,'65px','number','0')}</td>
+    <td>\${inlineInput(a.sovrapprezzo_a??'',\`adminSalva('colori_inserto_alluminio','\${a.id}','sovrapprezzo_a',this.value)\`,'65px','number','0')}</td>
+    <td>\${inlineInput(a.sovrapprezzo_p??'',\`adminSalva('colori_inserto_alluminio','\${a.id}','sovrapprezzo_p',this.value)\`,'65px','number','0')}</td>
   </tr>\`).join('');
   const rowsP=(pietra||[]).map(p=>\`<tr>
     <td>\${inlineInput(p.codice,\`adminSalva('colori_pietra','\${p.id}','codice',this.value)\`,'70px','text')}</td>
     <td>\${inlineInput(p.nome,\`adminSalva('colori_pietra','\${p.id}','nome',this.value)\`,'150px','text')}</td>
-    <td>\${inlineInput(p.sovrapprezzo_A??0,\`adminSalva('colori_pietra','\${p.id}','sovrapprezzo_A',this.value)\`,'65px')}</td>
-    <td>\${inlineInput(p.sovrapprezzo_P??0,\`adminSalva('colori_pietra','\${p.id}','sovrapprezzo_P',this.value)\`,'65px')}</td>
+    <td>\${inlineInput(p.sovrapprezzo_a??0,\`adminSalva('colori_pietra','\${p.id}','sovrapprezzo_a',this.value)\`,'65px')}</td>
+    <td>\${inlineInput(p.sovrapprezzo_p??0,\`adminSalva('colori_pietra','\${p.id}','sovrapprezzo_p',this.value)\`,'65px')}</td>
   </tr>\`).join('');
   document.getElementById('admin-sub').innerHTML=\`
   <div class="card" style="margin-bottom:12px">
-    <div class="card-header"><span class="card-title">Tipi vetro</span><button class="btn btn-red btn-sm" onclick="nuovaRiga('tipi_vetro',{codice:'VET',nome:'Nuovo vetro',sovrapprezzo_A:0,sovrapprezzo_P:0,attivo:true},'adminColoriExtra')">+</button></div>
+    <div class="card-header"><span class="card-title">Tipi vetro</span><button class="btn btn-red btn-sm" onclick="nuovaRiga('tipi_vetro',{codice:'VET',nome:'Nuovo vetro',sovrapprezzo_a:0,sovrapprezzo_p:0,attivo:true},'adminColoriExtra')">+</button></div>
     <table><thead><tr><th>Codice</th><th>Nome</th><th>Sovr.A</th><th>Sovr.P</th><th>Stato</th></tr></thead><tbody>\${rowsV||'<tr><td colspan="5" style="text-align:center;color:var(--mid);padding:12px">Nessuno</td></tr>'}</tbody></table>
   </div>
   <div class="card" style="margin-bottom:12px">
@@ -3552,7 +3552,7 @@ async function adminColoriExtra(){
     <table><thead><tr><th>Codice</th><th>Nome</th><th>Incluso</th><th>Sovr.A</th><th>Sovr.P</th></tr></thead><tbody>\${rowsA||'<tr><td colspan="5" style="text-align:center;color:var(--mid);padding:12px">Nessuno</td></tr>'}</tbody></table>
   </div>
   <div class="card">
-    <div class="card-header"><span class="card-title">Colori pietra</span><button class="btn btn-red btn-sm" onclick="nuovaRiga('colori_pietra',{codice:'PIE',nome:'Nuovo colore',sovrapprezzo_A:0,sovrapprezzo_P:0},'adminColoriExtra')">+</button></div>
+    <div class="card-header"><span class="card-title">Colori pietra</span><button class="btn btn-red btn-sm" onclick="nuovaRiga('colori_pietra',{codice:'PIE',nome:'Nuovo colore',sovrapprezzo_a:0,sovrapprezzo_p:0},'adminColoriExtra')">+</button></div>
     <table><thead><tr><th>Codice</th><th>Nome</th><th>Sovr.A</th><th>Sovr.P</th></tr></thead><tbody>\${rowsP||'<tr><td colspan="4" style="text-align:center;color:var(--mid);padding:12px">Nessun colore pietra — aggiungilo qui</td></tr>'}</tbody></table>
   </div>\`;
 }
@@ -3604,8 +3604,8 @@ async function adminSpalle(){
     <td>\${inlineInput(s.spalla_cm,\`adminSalva('telai_spalle','\${s.id}','spalla_cm',this.value)\`,'60px')} cm</td>
     <td><span class="tag" style="font-size:10px">\${s.famiglia_apertura}</span></td>
     <td style="font-size:11px;color:var(--mid);max-width:160px">\${s.descrizione||''}</td>
-    <td>\${inlineInput(s.prezzo_A??'',\`adminSalva('telai_spalle','\${s.id}','prezzo_A',this.value)\`,'70px','number','€')}</td>
-    <td>\${inlineInput(s.prezzo_P??'',\`adminSalva('telai_spalle','\${s.id}','prezzo_P',this.value)\`,'70px','number','€')}</td>
+    <td>\${inlineInput(s.prezzo_a??'',\`adminSalva('telai_spalle','\${s.id}','prezzo_a',this.value)\`,'70px','number','€')}</td>
+    <td>\${inlineInput(s.prezzo_p??'',\`adminSalva('telai_spalle','\${s.id}','prezzo_p',this.value)\`,'70px','number','€')}</td>
   </tr>\`).join('');
   document.getElementById('admin-sub').innerHTML=adminCard('Spalle telaio a magazzino',\`
     <table><thead><tr><th>Codice</th><th>Spalla</th><th>Famiglia</th><th>Descrizione</th><th>Prezzo A (€)</th><th>Prezzo P (€)</th></tr></thead>
@@ -3637,8 +3637,8 @@ async function adminScorExt(){
     <td><strong style="font-size:12px">\${s.codice_apertura}</strong></td>
     <td style="font-size:12px">\${s.spessore_da_cm}–\${s.spessore_a_cm} cm</td>
     <td style="font-size:11px">\${s.tipo_accessorio||'—'} \${s.cm_accessorio?s.cm_accessorio+'cm':''}</td>
-    <td>\${inlineInput(s.prezzo_A??'',\`adminSalva('scorrevoli_esterni','\${s.id}','prezzo_A',this.value)\`,'75px','number','€')}</td>
-    <td>\${inlineInput(s.prezzo_P??'',\`adminSalva('scorrevoli_esterni','\${s.id}','prezzo_P',this.value)\`,'75px','number','€')}</td>
+    <td>\${inlineInput(s.prezzo_a??'',\`adminSalva('scorrevoli_esterni','\${s.id}','prezzo_a',this.value)\`,'75px','number','€')}</td>
+    <td>\${inlineInput(s.prezzo_p??'',\`adminSalva('scorrevoli_esterni','\${s.id}','prezzo_p',this.value)\`,'75px','number','€')}</td>
   </tr>\`).join('');
   document.getElementById('admin-sub').innerHTML=adminCard('Scorrevoli esterni — prezzi per fascia spessore',\`
     <table><thead><tr><th>Tipologia</th><th>Spessore muro</th><th>Accessorio</th><th>Prezzo A (€)</th><th>Prezzo P (€)</th></tr></thead>
@@ -3652,8 +3652,8 @@ async function adminScorInt(){
     <td style="font-size:12px">\${s.codice_cassone}</td>
     <td style="font-size:12px">\${s.spalla_cassone_cm} cm</td>
     <td><strong style="font-size:12px">\${s.kit_telaio_codice}</strong></td>
-    <td>\${inlineInput(s.prezzo_A??'',\`adminSalva('scorrevoli_interni','\${s.id}','prezzo_A',this.value)\`,'75px','number','€')}</td>
-    <td>\${inlineInput(s.prezzo_P??'',\`adminSalva('scorrevoli_interni','\${s.id}','prezzo_P',this.value)\`,'75px','number','€')}</td>
+    <td>\${inlineInput(s.prezzo_a??'',\`adminSalva('scorrevoli_interni','\${s.id}','prezzo_a',this.value)\`,'75px','number','€')}</td>
+    <td>\${inlineInput(s.prezzo_p??'',\`adminSalva('scorrevoli_interni','\${s.id}','prezzo_p',this.value)\`,'75px','number','€')}</td>
   </tr>\`).join('');
   document.getElementById('admin-sub').innerHTML=adminCard('Scorrevoli interni — kit cassone',\`
     <table><thead><tr><th>Tipologia</th><th>Cassone</th><th>Spalla</th><th>Kit telaio</th><th>Prezzo A (€)</th><th>Prezzo P (€)</th></tr></thead>
@@ -4129,7 +4129,7 @@ function msgErrore(error, valore){
 
 async function adminSalva(tabella, id, campo, valore){
   let val = valore;
-  const numericFields=['sovrapprezzo_A','sovrapprezzo_P','prezzo_A','prezzo_P','prezzo_base',
+  const numericFields=['sovrapprezzo_a','sovrapprezzo_p','prezzo_a','prezzo_p','prezzo_base',
     'prezzo_vetro','prezzo_extra_incisioni','sovrapprezzo_bugna_A','sovrapprezzo_bugna_P',
     'maggiorazione_pct','spalla_cm','spessore_da_cm','spessore_a_cm','cm_accessorio',
     'prezzo_access_A','prezzo_access_P','spalla_cassone_cm','quantita',
