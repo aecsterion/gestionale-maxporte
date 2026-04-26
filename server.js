@@ -3333,13 +3333,14 @@ async function nuovaConCodiceNome(tabella, promptCodice, promptNome, extraData, 
   if(!codice) return;
   const nome = prompt(promptNome);
   if(!nome) return;
-  const {data, error} = await sb.from(tabella).insert([{codice:codice.trim(), nome, ...extraData}]).select();
+  // Inserisce solo codice e nome — gli altri campi si modificano inline
+  const {data, error} = await sb.from(tabella).insert([{codice:codice.trim(), nome}]).select();
   if(error){
     console.error('nuovaConCodiceNome error:', error);
     toast('Errore: '+error.message,'err');
     return;
   }
-  toast('Aggiunto','ok');
+  toast('Aggiunto — modifica gli altri campi direttamente in tabella','ok');
   if(callback && window[callback]) window[callback]();
 }
 
@@ -3351,15 +3352,15 @@ async function nuovaSerratura(){
   const {data, error} = await sb.from('tipi_serratura').insert([{
     codice:codice.toUpperCase().trim(), nome,
     attiva:true, richiede_cilindro:false,
-    richiede_pomolino:false, is_automatica:false,
-    sovrapprezzo_A:0, sovrapprezzo_P:0
+    richiede_pomolino:false
   }]).select();
   if(error){
     console.error('nuovaSerratura error:', error);
     toast('Errore: '+error.message,'err');
     return;
   }
-  toast('Serratura aggiunta','ok'); adminSerrature();
+  toast('Serratura aggiunta — modifica i campi direttamente in tabella','ok');
+  adminSerrature();
 }
 
 async function eliminaRigaAdmin(tabella, id, callback){
