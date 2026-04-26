@@ -1346,22 +1346,58 @@ function resetCFG(){
     nome_colore_maniglia:'',
     // flags
     _flags:{}, _richiede_cilindro:false, _richiede_pomolino:false, _maniglia_esclusa:false,
-    _vetroIncluso:false, _haExtraIncisioni:false, _finitura_pct:0, _finitura_fisso:0
+    _vetroIncluso:false, _haExtraIncisioni:false, _finitura_pct:0, _finitura_fisso:0,
+    _isDoppiaAnta:false, _needsComFmSuppl:false,
+    _isFuoriH:false, _isFuoriL:false, _p_fuori_h:0, _p_fuori_l:0,
+    _fuori_h_pct:0, _fuori_l_pct:0, _p_varsavia:0
   };
 }
 resetCFG();
 
 function cfgTotale(){
-  // Se la finitura è a percentuale, calcolala sul prezzo base
+  // Prezzo finitura (fisso o percentuale)
   let p_fin = CFG.p_finitura||0;
   if((CFG._finitura_pct||0) > 0 && (CFG.p_base||0) > 0){
-    p_fin = (CFG.p_base * CFG._finitura_pct / 100);
+    p_fin = Math.round(CFG.p_base * CFG._finitura_pct / 100 * 100)/100;
   }
-  return (CFG.p_base||0)+(p_fin)+
+
+  // Prezzo spalla (telaio)
+  const p_telaio = CFG.p_telaio||0;
+
+  // Subtotale base (su cui si applicano i fuori misura)
+  const sub = (CFG.p_base||0) + p_fin + (CFG.p_apertura||0) + p_telaio;
+
+  // Supplemento doppia anta: (base+finitura+telaio)*2 + eventuale extra CS2A
+  let p_doppia=0;
+  if(CFG._isDoppiaAnta){
+    p_doppia = (CFG.p_base||0) + p_fin + p_telaio; // già moltiplicato x2 = raddoppio del sub
+    if(CFG.apertura==='CS2A') p_doppia += 124;
+  }
+
+  // Supplemento fuori misura H (+20% su sub, oppure fisso €45)
+  let p_fh=0;
+  if(CFG._isFuoriH){
+    if(CFG._fuori_h_pct) p_fh=Math.round(sub*(CFG._fuori_h_pct/100)*100)/100;
+    else p_fh=CFG._p_fuori_h||0;
+  }
+
+  // Supplemento fuori misura L (+40% su sub+fh)
+  let p_fl=0;
+  if(CFG._isFuoriL){
+    p_fl=Math.round((sub+p_fh)*(CFG._fuori_l_pct/100)*100)/100;
+  }
+
+  // Totale porta
+  const tot_porta = CFG._isDoppiaAnta ? sub + p_doppia : sub;
+
+  return Math.round((
+    tot_porta + p_fh + p_fl +
     (CFG.p_vetro||0)+(CFG.p_bugna||0)+(CFG.p_inserto||0)+
-    (CFG.p_apertura||0)+(CFG.p_telaio||0)+(CFG.p_acc_telaio||0)+
+    (CFG.p_acc_telaio||0)+
     (CFG.p_ferramenta||0)+(CFG.p_maniglia||0)+(CFG.p_extra_incisioni||0)+
-    (CFG.p_serratura||0)+(CFG.p_cilindro||0)+(CFG.p_pomolino||0);
+    (CFG.p_serratura||0)+(CFG.p_cilindro||0)+(CFG.p_pomolino||0)+
+    (CFG._p_varsavia||0)
+  )*100)/100;
 }
 
 function listino(){ return window._prevListino || 'A'; }
@@ -1877,29 +1913,76 @@ async function selApertura(cod, nome, logica, sovr, doppio, magg){
   CFG.serratura=null; CFG.nome_serratura=''; CFG.cilindro=null; CFG.nome_cilindro='';
   CFG.apertura=cod; CFG.nome_apertura=nome;
   CFG._logicaApertura=logica; CFG._maggApertura=magg; CFG._doppioApertura=doppio;
+
+  // Calcola supplemento apertura base
   if(logica==='fisso') CFG.p_apertura=sovr;
   else if(logica==='percentuale') CFG.p_apertura=Math.round(CFG.p_base*(magg/100)*100)/100;
   else CFG.p_apertura=0;
+
+  // Supplemento Varsavia (staffe obbligatorie)
+  CFG._p_varsavia=0;
+  if(CFG.modello==='VAR'){
+    const isScorrevole=['SI','SE'].some(x=>cod.startsWith(x));
+    if(isScorrevole){
+      const isDoppia=cod.endsWith('2A')||cod.endsWith('AS');
+      const {data:varMod}=await sb.from('modelli').select('supplemento_staffe_a,supplemento_staffe_p').eq('codice','VAR').limit(1);
+      const lst=listino().toLowerCase();
+      const staffe=varMod?.[0]?.[\`supplemento_staffe_\${lst}\`]||0;
+      CFG._p_varsavia=isDoppia?staffe*2:staffe;
+    }
+  }
+
+  // Flag doppia anta
+  CFG._isDoppiaAnta = cod==='BAT2A'||cod==='CS2A'||cod.endsWith('2A');
+
+  // Per COM e FM: il supplemento dipende dalla famiglia serie+finitura
+  // Verrà (ri)calcolato in calcolaSupplementoComFm() dopo la scelta della finitura
+  // Per ora non resettiamo p_apertura se già calcolato
+  if(cod.startsWith('COM')||cod.startsWith('FM')){
+    CFG._needsComFmSuppl=true;
+  } else {
+    CFG._needsComFmSuppl=false;
+  }
+
+  cfgUpdatePrice();
 
   // Carica sensi disponibili per questa apertura
   const {data:sensi} = await sb.from('sensi_apertura').select('*').eq('codice_apertura',cod).eq('attivo',true).order('ordine');
 
   if(!sensi||sensi.length===0){
-    // Nessun senso configurato — vai direttamente alle misure
     CFG.senso=null;
     await renderCfgStep('misure');
     return;
   }
 
-  if(sensi.length===1 && sensi[0].codice_senso==='BIDIREZIONALE' || sensi[0].codice_senso==='NESSUNO' || sensi[0].codice_senso==='X'){
-    // Senso fisso o non applicabile
+  if(sensi.length===1 && (sensi[0].codice_senso==='BIDIREZIONALE'||sensi[0].codice_senso==='NESSUNO'||sensi[0].codice_senso==='X')){
     CFG.senso=sensi[0].codice_senso;
     await renderCfgStep('misure');
     return;
   }
 
-  // Mostra scelta senso
   await cfgSenso(sensi);
+}
+
+// Determina famiglia serie per COM/FM
+function famigliaSerie(){
+  const s=CFG.serie||'';
+  const f=CFG.finitura||'';
+  if(f==='GREZZA') return 'GREZZA';
+  if(['LAC','GEO','GL','JAD','ACC','PAN-BL'].includes(s)) return 'LACCATA';
+  return 'TAM_MAS';
+}
+
+// Calcola supplemento COM/FM in base a famiglia serie
+async function calcolaSupplementoComFm(){
+  if(!CFG._needsComFmSuppl) return;
+  const cod=CFG.apertura||'';
+  const fam=famigliaSerie();
+  const {data}=await sb.from('supplementi_apertura')
+    .select('*').eq('codice_apertura',cod).eq('famiglia_serie',fam).limit(1);
+  const lst=listino().toLowerCase();
+  CFG.p_apertura=(data?.[0]?.[\`supplemento_\${lst}\`])||0;
+  cfgUpdatePrice();
 }
 
 async function cfgSenso(sensi){
@@ -1966,6 +2049,9 @@ async function cfgMisure(){
     </div>
   </div>
   \${CFG.misura_custom?'<div style="background:var(--red-bg);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--red-tx);margin-bottom:12px">⚠ Misura custom — richiederà approvazione tecnica</div>':''}
+  <div style="background:var(--amber-bg);border-radius:var(--radius);padding:10px 14px;font-size:12px;color:var(--amber-tx);margin-bottom:12px">
+    <strong>Fuori misura:</strong> larghezze non in elenco → +40% · altezze non in elenco → +20% (o €45 per CL/LCL) · h&gt;210cm solo laccate con scorrevole/FM
+  </div>
   <div style="display:flex;justify-content:flex-end">
     <button class="btn btn-red btn-sm" onclick="avanzaASpessore()">Avanti →</button>
   </div>\`;
@@ -1976,8 +2062,63 @@ function selLarghezza(v){ CFG.larghezza=v; CFG.misura_custom=false; cfgMisure();
 function selAltezza(v){ CFG.altezza=v; CFG.misura_custom=false; cfgMisure(); }
 function selLarghezzaCustom(v){ if(v){ CFG.larghezza=parseFloat(v); CFG.misura_custom=true; } }
 function selAltezzaCustom(v){ if(v){ CFG.altezza=parseFloat(v); CFG.misura_custom=true; } }
-function avanzaASpessore(){
+async function avanzaASpessore(){
   if(!CFG.larghezza||!CFG.altezza){ toast('Seleziona larghezza e altezza','err'); return; }
+
+  // Calcola supplemento COM/FM ora che abbiamo finitura+serie
+  await calcolaSupplementoComFm();
+
+  // Determina misure standard
+  const fam=['SI','SE','FM','COM'].some(x=>CFG.apertura?.startsWith(x))?'SCOR':'BAT';
+  const {data:misure}=await sb.from('misure_standard').select('*').eq('famiglia_apertura',fam);
+  const larghezzeStd=new Set((misure||[]).map(m=>m.larghezza_cm));
+  const altezzeStd=new Set((misure||[]).map(m=>m.altezza_cm));
+
+  const isFuoriH = !altezzeStd.has(CFG.altezza);
+  const isFuoriL = !larghezzeStd.has(CFG.larghezza);
+  const isLaccata = ['LAC','GEO','GL','JAD','ACC','PAN-BL'].includes(CFG.serie||'');
+  const isMassellata = CFG.serie==='MAS';
+  const isModelloCLLCL = ['CL','LCL'].includes(CFG.modello||'');
+  const isScorrevole = ['SI','SE'].some(x=>(CFG.apertura||'').startsWith(x));
+  const isFM = (CFG.apertura||'').startsWith('FM');
+
+  // Validazione h>210 — solo laccati con scorrevole o FM
+  if(isFuoriH && CFG.altezza>210){
+    if(!isLaccata){
+      toast('Altezza >210cm disponibile solo per porte laccate con tipologia scorrevole o filo muro','err');
+      return;
+    }
+    if(!isScorrevole && !isFM){
+      toast('Altezza >210cm disponibile solo con tipologia scorrevole o filo muro','err');
+      return;
+    }
+  }
+
+  // Reset supplementi fuori misura
+  CFG._p_fuori_h=0; CFG._p_fuori_l=0;
+  CFG._isFuoriH=false; CFG._isFuoriL=false;
+
+  // Supplemento fuori misura H (<210 o >210)
+  if(isFuoriH){
+    CFG._isFuoriH=true;
+    if(isMassellata){
+      // Massellate: nessun supplemento h
+    } else if(isModelloCLLCL){
+      CFG._p_fuori_h=45;
+    } else {
+      // +20% su (base + finitura + apertura + telaio)
+      CFG._fuori_h_pct=20;
+    }
+  }
+
+  // Supplemento fuori misura L (+40% su tutto)
+  if(isFuoriL){
+    CFG._isFuoriL=true;
+    CFG._fuori_l_pct=40;
+  }
+
+  // Ricalcola con supplementi
+  cfgUpdatePrice();
   renderCfgStep('spessore');
 }
 
@@ -2342,17 +2483,31 @@ async function cfgRiepilogo(){
     CFG.nome_maniglia||''
   ].filter(Boolean).join(' | ');
 
+  // Calcola valori effettivi per riepilogo
+  const p_fin_eff = (CFG._finitura_pct||0)>0 ? Math.round((CFG.p_base||0)*CFG._finitura_pct/100*100)/100 : (CFG.p_finitura||0);
+  const sub_eff = (CFG.p_base||0)+p_fin_eff+(CFG.p_apertura||0)+(CFG.p_telaio||0);
+  const p_fh_eff = CFG._isFuoriH ? (CFG._fuori_h_pct ? Math.round(sub_eff*CFG._fuori_h_pct/100*100)/100 : CFG._p_fuori_h||0) : 0;
+  const p_fl_eff = CFG._isFuoriL ? Math.round((sub_eff+p_fh_eff)*CFG._fuori_l_pct/100*100)/100 : 0;
+  const p_doppia_eff = CFG._isDoppiaAnta ? ((CFG.p_base||0)+p_fin_eff+(CFG.p_telaio||0)+(CFG.apertura==='CS2A'?124:0)) : 0;
+
   const righe_prezzo = [
     {label:'Prezzo base porta',val:CFG.p_base},
     CFG.p_vetro>0&&{label:'Vetro ('+CFG.nome_tipo_vetro+')',val:CFG.p_vetro},
-    CFG.p_finitura>0&&{label:'Finitura ('+CFG.nome_finitura+')',val:CFG.p_finitura},
+    p_fin_eff>0&&{label:'Finitura ('+(CFG._finitura_pct>0?'+'+CFG._finitura_pct+'%':'')+CFG.nome_finitura+')',val:p_fin_eff},
     CFG.p_bugna>0&&{label:'Bugna',val:CFG.p_bugna},
     CFG.p_inserto>0&&{label:'Inserto '+(CFG.nome_colore_alu||CFG.nome_colore_pietra),val:CFG.p_inserto},
-    CFG.p_apertura>0&&{label:'Apertura ('+CFG.nome_apertura+')',val:CFG.p_apertura},
+    CFG.p_apertura>0&&{label:'Supplemento apertura ('+CFG.nome_apertura+')',val:CFG.p_apertura},
     CFG.p_telaio>0&&{label:'Telaio / Spalla ('+CFG.spalla+')',val:CFG.p_telaio},
     CFG.p_acc_telaio>0&&{label:'Accessorio telaio ('+CFG.accessorio_telaio+')',val:CFG.p_acc_telaio},
+    p_doppia_eff>0&&{label:'Supplemento doppia anta'+(CFG.apertura==='CS2A'?' incl. €124':''),val:p_doppia_eff},
+    p_fh_eff>0&&{label:'Supplemento fuori misura H'+(CFG._fuori_h_pct?\` (+\${CFG._fuori_h_pct}%)\`:''),val:p_fh_eff},
+    p_fl_eff>0&&{label:'Supplemento fuori misura L (+'+CFG._fuori_l_pct+'%)',val:p_fl_eff},
+    CFG._p_varsavia>0&&{label:'Staffe Varsavia (obbligatorie)',val:CFG._p_varsavia},
     CFG.p_ferramenta>0&&{label:'Ferramenta ('+CFG.nome_ferramenta+')',val:CFG.p_ferramenta},
     CFG.p_maniglia>0&&{label:'Maniglia ('+CFG.nome_maniglia+')',val:CFG.p_maniglia},
+    CFG.p_serratura>0&&{label:'Serratura ('+CFG.nome_serratura+')',val:CFG.p_serratura},
+    CFG.p_cilindro>0&&{label:'Cilindro ('+CFG.nome_cilindro+')',val:CFG.p_cilindro},
+    CFG.p_pomolino>0&&{label:'Pomolino WC',val:CFG.p_pomolino},
     CFG.p_extra_incisioni>0&&{label:'Extra incisioni',val:CFG.p_extra_incisioni},
   ].filter(Boolean);
 
