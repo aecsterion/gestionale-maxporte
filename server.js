@@ -2010,9 +2010,25 @@ async function selSenso(senso, desc){
 }
 
 async function cfgMisure(){
-  // misure standard per famiglia apertura
-  const fam = ['SI','SE','FM','COM'].some(x=>CFG.apertura?.startsWith(x))?'SCOR':'BAT';
-  const {data:misure} = await sb.from('misure_standard').select('*').eq('famiglia_apertura',fam).order('larghezza_cm').order('altezza_cm');
+  // Determina famiglia misure in base al codice apertura
+  const ap = CFG.apertura||'';
+  const famMisure = 
+    ap.startsWith('SI') ? 'SI' :
+    ap.startsWith('SE') ? 'SE' :
+    ap.startsWith('FM') ? 'FM' :
+    ap.startsWith('COM') ? 'COM' :
+    ap.startsWith('CS') ? 'CS' :
+    ap.startsWith('LIBRO') || ap==='1/3 - 2/3' ? 'LIBRO' :
+    ap==='ROTO' ? 'ROTO' :
+    ap.startsWith('V/V') || ap.startsWith('SALOON') ? 'SALOON' :
+    ap==='TRAP' ? 'SPECIALI' : 'BAT';
+
+  CFG._famMisure = famMisure;
+
+  const {data:misure} = await sb.from('misure_standard').select('*')
+    .eq('famiglia_apertura',famMisure)
+    .gt('larghezza_cm',0).gt('altezza_cm',0)
+    .order('larghezza_cm').order('altezza_cm');
 
   const larghezze = [...new Set((misure||[]).map(m=>m.larghezza_cm))].sort((a,b)=>a-b);
   const altezze = [...new Set((misure||[]).map(m=>m.altezza_cm))].sort((a,b)=>a-b);
@@ -2068,9 +2084,10 @@ async function avanzaASpessore(){
   // Calcola supplemento COM/FM ora che abbiamo finitura+serie
   await calcolaSupplementoComFm();
 
-  // Determina misure standard
-  const fam=['SI','SE','FM','COM'].some(x=>CFG.apertura?.startsWith(x))?'SCOR':'BAT';
-  const {data:misure}=await sb.from('misure_standard').select('*').eq('famiglia_apertura',fam);
+  // Determina misure standard dalla famiglia già calcolata in cfgMisure
+  const famMisure = CFG._famMisure || 'BAT';
+  const {data:misure}=await sb.from('misure_standard').select('*')
+    .eq('famiglia_apertura',famMisure).gt('larghezza_cm',0).gt('altezza_cm',0);
   const larghezzeStd=new Set((misure||[]).map(m=>m.larghezza_cm));
   const altezzeStd=new Set((misure||[]).map(m=>m.altezza_cm));
 
