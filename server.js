@@ -3186,7 +3186,7 @@ async function adminFerramenta(){
   document.getElementById('admin-sub').innerHTML=adminCard('Ferramenta',\`
     <table><thead><tr><th>Codice</th><th>Nome</th><th>Colore hex</th><th>Sovr.A (€)</th><th>Sovr.P (€)</th><th>Stato</th><th></th></tr></thead>
     <tbody>\${rows}</tbody></table>\`,
-    \`<button class="btn btn-red btn-sm" onclick="nuovaRiga('ferramenta',{codice:'NEW',nome:'Nuovo colore',attivo:true,sovrapprezzo_A:0,sovrapprezzo_P:0},'adminFerramenta')">+ Aggiungi colore</button>\`);
+    \`<button class="btn btn-red btn-sm" onclick="nuovaConCodiceNome('ferramenta','Codice colore (es. NER-L):','Nome colore:',{attivo:true,sovrapprezzo_A:0,sovrapprezzo_P:0},'adminFerramenta')">+ Aggiungi colore</button>\`);
 }
 
 async function adminSalvaFerramenta(id, campo, valore, el){
@@ -3217,7 +3217,7 @@ async function adminManiglie(){
     <div style="overflow-x:auto"><table>
       <thead><tr><th>Codice</th><th>Nome</th><th>Serie compatibili</th><th>Descrizione</th><th>Prezzo A</th><th>Prezzo P</th><th>Immagine</th><th>Stato</th><th></th></tr></thead>
       <tbody>\${rows}</tbody></table></div>\`,
-    \`<button class="btn btn-red btn-sm" onclick="nuovaRiga('maniglie',{codice:'MAN-NEW',nome:'Nuova maniglia',attivo:true,prezzo_A:0,prezzo_P:0},'adminManiglie')">+ Aggiungi maniglia</button>\`);
+    \`<button class="btn btn-red btn-sm" onclick="nuovaConCodiceNome('maniglie','Codice maniglia (es. ASC-CH):','Nome maniglia:',{attivo:true,prezzo_A:0,prezzo_P:0},'adminManiglie')">+ Aggiungi maniglia</button>\`);
 }
 
 // ── SERRATURE ADMIN ───────────────────────────────────
@@ -3261,7 +3261,7 @@ async function adminCilindri(){
   document.getElementById('admin-sub').innerHTML=adminCard('Cilindri',\`
     <table><thead><tr><th>Codice</th><th>Nome</th><th>Misura</th><th>Famiglie apertura</th><th>Fornitore</th><th>Sovr.A</th><th>Sovr.P</th><th>Stato</th><th></th></tr></thead>
     <tbody>\${rows}</tbody></table>\`,
-    \`<button class="btn btn-red btn-sm" onclick="nuovaRiga('tipi_cilindro',{codice:'CIL-NEW',nome:'Nuovo cilindro',attivo:true,sovrapprezzo_A:0,sovrapprezzo_P:0},'adminCilindri')">+ Aggiungi cilindro</button>\`);
+    \`<button class="btn btn-red btn-sm" onclick="nuovaConCodiceNome('tipi_cilindro','Codice cilindro (es. CIL-3535):','Nome cilindro:',{attivo:true,sovrapprezzo_A:0,sovrapprezzo_P:0},'adminCilindri')">+ Aggiungi cilindro</button>\`);
 }
 
 // ── COLORI MANIGLIA ADMIN ─────────────────────────────
@@ -3324,7 +3324,23 @@ async function adminPomolini(){
   document.getElementById('admin-sub').innerHTML=adminCard('Pomolini WC',\`
     <table><thead><tr><th>Codice</th><th>Nome</th><th>Descrizione</th><th>Colore hex</th><th>Prezzo A</th><th>Prezzo P</th><th>Stato</th><th></th></tr></thead>
     <tbody>\${rows||'<tr><td colspan="8" style="text-align:center;color:var(--mid);padding:16px">Nessun pomolino</td></tr>'}</tbody></table>\`,
-    \`<button class="btn btn-red btn-sm" onclick="nuovaRiga('pomolini_wc',{codice:'POM-NEW',nome:'Nuovo pomolino',attivo:true,prezzo_A:0,prezzo_P:0},'adminPomolini')">+ Aggiungi pomolino</button>\`);
+    \`<button class="btn btn-red btn-sm" onclick="nuovaConCodiceNome('pomolini_wc','Codice pomolino (es. POM-WC-T):','Nome pomolino:',{attivo:true,prezzo_A:0,prezzo_P:0},'adminPomolini')">+ Aggiungi pomolino</button>\`);
+}
+
+
+async function nuovaConCodiceNome(tabella, promptCodice, promptNome, extraData, callback){
+  const codice = prompt(promptCodice);
+  if(!codice) return;
+  const nome = prompt(promptNome);
+  if(!nome) return;
+  const {data, error} = await sb.from(tabella).insert([{codice:codice.trim(), nome, ...extraData}]).select();
+  if(error){
+    console.error('nuovaConCodiceNome error:', error);
+    toast('Errore: '+error.message,'err');
+    return;
+  }
+  toast('Aggiunto','ok');
+  if(callback && window[callback]) window[callback]();
 }
 
 async function nuovaSerratura(){
@@ -3332,13 +3348,17 @@ async function nuovaSerratura(){
   if(!codice) return;
   const nome = prompt('Nome serratura:');
   if(!nome) return;
-  const {error} = await sb.from('tipi_serratura').insert([{
+  const {data, error} = await sb.from('tipi_serratura').insert([{
     codice:codice.toUpperCase().trim(), nome,
     attiva:true, richiede_cilindro:false,
     richiede_pomolino:false, is_automatica:false,
     sovrapprezzo_A:0, sovrapprezzo_P:0
-  }]);
-  if(error){toast(msgErrore(error,codice),'err');return;}
+  }]).select();
+  if(error){
+    console.error('nuovaSerratura error:', error);
+    toast('Errore: '+error.message,'err');
+    return;
+  }
   toast('Serratura aggiunta','ok'); adminSerrature();
 }
 
