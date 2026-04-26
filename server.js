@@ -2086,36 +2086,35 @@ async function cfgFerramenta(){
 function selFerramenta(cod,nome,sovr){CFG.ferramenta=cod;CFG.nome_ferramenta=nome;CFG.p_ferramenta=sovr;cfgUpdatePrice();renderCfgStep('maniglia');}
 
 async function cfgManiglia(){
-  const isScorrevole = CFG.apertura==='SI'||CFG.apertura==='SE'||
-    (CFG.apertura||'').startsWith('SI')||(CFG.apertura||'').startsWith('SE');
+  const fam = (CFG.apertura||'').toUpperCase();
+  const isScorrevole = fam==='SI'||fam==='SE'||fam.startsWith('SI')||fam.startsWith('SE')||fam.startsWith('S/');
+  const isLibro = fam==='LIBRO'||fam.startsWith('LIBRO');
+  const isBattente = !isScorrevole && !isLibro;
 
-  // Carica maniglie filtrate per tipologia apertura
+  // Carica maniglie
   const {data:tutteMan}=await sb.from('maniglie').select('*').eq('attivo',true).order('nome');
   const manAll=await filtraPerCompatibilita(tutteMan||[],'maniglia','codice');
 
-  // Filtra per versione in base alla serratura
-  let versioneFiltro=null;
-  if(CFG._richiede_cilindro) versioneFiltro='CILINDRO';
-  else if(CFG.serratura==='L-O'||CFG.serratura==='WC'||CFG._richiede_pomolino) versioneFiltro='WC';
-  else if(CFG.serratura==='TIR') versioneFiltro=null;
-  else versioneFiltro='CHIAVE';
+  // Versioni ammesse per tipo apertura
+  // SCORREVOLE → versione=SCORREVOLE (+ NESSUNA)
+  // LIBRO → versione=LIBRO (+ NESSUNA)
+  // BATTENTE → versione=CHIAVE|CILINDRO|WC|MANIGLIONE in base a serratura (+ NESSUNA)
+  let versioniAmmesse;
+  if(isScorrevole){
+    versioniAmmesse = new Set(['SCORREVOLE']);
+  } else if(isLibro){
+    versioniAmmesse = new Set(['LIBRO']);
+  } else {
+    // Battente/CS/COM ecc: filtra per serratura
+    if(CFG._richiede_cilindro) versioniAmmesse = new Set(['CILINDRO']);
+    else if(CFG.serratura==='L-O'||CFG.serratura==='WC'||CFG._richiede_pomolino) versioniAmmesse = new Set(['WC']);
+    else versioniAmmesse = new Set(['CHIAVE']);
+  }
 
-  // Filtra per tipo apertura: scorrevoli vs battenti
-  // Le maniglie scorrevoli hanno serie_compatibili che contiene 'SCOR' o simile
-  // Per semplicità: filtra per versione e lascia che la compatibilità faccia il resto
   let man = manAll.filter(m=>{
     if(m.codice==='NESSUNA') return true;
-    // Filtro versione
-    if(versioneFiltro && m.versione && m.versione!==versioneFiltro) return false;
-    // Filtro scorrevoli/battenti tramite serie_compatibili
-    if(m.serie_compatibili){
-      const serieComp = m.serie_compatibili.toUpperCase();
-      const hasScor = serieComp.includes('SCOR')||serieComp.includes('SI')||serieComp.includes('SE');
-      const hasBat = !hasScor; // se non ha flag scorrevole è per battenti
-      if(isScorrevole && !hasScor) return false;
-      if(!isScorrevole && hasScor) return false;
-    }
-    return true;
+    if(!m.versione) return isBattente; // senza versione = battente generico
+    return versioniAmmesse.has(m.versione.toUpperCase());
   });
 
   // NESSUNA sempre prima
