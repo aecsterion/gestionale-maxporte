@@ -3216,6 +3216,7 @@ function adminCatalogo(){
   const tabs=[
     {id:'serie',label:'Serie'},{id:'modelli',label:'Modelli'},
     {id:'finiture',label:'Finiture'},{id:'aperture',label:'Aperture e sensi'},
+    {id:'misure',label:'Misure std'},{id:'supplementi',label:'Suppl. COM/FM'},
     {id:'ferramenta',label:'Ferramenta'},{id:'maniglie',label:'Maniglie'},
     {id:'serrature',label:'Serrature'},{id:'cilindri',label:'Cilindri'},
     {id:'colori_maniglia',label:'Colori maniglia'},{id:'pomolini',label:'Pomolini WC'},
@@ -3237,6 +3238,8 @@ function switchAdminCat(sub){
   else if(sub==='modelli') adminModelli();
   else if(sub==='finiture') adminFiniture();
   else if(sub==='aperture') adminAperture();
+  else if(sub==='misure') adminMisure();
+  else if(sub==='supplementi') adminSupplementiComFm();
   else if(sub==='ferramenta') adminFerramenta();
   else if(sub==='maniglie') adminManiglie();
   else if(sub==='serrature') adminSerrature();
@@ -3307,6 +3310,8 @@ async function adminModelli(){
           <span title="Vetro incluso nel prezzo porta" style="cursor:pointer;font-size:10px;color:\${pa?.vetro_incluso?'var(--green-tx)':'var(--mid)'}" onclick="toggleVetroIncluso('\${m.codice}',\${!!pa?.vetro_incluso})">\${pa?.vetro_incluso?'✓incl':'libero'}</span>
         </div>\`:'—'}</td>
       <td>\${pa?.ha_extra_incisioni?inlineInput(pa?.prezzo_extra_incisioni||'',\`salvaPrezzo('\${m.codice}','A','prezzo_extra_incisioni',this.value)\`,'65px'):'<span style="font-size:11px;color:var(--mid)">No</span>'}</td>
+      <td>\${inlineInput(m.supplemento_staffe_a??0,\`adminSalva('modelli','\${m.id}','supplemento_staffe_a',this.value)\`,'65px','number','€ A')}</td>
+      <td>\${inlineInput(m.supplemento_staffe_p??0,\`adminSalva('modelli','\${m.id}','supplemento_staffe_p',this.value)\`,'65px','number','€ P')}</td>
       <td>
         \${m.immagine_url?\`<img src="\${m.immagine_url}" style="width:32px;height:32px;object-fit:cover;border-radius:4px;margin-right:4px">\`:''}
         <label style="cursor:pointer"><input type="file" accept="image/*" style="display:none" onchange="uploadImmagine('modelli','\${m.id}',this)"><span style="font-size:11px;cursor:pointer;color:var(--red)">📷</span></label>
@@ -3328,7 +3333,7 @@ async function adminModelli(){
   \${adminCard(\`Modelli — \${serieFilter}\`,\`
     <div style="font-size:11px;color:var(--mid);margin-bottom:8px">Flag cliccabili: <b>V</b>=vetro <b>P</b>=pannello/bugna <b>A</b>=inserto alluminio <b>I</b>=inserto pietra <b>T</b>=pantografatura</div>
     <div style="overflow-x:auto"><table>
-      <thead><tr><th>Codice</th><th>Nome</th><th>Serie</th><th>Variante</th><th>Flag</th><th>Prezzo A</th><th>Prezzo P</th><th>Vetro A</th><th>Extra incis.</th><th>Img</th><th>Stato</th><th></th></tr></thead>
+      <thead><tr><th>Codice</th><th>Nome</th><th>Serie</th><th>Variante</th><th>Flag</th><th>Prezzo A</th><th>Prezzo P</th><th>Vetro A</th><th>Extra incis.</th><th>Staffe A</th><th>Staffe P</th><th>Img</th><th>Stato</th><th></th></tr></thead>
       <tbody>\${rows}</tbody>
     </table></div>\`)}\`;
 }
@@ -3411,6 +3416,98 @@ async function nuovaFinitura(serieFilter){
   const {error}=await sb.from('finiture').insert([{codice_serie:serieFilter,codice_finitura:cod.toUpperCase(),nome_finitura:nome,attiva:true}]);
   if(error){toast(msgErrore(error,cod),'err');return;}
   toast('Finitura aggiunta','ok'); adminFiniture();
+}
+
+// MISURE STANDARD
+async function adminMisure(){
+  const {data:famiglie} = await sb.from('misure_standard').select('famiglia_apertura').order('famiglia_apertura');
+  const famSet = [...new Set((famiglie||[]).map(f=>f.famiglia_apertura))];
+  const famFilter = window._adminMisureFam || famSet[0] || 'BAT';
+  window._adminMisureFam = famFilter;
+
+  const {data} = await sb.from('misure_standard').select('*').eq('famiglia_apertura',famFilter).order('larghezza_cm').order('altezza_cm');
+
+  const famOpts = famSet.map(f=>\`<option value="\${f}" \${f===famFilter?'selected':''}>\${f}</option>\`).join('');
+
+  const rows=(data||[]).map(m=>\`<tr>
+    <td>\${inlineInput(m.larghezza_cm,\`adminSalva('misure_standard','\${m.id}','larghezza_cm',this.value)\`,'70px','number')} cm</td>
+    <td>\${inlineInput(m.altezza_cm,\`adminSalva('misure_standard','\${m.id}','altezza_cm',this.value)\`,'70px','number')} cm</td>
+    <td style="font-size:12px;color:var(--mid)">\${m.famiglia_apertura}</td>
+    <td><button onclick="eliminaRigaAdmin('misure_standard','\${m.id}','adminMisure')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
+  </tr>\`).join('');
+
+  document.getElementById('admin-sub').innerHTML=\`
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+      <label style="font-size:12px;color:var(--mid)">Famiglia:</label>
+      <select onchange="window._adminMisureFam=this.value;adminMisure()" style="padding:5px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit">\${famOpts}</select>
+      <button class="btn btn-red btn-sm" onclick="nuovaMisura('\${famFilter}')">+ Aggiungi misura</button>
+    </div>
+    \${adminCard(\`Misure standard — \${famFilter}\`,\`
+      <table><thead><tr><th>Larghezza</th><th>Altezza</th><th>Famiglia</th><th></th></tr></thead>
+      <tbody>\${rows||'<tr><td colspan="4" style="text-align:center;color:var(--mid);padding:16px">Nessuna misura</td></tr>'}</tbody>
+    </table>\`)}\`;
+}
+
+async function nuovaMisura(fam){
+  const l=prompt('Larghezza (cm):'); if(!l) return;
+  const a=prompt('Altezza (cm):'); if(!a) return;
+  const {error}=await sb.from('misure_standard').insert([{famiglia_apertura:fam,larghezza_cm:parseFloat(l),altezza_cm:parseFloat(a)}]);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Misura aggiunta','ok'); adminMisure();
+}
+
+// SUPPLEMENTI COM/FM
+async function adminSupplementiComFm(){
+  const {data:aperture} = await sb.from('tipologie_apertura').select('codice,nome')
+    .in('famiglia',['COM','FM']).order('codice');
+  const {data} = await sb.from('supplementi_apertura').select('*').order('codice_apertura').order('famiglia_serie');
+
+  const famiglie = ['TAM_MAS','LACCATA','GREZZA'];
+  const famLabel = {'TAM_MAS':'Tamburate + Massellate','LACCATA':'Laccate','GREZZA':'Grezze'};
+
+  // Raggruppa per codice_apertura
+  const byAp = {};
+  (data||[]).forEach(r=>{ if(!byAp[r.codice_apertura]) byAp[r.codice_apertura]={}; byAp[r.codice_apertura][r.famiglia_serie]=r; });
+
+  const rows=(aperture||[]).map(ap=>{
+    return famiglie.map(fam=>{
+      const r=byAp[ap.codice]?.[fam];
+      return \`<tr>
+        <td style="font-size:12px;font-weight:500">\${ap.codice}</td>
+        <td style="font-size:12px;color:var(--mid)">\${ap.nome||''}</td>
+        <td><span class="badge" style="background:var(--beige2);color:var(--dark);font-size:10px">\${famLabel[fam]}</span></td>
+        <td>\${r?inlineInput(r.supplemento_a??0,\`adminSalvaSuppl('\${ap.codice}','\${fam}',\${r?\`'\${r.id}'\`:'null'},'supplemento_a',this.value)\`,'75px','number','€ A'):'<button class="btn btn-sm" onclick="creaSuppl(\\''+ap.codice+'\\',\\''+fam+'\\')">+ Crea</button>'}</td>
+        <td>\${r?inlineInput(r.supplemento_p??0,\`adminSalvaSuppl('\${ap.codice}','\${fam}',\${r?\`'\${r.id}'\`:'null'},'supplemento_p',this.value)\`,'75px','number','€ P'):''}</td>
+        <td style="font-size:11px;color:var(--mid)">\${r?.note||''}</td>
+        \${r?\`<td><button onclick="eliminaRigaAdmin('supplementi_apertura','\${r.id}','adminSupplementiComFm')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>\`:'<td></td>'}
+      </tr>\`;
+    }).join('');
+  }).join('');
+
+  document.getElementById('admin-sub').innerHTML=adminCard('Supplementi COM/FM per famiglia serie',\`
+    <div style="font-size:12px;color:var(--mid);margin-bottom:10px">
+      Il supplemento viene applicato in base alla serie della porta configurata (TAM+MAS, Laccata o Grezza).
+    </div>
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>Codice</th><th>Nome</th><th>Famiglia</th><th>Suppl. A (€)</th><th>Suppl. P (€)</th><th>Note</th><th></th></tr></thead>
+      <tbody>\${rows||'<tr><td colspan="7" style="text-align:center;color:var(--mid);padding:16px">Nessun supplemento configurato</td></tr>'}</tbody>
+    </table></div>\`);
+}
+
+async function creaSuppl(codAp, famSerie){
+  const {error}=await sb.from('supplementi_apertura').insert([{codice_apertura:codAp,famiglia_serie:famSerie,supplemento_a:0,supplemento_p:0}]);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Riga creata — modifica i prezzi direttamente','ok'); adminSupplementiComFm();
+}
+
+async function adminSalvaSuppl(codAp, famSerie, id, campo, valore){
+  const val=parseFloat(valore); if(isNaN(val)) return;
+  if(id&&id!=='null'){
+    await sb.from('supplementi_apertura').update({[campo]:val}).eq('id',id);
+  } else {
+    await sb.from('supplementi_apertura').insert([{codice_apertura:codAp,famiglia_serie:famSerie,[campo]:val}]);
+  }
+  toast('Salvato','ok');
 }
 
 // APERTURE E SENSI
