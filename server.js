@@ -2039,7 +2039,7 @@ async function cfgMisure(){
   const altezze = [...new Set((misure||[]).map(m=>m.altezza_cm))].sort((a,b)=>a-b);
 
   // Serializza misure per passarle ai click handler
-  const misureJson = JSON.stringify(misure||[]).replace(/'/g,"\\\\'");
+  window._cfgMisureCorrente = misure||[];
 
   let html=\`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
     <div style="font-size:13px;font-weight:500">Misure porta <span style="color:var(--mid);font-weight:400">— \${CFG.nome_apertura} (\${famMisure})</span></div>
@@ -2049,13 +2049,13 @@ async function cfgMisure(){
     <div>
       <div style="font-size:12px;font-weight:500;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.4px;color:var(--mid)">Larghezza (cm)</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px">
-        \${larghezze.map(l=>\`<div onclick="selLarghezza(\${l},\${misureJson})" style="padding:6px 12px;border-radius:var(--radius);border:\${CFG.larghezza===l?'2px solid var(--red)':'0.5px solid var(--border)'};cursor:pointer;font-size:13px;font-weight:500;background:\${CFG.larghezza===l?'var(--red-bg)':'var(--white)'};">\${l}</div>\`).join('')}
+        \${larghezze.map(l=>\`<div onclick="selLarghezza(\${l})" style="padding:6px 12px;border-radius:var(--radius);border:\${CFG.larghezza===l?'2px solid var(--red)':'0.5px solid var(--border)'};cursor:pointer;font-size:13px;font-weight:500;background:\${CFG.larghezza===l?'var(--red-bg)':'var(--white)'};">\${l}</div>\`).join('')}
       </div>
     </div>
     <div>
       <div style="font-size:12px;font-weight:500;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.4px;color:var(--mid)">Altezza (cm)</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px">
-        \${altezze.map(a=>\`<div onclick="selAltezza(\${a},\${misureJson})" style="padding:6px 12px;border-radius:var(--radius);border:\${CFG.altezza===a?'2px solid var(--red)':'0.5px solid var(--border)'};cursor:pointer;font-size:13px;font-weight:500;background:\${CFG.altezza===a?'var(--red-bg)':'var(--white)'};">\${a}</div>\`).join('')}
+        \${altezze.map(a=>\`<div onclick="selAltezza(\${a})" style="padding:6px 12px;border-radius:var(--radius);border:\${CFG.altezza===a?'2px solid var(--red)':'0.5px solid var(--border)'};cursor:pointer;font-size:13px;font-weight:500;background:\${CFG.altezza===a?'var(--red-bg)':'var(--white)'};">\${a}</div>\`).join('')}
       </div>
     </div>
   </div>
@@ -2082,15 +2082,15 @@ async function cfgMisure(){
   document.getElementById('cfg-body').innerHTML=html;
 }
 
-function selLarghezza(v, misure){ 
+function selLarghezza(v){ 
   CFG.larghezza=v; CFG.misura_custom=false;
   // Trova sovrapprezzo misura se altezza già selezionata
-  aggiornaSuprMisura(misure); 
+  aggiornaSuprMisura(window._cfgMisureCorrente||[]); 
   cfgMisure(); 
 }
-function selAltezza(v, misure){ 
+function selAltezza(v){ 
   CFG.altezza=v; CFG.misura_custom=false;
-  aggiornaSuprMisura(misure);
+  aggiornaSuprMisura(window._cfgMisureCorrente||[]);
   cfgMisure(); 
 }
 function aggiornaSuprMisura(misure){
