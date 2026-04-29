@@ -7,9 +7,6 @@ import sys, json, os, subprocess, shutil, copy
 from openpyxl import load_workbook
 from openpyxl.cell.cell import MergedCell
 from openpyxl.utils import get_column_letter
-import qrcode
-from io import BytesIO
-from openpyxl.drawing.image import Image as XLImage
 
 TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), 'template_preventivo.xlsx')
 
@@ -49,21 +46,7 @@ def compila_foglio(ws, mapping):
                 cell.value = sostituisci(cell.value, mapping)
 
 def genera_qr(testo, size_px=80):
-    """Genera un QR code e lo restituisce come immagine openpyxl."""
-    try:
-        qr = qrcode.QRCode(version=1, box_size=3, border=1)
-        qr.add_data(testo)
-        qr.make(fit=True)
-        img = qr.make_image(fill_color="black", back_color="white")
-        buf = BytesIO()
-        img.save(buf, format='PNG')
-        buf.seek(0)
-        xl_img = XLImage(buf)
-        xl_img.width = size_px
-        xl_img.height = size_px
-        return xl_img
-    except:
-        return None
+    return None
 
 def copia_riga_template(ws_dest, ws_src, src_row, dest_row):
     """Copia una riga dal foglio sorgente al foglio destinazione."""
