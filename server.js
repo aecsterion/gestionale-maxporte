@@ -1,7 +1,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { execFile, spawn } = require('child_process');
+const spawn = require('child_process').spawn;
 const os = require('os');
 
 const PORT = process.env.PORT || 3000;
@@ -13,154 +13,11 @@ const HTML = `<!DOCTYPE html>
 <title>Max Porte — Gestionale</title>
 <!-- MAXPORTE-BUILD-v24APR2026 -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2">
-// ── ESPORTA PDF ───────────────────────────────────────
-async function esportaPDF(tipo, id) {
-  toast('Generazione PDF in corso...', 'ok');
-  try {
-    const tabDoc = tipo==='preventivo' ? 'preventivi' : 'ordini_vendita';
-    const tabRighe = tipo==='preventivo' ? 'righe_preventivo' : 'righe_ordine';
-    const fkRiga = tipo==='preventivo' ? 'preventivo_id' : 'ordine_id';
 
-    // Carica documento completo
-    const [{data:doc}, {data:righe}, {data:cliente}] = await Promise.all([
-      sb.from(tabDoc).select('*,anagrafiche(*),agenti(nome,cognome)').eq('id',id).single(),
-      sb.from(tabRighe).select('*').eq(fkRiga,id).order('riga_numero'),
-      sb.from(tabDoc).select('*,anagrafiche(*)').eq('id',id).single(),
-    ]);
-
-    if(!doc){ toast('Documento non trovato','err'); return; }
-
-    const an = doc.anagrafiche || {};
-    const ag = doc.agenti || {};
-
-    // Payload per il server
-    const payload = {
-      tipo,
-      documento: {
-        numero: doc.numero,
-        data: new Date(doc.created_at).toLocaleDateString('it-IT'),
-        data_modifica: new Date(doc.updated_at||doc.created_at).toLocaleDateString('it-IT'),
-        compilatore: doc.nome_compilatore || '',
-        tipo_documento: tipo==='preventivo' ? 'PREVENTIVO' : 'CONFERMA D\\'ORDINE',
-        // Cliente
-        ragione_sociale: an.ragione_sociale || '',
-        ragione_sociale_riga2: an.ragione_sociale_riga2 || '',
-        indirizzo: an.indirizzo || '',
-        cap: an.cap || '',
-        citta: an.citta || '',
-        provincia: an.provincia || '',
-        paese: an.paese || 'Italia',
-        partita_iva: an.partita_iva || '',
-        codice_fiscale: an.codice_fiscale || '',
-        telefono: an.telefono || '',
-        cellulare: an.cellulare || '',
-        email1: an.email || '',
-        email2: an.email2 || '',
-        sdi: an.sdi || '',
-        pec: an.pec || '',
-        banca: an.banca || '',
-        cin_abi_cab: an.cin_abi_cab || '',
-        referente: an.referente || '',
-        codice_cliente: an.codice || '',
-        agente: ag.nome ? \`\${ag.nome} \${ag.cognome}\` : '',
-        // Destinazione
-        dest_nome: doc.indirizzo_destinazione ? an.ragione_sociale : '',
-        dest_indirizzo: doc.indirizzo_destinazione || '',
-        dest_cap: doc.cap_destinazione || '',
-        dest_citta: doc.citta_destinazione || '',
-        dest_provincia: doc.provincia_destinazione || '',
-        dest_paese: 'Italia',
-        dest_riferimenti: doc.riferimenti_destinazione || '',
-        // Condizioni
-        trasporto: doc.trasporto || '',
-        resa: an.resa || 'Franco fabbrica',
-        imballo: an.tipo_imballo || 'Sì',
-        condizioni_pagamento: an.condizioni_pagamento || '',
-        validita_offerta: doc.validita_offerta || '30',
-        riferimento_cliente: doc.riferimento_cliente || '',
-        // Sconto
-        sconto1: doc.sconto1 || 0,
-        sconto2: doc.sconto2 || 0,
-        totale_imponibile: doc.totale_imponibile || 0,
-        totale_netto: doc.totale_netto || 0,
-      },
-      righe: (righe||[]).map((r,i) => ({
-        posizione: String(i+1).padStart(3,'0'),
-        larghezza: r.larghezza_mm || '',
-        altezza: r.altezza_mm || '',
-        spessore: r.spessore_muro_mm || '',
-        senso: r.senso_apertura || '',
-        apertura: r.nome_apertura || '',
-        quantita: r.quantita || 1,
-        um: 'NR',
-        serie: r.nome_serie || '',
-        modello: r.nome_modello || '',
-        finitura: r.nome_finitura || '',
-        tipologia: r.nome_apertura || '',
-        senso_apertura: r.senso_apertura || '',
-        spalla: r.spalla || '',
-        ferramenta: r.nome_ferramenta || '',
-        serratura: r.nome_serratura || '',
-        maniglia: r.nome_maniglia || '',
-        versione_maniglia: '',
-        colore_maniglia: r.nome_colore_maniglia || '',
-        vetro: r.nome_tipo_vetro || '',
-        bugna: r.pannello_bugna || '',
-        colore_inserto: r.nome_colore_alu || r.nome_colore_pietra || '',
-        note_riga: r.note_riga || '',
-        // Prezzi
-        prezzo_base: r.prezzo_base || 0,
-        prezzo_finitura: r.prezzo_finitura || 0,
-        prezzo_apertura: r.prezzo_apertura || 0,
-        prezzo_telaio: r.prezzo_telaio || 0,
-        prezzo_ferramenta: r.prezzo_ferramenta || 0,
-        prezzo_maniglia: r.prezzo_maniglia || 0,
-        prezzo_serratura: r.prezzo_serratura || 0,
-        prezzo_vetro: r.prezzo_vetro || 0,
-        prezzo_bugna: r.prezzo_bugna || 0,
-        prezzo_extra: r.prezzo_extra_incisioni || 0,
-        prezzo_unitario: r.prezzo_unitario || 0,
-        prezzo_totale: r.prezzo_totale_riga || 0,
-        sconto: doc.sconto1 || 0,
-        // Kit obbligatori
-        kit_varsavia: r.kit_varsavia || '',
-        kit_rim16: r.kit_rim16 || '',
-        fuori_misura_l: r.fuori_misura_l ? 'Sì' : '',
-        fuori_misura_h: r.fuori_misura_h ? 'Sì' : '',
-        immagine_url: r.immagine_url || '',
-      }))
-    };
-
-    // Chiama il server per generare il PDF
-    const resp = await fetch('/genera-pdf', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify(payload)
-    });
-
-    if(!resp.ok){
-      const err = await resp.text();
-      toast('Errore generazione PDF: '+err, 'err');
-      return;
-    }
-
-    // Download PDF
-    const blob = await resp.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = \`\${doc.numero}.pdf\`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast('PDF scaricato: '+doc.numero, 'ok');
-
-  } catch(e) {
-    console.error('esportaPDF error:', e);
-    toast('Errore: '+e.message, 'err');
-  }
-}
 
 </script>
+
+
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -2329,11 +2186,11 @@ async function cfgSpessore(){
     CFG.apertura?.startsWith('CS')?'CS':'BAT';
 
   let html=\`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-    <div style="font-size:13px;font-weight:500">Spessore muro e telaio <span style="color:var(--mid);font-weight:400">— \${CFG.larghezza}×\${CFG.altezza} cm \${CFG.senso}</span></div>
+    <div style="font-size:13px;font-weight:500">Spessore muro e telaio <span style="color:var(--mid);font-weight:400">— \${CFG.larghezza}×\${CFG.altezza} mm \${CFG.senso}</span></div>
     <button class="btn btn-sm" onclick="renderCfgStep('misure')">← Indietro</button>
   </div>
   <div style="margin-bottom:14px">
-    <div style="font-size:12px;font-weight:500;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.4px;color:var(--mid)">Spessore muro (cm)</div>
+    <div style="font-size:12px;font-weight:500;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.4px;color:var(--mid)">Spessore muro (mm)</div>
     <div style="display:flex;align-items:center;gap:10px">
       <input type="number" id="cfg-spessore" value="\${CFG.spessore||''}" placeholder="es. 12.5" step="0.5" min="5" max="60"
         style="width:120px;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px;font-family:inherit"
@@ -4759,16 +4616,171 @@ function ensureModalInBody(id) {
   }
   return el;
 }
-</script>
 
-
-</html>
-
-  if(error){toast('Errore: '+error.message,'err');return;}
+if(error){toast('Errore: '+error.message,'err');return;}
   toast('Utente aggiunto con ruolo '+RUOLI_LABEL[ruolo],'ok');
   renderUtentiInline();
 }
 
+
+
+// Sposta i modal fuori da qualsiasi container al caricamento
+(function(){
+  var toMove = ['modal-cfg', 'modal-nuovo-doc'];
+  toMove.forEach(function(id){
+    var el = document.getElementById(id);
+    if(el && el.parentElement && el.parentElement.id !== 'body-root'){
+      document.body.appendChild(el);
+    }
+  });
+})();
+
+// ── ESPORTA PDF ───────────────────────────────────────
+async function esportaPDF(tipo, id) {
+  toast('Generazione PDF in corso...', 'ok');
+  try {
+    const tabDoc = tipo==='preventivo' ? 'preventivi' : 'ordini_vendita';
+    const tabRighe = tipo==='preventivo' ? 'righe_preventivo' : 'righe_ordine';
+    const fkRiga = tipo==='preventivo' ? 'preventivo_id' : 'ordine_id';
+
+    // Carica documento completo
+    const [{data:doc}, {data:righe}, {data:cliente}] = await Promise.all([
+      sb.from(tabDoc).select('*,anagrafiche(*),agenti(nome,cognome)').eq('id',id).single(),
+      sb.from(tabRighe).select('*').eq(fkRiga,id).order('riga_numero'),
+      sb.from(tabDoc).select('*,anagrafiche(*)').eq('id',id).single(),
+    ]);
+
+    if(!doc){ toast('Documento non trovato','err'); return; }
+
+    const an = doc.anagrafiche || {};
+    const ag = doc.agenti || {};
+
+    // Payload per il server
+    const payload = {
+      tipo,
+      documento: {
+        numero: doc.numero,
+        data: new Date(doc.created_at).toLocaleDateString('it-IT'),
+        data_modifica: new Date(doc.updated_at||doc.created_at).toLocaleDateString('it-IT'),
+        compilatore: doc.nome_compilatore || '',
+        tipo_documento: tipo==='preventivo' ? 'PREVENTIVO' : 'CONFERMA D\\'ORDINE',
+        // Cliente
+        ragione_sociale: an.ragione_sociale || '',
+        ragione_sociale_riga2: an.ragione_sociale_riga2 || '',
+        indirizzo: an.indirizzo || '',
+        cap: an.cap || '',
+        citta: an.citta || '',
+        provincia: an.provincia || '',
+        paese: an.paese || 'Italia',
+        partita_iva: an.partita_iva || '',
+        codice_fiscale: an.codice_fiscale || '',
+        telefono: an.telefono || '',
+        cellulare: an.cellulare || '',
+        email1: an.email || '',
+        email2: an.email2 || '',
+        sdi: an.sdi || '',
+        pec: an.pec || '',
+        banca: an.banca || '',
+        cin_abi_cab: an.cin_abi_cab || '',
+        referente: an.referente || '',
+        codice_cliente: an.codice || '',
+        agente: ag.nome ? \`\${ag.nome} \${ag.cognome}\` : '',
+        // Destinazione
+        dest_nome: doc.indirizzo_destinazione ? an.ragione_sociale : '',
+        dest_indirizzo: doc.indirizzo_destinazione || '',
+        dest_cap: doc.cap_destinazione || '',
+        dest_citta: doc.citta_destinazione || '',
+        dest_provincia: doc.provincia_destinazione || '',
+        dest_paese: 'Italia',
+        dest_riferimenti: doc.riferimenti_destinazione || '',
+        // Condizioni
+        trasporto: doc.trasporto || '',
+        resa: an.resa || 'Franco fabbrica',
+        imballo: an.tipo_imballo || 'Sì',
+        condizioni_pagamento: an.condizioni_pagamento || '',
+        validita_offerta: doc.validita_offerta || '30',
+        riferimento_cliente: doc.riferimento_cliente || '',
+        // Sconto
+        sconto1: doc.sconto1 || 0,
+        sconto2: doc.sconto2 || 0,
+        totale_imponibile: doc.totale_imponibile || 0,
+        totale_netto: doc.totale_netto || 0,
+      },
+      righe: (righe||[]).map((r,i) => ({
+        posizione: String(i+1).padStart(3,'0'),
+        larghezza: r.larghezza_mm || '',
+        altezza: r.altezza_mm || '',
+        spessore: r.spessore_muro_mm || '',
+        senso: r.senso_apertura || '',
+        apertura: r.nome_apertura || '',
+        quantita: r.quantita || 1,
+        um: 'NR',
+        serie: r.nome_serie || '',
+        modello: r.nome_modello || '',
+        finitura: r.nome_finitura || '',
+        tipologia: r.nome_apertura || '',
+        senso_apertura: r.senso_apertura || '',
+        spalla: r.spalla || '',
+        ferramenta: r.nome_ferramenta || '',
+        serratura: r.nome_serratura || '',
+        maniglia: r.nome_maniglia || '',
+        versione_maniglia: '',
+        colore_maniglia: r.nome_colore_maniglia || '',
+        vetro: r.nome_tipo_vetro || '',
+        bugna: r.pannello_bugna || '',
+        colore_inserto: r.nome_colore_alu || r.nome_colore_pietra || '',
+        note_riga: r.note_riga || '',
+        // Prezzi
+        prezzo_base: r.prezzo_base || 0,
+        prezzo_finitura: r.prezzo_finitura || 0,
+        prezzo_apertura: r.prezzo_apertura || 0,
+        prezzo_telaio: r.prezzo_telaio || 0,
+        prezzo_ferramenta: r.prezzo_ferramenta || 0,
+        prezzo_maniglia: r.prezzo_maniglia || 0,
+        prezzo_serratura: r.prezzo_serratura || 0,
+        prezzo_vetro: r.prezzo_vetro || 0,
+        prezzo_bugna: r.prezzo_bugna || 0,
+        prezzo_extra: r.prezzo_extra_incisioni || 0,
+        prezzo_unitario: r.prezzo_unitario || 0,
+        prezzo_totale: r.prezzo_totale_riga || 0,
+        sconto: doc.sconto1 || 0,
+        // Kit obbligatori
+        kit_varsavia: r.kit_varsavia || '',
+        kit_rim16: r.kit_rim16 || '',
+        fuori_misura_l: r.fuori_misura_l ? 'Sì' : '',
+        fuori_misura_h: r.fuori_misura_h ? 'Sì' : '',
+        immagine_url: r.immagine_url || '',
+      }))
+    };
+
+    // Chiama il server per generare il PDF
+    const resp = await fetch('/genera-pdf', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+
+    if(!resp.ok){
+      const err = await resp.text();
+      toast('Errore generazione PDF: '+err, 'err');
+      return;
+    }
+
+    // Download PDF
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = \`\${doc.numero}.pdf\`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast('PDF scaricato: '+doc.numero, 'ok');
+
+  } catch(e) {
+    console.error('esportaPDF error:', e);
+    toast('Errore: '+e.message, 'err');
+  }
+}
 </script>
 
 <!-- MODAL CONFIGURATORE PORTA -->
@@ -4895,43 +4907,23 @@ function ensureModalInBody(id) {
 </div>
 
 
-<script>
-// Sposta i modal fuori da qualsiasi container al caricamento
-(function(){
-  var toMove = ['modal-cfg', 'modal-nuovo-doc'];
-  toMove.forEach(function(id){
-    var el = document.getElementById(id);
-    if(el && el.parentElement && el.parentElement.id !== 'body-root'){
-      document.body.appendChild(el);
-    }
-  });
-})();
-</script>
+
 </body>
 </html>
 `;
-const SCRIPT_DIR = __dirname;
 
 function generaPDF(payload, callback) {
-  const tmpJson = path.join(os.tmpdir(), `prev_${Date.now()}.json`);
-  const tmpPdf = path.join(os.tmpdir(), `prev_${Date.now()}.pdf`);
-  
+  const tmpJson = path.join(os.tmpdir(), 'prev_' + Date.now() + '.json');
+  const tmpPdf = path.join(os.tmpdir(), 'prev_' + Date.now() + '.pdf');
   fs.writeFileSync(tmpJson, JSON.stringify(payload));
-  
-  const proc = spawn('python3', [
-    path.join(SCRIPT_DIR, 'genera_pdf.py'),
-    tmpJson,
-    tmpPdf
-  ]);
-  
+  const proc = spawn('python3', [path.join(__dirname, 'genera_pdf.py'), tmpJson, tmpPdf]);
   let stderr = '';
-  proc.stderr.on('data', d => stderr += d.toString());
-  
-  proc.on('close', code => {
-    fs.unlinkSync(tmpJson);
+  proc.stderr.on('data', function(d) { stderr += d.toString(); });
+  proc.on('close', function(code) {
+    try { fs.unlinkSync(tmpJson); } catch(e) {}
     if (code === 0 && fs.existsSync(tmpPdf)) {
       const pdfData = fs.readFileSync(tmpPdf);
-      fs.unlinkSync(tmpPdf);
+      try { fs.unlinkSync(tmpPdf); } catch(e) {}
       callback(null, pdfData);
     } else {
       callback(new Error('Generazione PDF fallita: ' + stderr));
@@ -4939,23 +4931,22 @@ function generaPDF(payload, callback) {
   });
 }
 
-const server = http.createServer((req, res) => {
-  // Endpoint generazione PDF
+const server = http.createServer(function(req, res) {
   if (req.method === 'POST' && req.url === '/genera-pdf') {
     let body = '';
-    req.on('data', chunk => body += chunk.toString());
-    req.on('end', () => {
+    req.on('data', function(chunk) { body += chunk.toString(); });
+    req.on('end', function() {
       try {
         const payload = JSON.parse(body);
-        generaPDF(payload, (err, pdfData) => {
+        generaPDF(payload, function(err, pdfData) {
           if (err) {
             res.writeHead(500, {'Content-Type': 'text/plain'});
             res.end(err.message);
           } else {
-            const numero = payload.documento?.numero || 'documento';
+            const numero = (payload.documento && payload.documento.numero) || 'documento';
             res.writeHead(200, {
               'Content-Type': 'application/pdf',
-              'Content-Disposition': `attachment; filename="${numero}.pdf"`,
+              'Content-Disposition': 'attachment; filename="' + numero + '.pdf"',
               'Content-Length': pdfData.length
             });
             res.end(pdfData);
@@ -4968,13 +4959,8 @@ const server = http.createServer((req, res) => {
     });
     return;
   }
-  
-  // Serve HTML principale
-  res.writeHead(200, {
-    'Content-Type': 'text/html;charset=utf-8',
-    'Cache-Control': 'no-store'
-  });
+  res.writeHead(200, {'Content-Type': 'text/html;charset=utf-8', 'Cache-Control': 'no-store'});
   res.end(HTML);
 });
 
-server.listen(PORT, () => console.log('MPX Gestionale avviato su porta ' + PORT));
+server.listen(PORT, function() { console.log('MPX Gestionale avviato su porta ' + PORT); });
