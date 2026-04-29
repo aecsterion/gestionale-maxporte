@@ -177,11 +177,27 @@ def genera_preventivo(dati_json, output_path):
                     nc.alignment = copy.copy(cell.alignment)
                     nc.border = copy.copy(cell.border)
                     nc.number_format = cell.number_format
-        ws_new.page_setup.paperSize = ws_new.PAPERSIZE_A4
-        ws_new.page_setup.orientation = 'portrait'
+        # Copia page setup dal template originale
+        ws_new.page_setup.paperSize = ws_src.page_setup.paperSize or ws_new.PAPERSIZE_A4
+        ws_new.page_setup.orientation = ws_src.page_setup.orientation or 'portrait'
         ws_new.page_setup.fitToPage = True
         ws_new.page_setup.fitToWidth = 1
         ws_new.page_setup.fitToHeight = 0
+        ws_new.sheet_properties.pageSetUpPr.fitToPage = True
+        # Copia margini
+        if ws_src.page_margins:
+            from openpyxl.worksheet.page import PageMargins
+            ws_new.page_margins = PageMargins(
+                left=ws_src.page_margins.left,
+                right=ws_src.page_margins.right,
+                top=ws_src.page_margins.top,
+                bottom=ws_src.page_margins.bottom,
+                header=ws_src.page_margins.header,
+                footer=ws_src.page_margins.footer
+            )
+        # Copia print area
+        if ws_src.print_area:
+            ws_new.print_area = ws_src.print_area
         return ws_new
 
     # Determina come distribuire le righe nei fogli
@@ -280,6 +296,8 @@ def genera_preventivo(dati_json, output_path):
     # Per semplicità generiamo un unico foglio con prima pagina + posizioni + finale
     # La struttura multi-foglio la implementeremo nella versione avanzata
     ws_out = crea_foglio_da_template(ws_prima, 'Preventivo')
+    # Forza area di stampa A1:AO fino all'ultima riga usata
+    ws_out.print_area = 'A1:AO200'
     
     # Compila dati documento nella prima pagina
     compila_foglio(ws_out, {**mapping_doc})
@@ -316,9 +334,12 @@ def genera_preventivo(dati_json, output_path):
     # Converti in PDF con LibreOffice
     out_dir = os.path.dirname(output_path)
     r = subprocess.run([
-        'libreoffice', '--headless', '--convert-to', 'pdf',
+        'libreoffice', '--headless',
+        '--convert-to', 'pdf',
+        '--infilter', 'Calc MS Excel 2007 XML',
         '--outdir', out_dir, tmp_xlsx
-    ], capture_output=True, text=True, timeout=30)
+    ], capture_output=True, text=True, timeout=60,
+    env={**os.environ, 'PYTHONPATH': ''})
     
     # Rinomina output
     tmp_pdf = tmp_xlsx.replace('.xlsx', '.pdf')
