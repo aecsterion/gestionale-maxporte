@@ -336,19 +336,21 @@ def genera_preventivo(dati_json, output_path):
     r = subprocess.run([
         'libreoffice', '--headless',
         '--convert-to', 'pdf',
-        '--infilter', 'Calc MS Excel 2007 XML',
         '--outdir', out_dir, tmp_xlsx
     ], capture_output=True, text=True, timeout=60,
-    env={**os.environ, 'PYTHONPATH': ''})
+    env={**os.environ, 'HOME': '/tmp'})
     
     # Rinomina output
     tmp_pdf = tmp_xlsx.replace('.xlsx', '.pdf')
+    # LibreOffice può restituire exit code 1 anche in caso di successo
+    # Verifichiamo l'esistenza del file PDF invece del return code
     if os.path.exists(tmp_pdf):
         os.rename(tmp_pdf, output_path)
-        os.remove(tmp_xlsx)
+        try: os.remove(tmp_xlsx)
+        except: pass
         print(f"PDF generato: {output_path}", file=sys.stderr)
     else:
-        print(f"Errore LibreOffice: {r.stderr}", file=sys.stderr)
+        print(f"Errore LibreOffice (rc={r.returncode}): {r.stderr}", file=sys.stderr)
         sys.exit(1)
 
 if __name__ == '__main__':
