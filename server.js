@@ -4617,13 +4617,6 @@ function ensureModalInBody(id) {
   return el;
 }
 
-if(error){toast('Errore: '+error.message,'err');return;}
-  toast('Utente aggiunto con ruolo '+RUOLI_LABEL[ruolo],'ok');
-  renderUtentiInline();
-}
-
-
-
 // Sposta i modal fuori da qualsiasi container al caricamento
 (function(){
   var toMove = ['modal-cfg', 'modal-nuovo-doc'];
