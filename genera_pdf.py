@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
-"""
-Motore generazione PDF preventivi/ordini Max Porte
-Uso: python3 genera_pdf.py <input_json> <output_pdf>
-"""
-import sys, json, os, subprocess, shutil, copy
+"""Motore generazione PDF preventivi/ordini Max Porte"""
+import sys, json, os, subprocess, copy
 from openpyxl import load_workbook
 from openpyxl.cell.cell import MergedCell
 from openpyxl.utils import get_column_letter
 
-TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), 'template_preventivo.xlsx')
+TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'template_preventivo.xlsx')
 
 def sostituisci(val, mapping):
     """Sostituisce tutti i segnaposto in una stringa."""
@@ -16,6 +13,25 @@ def sostituisci(val, mapping):
     for k, v in mapping.items():
         val = val.replace(k, str(v) if v is not None else '')
     return val
+
+def nascondi_righe_vuote(ws):
+    """Nasconde righe con solo segnaposto non valorizzati."""
+    for row in ws.iter_rows():
+        row_idx = row[0].row
+        has_value = False
+        has_placeholder = False
+        for cell in row:
+            if isinstance(cell, MergedCell): continue
+            if cell.value and isinstance(cell.value, str):
+                val = cell.value.strip()
+                if val and '*' in val:
+                    has_placeholder = True
+                elif val:
+                    has_value = True
+            elif cell.value is not None:
+                has_value = True
+        if has_placeholder and not has_value:
+            ws.row_dimensions[row_idx].hidden = True
 
 def riga_vuota(ws, row_idx, ncols=41):
     """Controlla se una riga è tutta vuota."""
@@ -55,7 +71,6 @@ def copia_riga_template(ws_dest, ws_src, src_row, dest_row):
         dest_cell = ws_dest.cell(row=dest_row, column=cell.column)
         dest_cell.value = cell.value
         if cell.has_style:
-            import copy
             dest_cell.font = copy.copy(cell.font)
             dest_cell.fill = copy.copy(cell.fill)
             dest_cell.alignment = copy.copy(cell.alignment)
@@ -155,15 +170,20 @@ def genera_preventivo(dati_json, output_path):
     def crea_foglio_da_template(ws_src, sheet_name):
         ws_new = wb_out.create_sheet(sheet_name)
         ws_new.sheet_view.showGridLines = False
-        # Copia dimensioni colonne
-        for col, dim in ws_src.column_dimensions.items():
-            ws_new.column_dimensions[col].width = dim.width
+        # Copia dimensioni colonne — metodo robusto
+        for col_letter, dim in ws_src.column_dimensions.items():
+            if dim.width:
+                ws_new.column_dimensions[col_letter].width = dim.width
+            if dim.hidden:
+                ws_new.column_dimensions[col_letter].hidden = dim.hidden
         # Copia altezze righe
-        for row, dim in ws_src.row_dimensions.items():
-            ws_new.row_dimensions[row].height = dim.height
+        for row_idx, dim in ws_src.row_dimensions.items():
+            if dim.height:
+                ws_new.row_dimensions[row_idx].height = dim.height
         # Copia merge
         for merge in ws_src.merged_cells.ranges:
-            ws_new.merge_cells(str(merge))
+            try: ws_new.merge_cells(str(merge))
+            except: pass
         # Copia celle
         import copy
         for row in ws_src.iter_rows():
@@ -178,14 +198,16 @@ def genera_preventivo(dati_json, output_path):
                     nc.border = copy.copy(cell.border)
                     nc.number_format = cell.number_format
         # Copia page setup dal template originale
-        ws_new.page_setup.paperSize = ws_src.page_setup.paperSize or ws_new.PAPERSIZE_A4
+        ws_new.page_setup.paperSize = ws_src.page_setup.paperSize or 9  # 9 = A4
         ws_new.page_setup.orientation = ws_src.page_setup.orientation or 'portrait'
         ws_new.page_setup.fitToPage = True
         ws_new.page_setup.fitToWidth = 1
         ws_new.page_setup.fitToHeight = 0
-        ws_new.sheet_properties.pageSetUpPr.fitToPage = True
+        try:
+            ws_new.sheet_properties.pageSetUpPr.fitToPage = True
+        except: pass
         # Copia margini
-        if ws_src.page_margins:
+        try:
             from openpyxl.worksheet.page import PageMargins
             ws_new.page_margins = PageMargins(
                 left=ws_src.page_margins.left,
@@ -195,6 +217,7 @@ def genera_preventivo(dati_json, output_path):
                 header=ws_src.page_margins.header,
                 footer=ws_src.page_margins.footer
             )
+        except: pass
         # Copia print area
         if ws_src.print_area:
             ws_new.print_area = ws_src.print_area
@@ -302,6 +325,14 @@ def genera_preventivo(dati_json, output_path):
     # Compila dati documento nella prima pagina
     compila_foglio(ws_out, {**mapping_doc})
 
+    # Nascondi righe con segnaposto non valorizzati
+    nascondi_righe_vuote(ws_out)
+
+    # Forza fitToWidth=1 per stampa A4
+    ws_out.page_setup.fitToPage = True
+    ws_out.page_setup.fitToWidth = 1
+    ws_out.page_setup.fitToHeight = 0
+
     # Ora aggiungi le righe posizioni dopo la riga *POSIZIONE* nella prima pagina
     # Trova riga *POSIZIONE* nel foglio output
     pos_row_out = None
@@ -330,6 +361,64 @@ def genera_preventivo(dati_json, output_path):
     # Salva workbook temporaneo
     tmp_xlsx = output_path.replace('.pdf', '_tmp.xlsx')
     wb_out.save(tmp_xlsx)
+
+    # Patch XML: copia sheetFormatPr e fitToWidth dal template originale
+    import zipfile, re
+
+    # Leggi il sheetFormatPr dal template originale
+    tmpl_sheet_format = {}
+    with zipfile.ZipFile(TEMPLATE_PATH, 'r') as zt:
+        sheet_names = [n for n in zt.namelist() if n.startswith('xl/worksheets/') and n.endswith('.xml')]
+        for i, sname in enumerate(sorted(sheet_names)):
+            xml = zt.read(sname).decode('utf-8')
+            sfp = re.search(r'<sheetFormatPr[^/]*/>', xml)
+            cols = re.search(r'<cols>.*?</cols>', xml, re.DOTALL)
+            tmpl_sheet_format[i] = {
+                'sheetFormatPr': sfp.group(0) if sfp else None,
+                'cols': cols.group(0) if cols else None,
+            }
+
+    tmp_patched = tmp_xlsx.replace('.xlsx', '_p.xlsx')
+    try:
+        with zipfile.ZipFile(tmp_xlsx, 'r') as zin:
+            items = [(item, zin.read(item.filename)) for item in zin.infolist()]
+
+        with zipfile.ZipFile(tmp_patched, 'w', zipfile.ZIP_DEFLATED) as zout:
+            sheet_idx = 0
+            for item, data in items:
+                if item.filename.startswith('xl/worksheets/') and item.filename.endswith('.xml'):
+                    xml = data.decode('utf-8')
+                    fmt = tmpl_sheet_format.get(0)  # usa sempre il primo foglio del template
+
+                    # Sostituisci sheetFormatPr con quello del template
+                    if fmt and fmt['sheetFormatPr']:
+                        xml = re.sub(r'<sheetFormatPr[^/]*/>', fmt['sheetFormatPr'], xml)
+                        if '<sheetFormatPr' not in xml:
+                            xml = xml.replace('<sheetData>', fmt['sheetFormatPr'] + '<sheetData>', 1)
+
+                    # Aggiungi cols se presenti nel template
+                    if fmt and fmt['cols'] and '<cols>' not in xml:
+                        xml = xml.replace('<sheetData>', fmt['cols'] + '<sheetData>', 1)
+
+                    # Aggiungi fitToWidth="1"
+                    if 'fitToWidth' not in xml and 'fitToHeight' in xml:
+                        xml = xml.replace('fitToHeight="0"', 'fitToWidth="1" fitToHeight="0"')
+                    elif 'fitToWidth' not in xml and 'pageSetup' in xml:
+                        xml = re.sub(r'<pageSetup ', '<pageSetup fitToWidth="1" fitToHeight="0" ', xml)
+
+                    # Assicura pageSetUpPr
+                    if 'pageSetUpPr' not in xml and '<sheetData' in xml:
+                        xml = xml.replace('<sheetData>', '<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><sheetData>', 1)
+
+                    data = xml.encode('utf-8')
+                    sheet_idx += 1
+                zout.writestr(item, data)
+
+        os.replace(tmp_patched, tmp_xlsx)
+    except Exception as e:
+        print(f"XML patch warning: {e}", file=sys.stderr)
+        try: os.remove(tmp_patched)
+        except: pass
 
     # Converti in PDF con LibreOffice
     out_dir = os.path.dirname(output_path)
