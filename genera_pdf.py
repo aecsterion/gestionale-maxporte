@@ -331,6 +331,11 @@ def genera_preventivo(dati_json, output_path):
         sys.exit(1)
 
 if __name__ == '__main__':
-    input_json = sys.argv[1] if len(sys.argv) > 1 else sys.stdin.read()
+    if len(sys.argv) > 1:
+        # sys.argv[1] è il path del file JSON
+        with open(sys.argv[1], 'r') as f:
+            input_json = f.read()
+    else:
+        input_json = sys.stdin.read()
     output = sys.argv[2] if len(sys.argv) > 2 else '/tmp/output.pdf'
     genera_preventivo(input_json, output)
