@@ -3976,63 +3976,117 @@ async function adminSpalle(){
   const {data} = await sb.from('telai_spalle').select('*').order('famiglia_apertura').order('spalla_cm');
   const rows=(data||[]).map(s=>\`<tr>
     <td>\${inlineInput(s.codice,\`adminSalva('telai_spalle','\${s.id}','codice',this.value)\`,'90px','text')}</td>
-    <td>\${inlineInput(s.spalla_cm,\`adminSalva('telai_spalle','\${s.id}','spalla_cm',this.value)\`,'60px')} mm</td>
-    <td><span class="tag" style="font-size:10px">\${s.famiglia_apertura}</span></td>
-    <td style="font-size:11px;color:var(--mid);max-width:160px">\${s.descrizione||''}</td>
+    <td>\${inlineInput(s.spalla_cm,\`adminSalva('telai_spalle','\${s.id}','spalla_cm',this.value)\`,'60px','number')} mm</td>
+    <td>\${inlineInput(s.famiglia_apertura||'',\`adminSalva('telai_spalle','\${s.id}','famiglia_apertura',this.value)\`,'70px','text')}</td>
+    <td>\${inlineInput(s.descrizione||'',\`adminSalva('telai_spalle','\${s.id}','descrizione',this.value)\`,'160px','text','—')}</td>
     <td>\${inlineInput(s.prezzo_a??'',\`adminSalva('telai_spalle','\${s.id}','prezzo_a',this.value)\`,'70px','number','€')}</td>
     <td>\${inlineInput(s.prezzo_p??'',\`adminSalva('telai_spalle','\${s.id}','prezzo_p',this.value)\`,'70px','number','€')}</td>
+    <td><button onclick="eliminaRigaAdmin('telai_spalle','\${s.id}','adminSpalle')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
   </tr>\`).join('');
   document.getElementById('admin-sub').innerHTML=adminCard('Spalle telaio a magazzino',\`
-    <table><thead><tr><th>Codice</th><th>Spalla</th><th>Famiglia</th><th>Descrizione</th><th>Prezzo A (€)</th><th>Prezzo P (€)</th></tr></thead>
+    <div style="margin-bottom:10px"><button class="btn btn-red btn-sm" onclick="nuovaSpalla()">+ Aggiungi spalla</button></div>
+    <table><thead><tr><th>Codice</th><th>Spalla (mm)</th><th>Famiglia</th><th>Descrizione</th><th>Prezzo A (€)</th><th>Prezzo P (€)</th><th></th></tr></thead>
     <tbody>\${rows}</tbody></table>\`);
+}
+
+async function nuovaSpalla(){
+  const cod=prompt('Codice spalla (es. 107_B32):'); if(!cod) return;
+  const mm=prompt('Misura mm:'); if(!mm) return;
+  const fam=prompt('Famiglia apertura (es. BAT):'); if(!fam) return;
+  const {error}=await sb.from('telai_spalle').insert([{codice:cod,spalla_cm:parseFloat(mm),famiglia_apertura:fam.toUpperCase()}]);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Spalla aggiunta','ok'); adminSpalle();
 }
 
 async function adminRegole(){
   const {data} = await sb.from('regole_telaio').select('*').order('famiglia_apertura').order('spessore_da_cm');
   const rows=(data||[]).map(r=>\`<tr>
-    <td><span class="tag" style="font-size:10px">\${r.famiglia_apertura}</span></td>
-    <td style="font-size:12px">\${r.spessore_da_cm} – \${r.spessore_a_cm} mm</td>
-    <td><strong style="font-size:12px">\${r.codice_spalla}</strong></td>
-    <td style="font-size:12px">\${r.tipo_accessorio||'—'}</td>
-    <td style="font-size:12px">\${r.cm_accessorio||'—'}</td>
+    <td>\${inlineInput(r.famiglia_apertura,\`adminSalva('regole_telaio','\${r.id}','famiglia_apertura',this.value)\`,'70px','text')}</td>
+    <td style="display:flex;gap:4px;align-items:center">
+      \${inlineInput(r.spessore_da_cm,\`adminSalva('regole_telaio','\${r.id}','spessore_da_cm',this.value)\`,'55px','number')}
+      <span style="font-size:11px;color:var(--mid)">–</span>
+      \${inlineInput(r.spessore_a_cm,\`adminSalva('regole_telaio','\${r.id}','spessore_a_cm',this.value)\`,'55px','number')}
+      <span style="font-size:11px;color:var(--mid)">mm</span>
+    </td>
+    <td>\${inlineInput(r.codice_spalla,\`adminSalva('regole_telaio','\${r.id}','codice_spalla',this.value)\`,'90px','text')}</td>
+    <td>\${inlineInput(r.tipo_accessorio||'',\`adminSalva('regole_telaio','\${r.id}','tipo_accessorio',this.value)\`,'90px','text','—')}</td>
+    <td>\${inlineInput(r.cm_accessorio||'',\`adminSalva('regole_telaio','\${r.id}','cm_accessorio',this.value)\`,'55px','number','—')}</td>
     <td>\${inlineInput(r.prezzo_access_A??'',\`adminSalva('regole_telaio','\${r.id}','prezzo_access_A',this.value)\`,'70px','number','€')}</td>
     <td>\${inlineInput(r.prezzo_access_P??'',\`adminSalva('regole_telaio','\${r.id}','prezzo_access_P',this.value)\`,'70px','number','€')}</td>
-    <td style="font-size:11px;color:var(--mid);max-width:160px">\${r.note||''}</td>
+    <td>\${inlineInput(r.note||'',\`adminSalva('regole_telaio','\${r.id}','note',this.value)\`,'120px','text','—')}</td>
+    <td><button onclick="eliminaRigaAdmin('regole_telaio','\${r.id}','adminRegole')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
   </tr>\`).join('');
   document.getElementById('admin-sub').innerHTML=adminCard('Regole abbinamento spessore → telaio',\`
+    <div style="margin-bottom:10px"><button class="btn btn-red btn-sm" onclick="nuovaRegola()">+ Aggiungi regola</button></div>
     <div style="overflow-x:auto"><table>
-      <thead><tr><th>Famiglia</th><th>Spessore</th><th>Spalla</th><th>Accessorio</th><th>Cm</th><th>Costo A (€)</th><th>Costo P (€)</th><th>Note</th></tr></thead>
+      <thead><tr><th>Famiglia</th><th>Spessore (mm)</th><th>Spalla</th><th>Accessorio</th><th>Mm</th><th>Costo A (€)</th><th>Costo P (€)</th><th>Note</th><th></th></tr></thead>
       <tbody>\${rows}</tbody>
     </table></div>\`);
+}
+
+async function nuovaRegola(){
+  const fam=prompt('Famiglia apertura (es. BAT):'); if(!fam) return;
+  const da=prompt('Spessore da (mm):'); if(!da) return;
+  const a=prompt('Spessore a (mm):'); if(!a) return;
+  const spalla=prompt('Codice spalla (es. 107_B32):'); if(!spalla) return;
+  const {error}=await sb.from('regole_telaio').insert([{famiglia_apertura:fam.toUpperCase(),spessore_da_cm:parseFloat(da),spessore_a_cm:parseFloat(a),codice_spalla:spalla}]);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Regola aggiunta','ok'); adminRegole();
 }
 
 async function adminScorExt(){
   const {data} = await sb.from('scorrevoli_esterni').select('*').order('codice_apertura').order('spessore_da_cm');
   const rows=(data||[]).map(s=>\`<tr>
-    <td><strong style="font-size:12px">\${s.codice_apertura}</strong></td>
-    <td style="font-size:12px">\${s.spessore_da_cm}–\${s.spessore_a_cm} mm</td>
-    <td style="font-size:11px">\${s.tipo_accessorio||'—'} \${s.cm_accessorio?s.cm_accessorio+'cm':''}</td>
+    <td>\${inlineInput(s.codice_apertura,\`adminSalva('scorrevoli_esterni','\${s.id}','codice_apertura',this.value)\`,'80px','text')}</td>
+    <td style="display:flex;gap:4px;align-items:center">
+      \${inlineInput(s.spessore_da_cm,\`adminSalva('scorrevoli_esterni','\${s.id}','spessore_da_cm',this.value)\`,'55px','number')}
+      <span style="font-size:11px;color:var(--mid)">–</span>
+      \${inlineInput(s.spessore_a_cm,\`adminSalva('scorrevoli_esterni','\${s.id}','spessore_a_cm',this.value)\`,'55px','number')}
+      <span style="font-size:11px;color:var(--mid)">mm</span>
+    </td>
+    <td>\${inlineInput(s.tipo_accessorio||'',\`adminSalva('scorrevoli_esterni','\${s.id}','tipo_accessorio',this.value)\`,'90px','text','—')}</td>
+    <td>\${inlineInput(s.cm_accessorio||'',\`adminSalva('scorrevoli_esterni','\${s.id}','cm_accessorio',this.value)\`,'55px','number','mm')}</td>
     <td>\${inlineInput(s.prezzo_a??'',\`adminSalva('scorrevoli_esterni','\${s.id}','prezzo_a',this.value)\`,'75px','number','€')}</td>
     <td>\${inlineInput(s.prezzo_p??'',\`adminSalva('scorrevoli_esterni','\${s.id}','prezzo_p',this.value)\`,'75px','number','€')}</td>
+    <td><button onclick="eliminaRigaAdmin('scorrevoli_esterni','\${s.id}','adminScorExt')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
   </tr>\`).join('');
   document.getElementById('admin-sub').innerHTML=adminCard('Scorrevoli esterni — prezzi per fascia spessore',\`
-    <table><thead><tr><th>Tipologia</th><th>Spessore muro</th><th>Accessorio</th><th>Prezzo A (€)</th><th>Prezzo P (€)</th></tr></thead>
+    <div style="margin-bottom:10px"><button class="btn btn-red btn-sm" onclick="nuovoScorExt()">+ Aggiungi</button></div>
+    <table><thead><tr><th>Tipologia</th><th>Spessore muro (mm)</th><th>Accessorio</th><th>Mm</th><th>Prezzo A (€)</th><th>Prezzo P (€)</th><th></th></tr></thead>
     <tbody>\${rows}</tbody></table>\`);
+}
+
+async function nuovoScorExt(){
+  const cod=prompt('Codice apertura (es. SE):'); if(!cod) return;
+  const da=prompt('Spessore da (mm):'); if(!da) return;
+  const a=prompt('Spessore a (mm):'); if(!a) return;
+  const {error}=await sb.from('scorrevoli_esterni').insert([{codice_apertura:cod.toUpperCase(),spessore_da_cm:parseFloat(da),spessore_a_cm:parseFloat(a)}]);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Riga aggiunta','ok'); adminScorExt();
 }
 
 async function adminScorInt(){
   const {data} = await sb.from('scorrevoli_interni').select('*').order('codice_apertura').order('spalla_cassone_cm');
   const rows=(data||[]).map(s=>\`<tr>
-    <td><strong style="font-size:12px">\${s.codice_apertura}</strong></td>
-    <td style="font-size:12px">\${s.codice_cassone}</td>
-    <td style="font-size:12px">\${s.spalla_cassone_cm} mm</td>
-    <td><strong style="font-size:12px">\${s.kit_telaio_codice}</strong></td>
+    <td>\${inlineInput(s.codice_apertura,\`adminSalva('scorrevoli_interni','\${s.id}','codice_apertura',this.value)\`,'80px','text')}</td>
+    <td>\${inlineInput(s.codice_cassone||'',\`adminSalva('scorrevoli_interni','\${s.id}','codice_cassone',this.value)\`,'90px','text')}</td>
+    <td>\${inlineInput(s.spalla_cassone_cm,\`adminSalva('scorrevoli_interni','\${s.id}','spalla_cassone_cm',this.value)\`,'65px','number')} mm</td>
+    <td>\${inlineInput(s.kit_telaio_codice||'',\`adminSalva('scorrevoli_interni','\${s.id}','kit_telaio_codice',this.value)\`,'90px','text')}</td>
     <td>\${inlineInput(s.prezzo_a??'',\`adminSalva('scorrevoli_interni','\${s.id}','prezzo_a',this.value)\`,'75px','number','€')}</td>
     <td>\${inlineInput(s.prezzo_p??'',\`adminSalva('scorrevoli_interni','\${s.id}','prezzo_p',this.value)\`,'75px','number','€')}</td>
+    <td><button onclick="eliminaRigaAdmin('scorrevoli_interni','\${s.id}','adminScorInt')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
   </tr>\`).join('');
   document.getElementById('admin-sub').innerHTML=adminCard('Scorrevoli interni — kit cassone',\`
-    <table><thead><tr><th>Tipologia</th><th>Cassone</th><th>Spalla</th><th>Kit telaio</th><th>Prezzo A (€)</th><th>Prezzo P (€)</th></tr></thead>
+    <div style="margin-bottom:10px"><button class="btn btn-red btn-sm" onclick="nuovoScorInt()">+ Aggiungi</button></div>
+    <table><thead><tr><th>Tipologia</th><th>Cassone</th><th>Spalla (mm)</th><th>Kit telaio</th><th>Prezzo A (€)</th><th>Prezzo P (€)</th><th></th></tr></thead>
     <tbody>\${rows}</tbody></table>\`);
+}
+
+async function nuovoScorInt(){
+  const cod=prompt('Codice apertura (es. SI):'); if(!cod) return;
+  const {error}=await sb.from('scorrevoli_interni').insert([{codice_apertura:cod.toUpperCase()}]);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Riga aggiunta','ok'); adminScorInt();
 }
 
 // ══════════════════════════════════════════════════════
