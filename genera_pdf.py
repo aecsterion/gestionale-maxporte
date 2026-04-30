@@ -28,7 +28,7 @@ def sostituisci_foglio(ws, mapping):
                     val = val.replace(k, str(v) if v is not None else '')
                 cell.value = val
 
-def nascondi_righe_vuote(ws):
+def nascondi_righe_vuote(ws, min_row=None):
     def ha_valore(v):
         if not v: return False
         s = str(v).strip()
@@ -37,7 +37,17 @@ def nascondi_righe_vuote(ws):
         if re.match(r'^\d+%$', s): return False
         if s in ('-','X','x','€'): return False
         return True
-    for row in ws.iter_rows(min_row=31):
+    # Trova automaticamente la riga della sezione posizione
+    if min_row is None:
+        for row in ws.iter_rows():
+            for cell in row:
+                if isinstance(cell, MergedCell): continue
+                if cell.value and '*POSIZIONE*' in str(cell.value):
+                    min_row = cell.row + 1
+                    break
+            if min_row: break
+        if not min_row: min_row = 19
+    for row in ws.iter_rows(min_row=min_row):
         cells = {cell.column: cell for cell in row if not isinstance(cell, MergedCell)}
         val16 = cells.get(16)
         desc_vuoto = not ha_valore(val16.value if val16 else None)
@@ -73,6 +83,8 @@ def mapping_riga(r, sc):
         '*INCISIONI_O_STAMPE_DECORATIVE*': r.get('incisioni',''),
         '*BUGNA_O_PANNELLO*': r.get('bugna',''),
         '*TIPOLOGIA*': r.get('nome_apertura', r.get('apertura','')),
+        '*PREZZO_TIPOLOGIA_LISTINO*': '',
+        '*PREZZO_TIPOLOGIA_SCONTATO*': '',
         '*SERRATURA*': r.get('serratura',''),
         '*SPALLA*': r.get('spalla',''),
         '*FERRAMENTA*': r.get('ferramenta',''),
@@ -208,17 +220,50 @@ def genera_preventivo(dati_json, output_path):
         sostituisci_foglio(ws_inter, {**mapping_doc, **mapping_riga(righe[1], sc1)})
         nascondi_righe_vuote(ws_inter)
 
-        # Per pos 3..N: aggiungi copie PRIMA di PAGINA_FINALE
-        fin_idx = wb.sheetnames.index('PAGINA_FINALE')
+        # Per pos 3..N: carica template fresco, compila e inserisce prima di PAGINA_FINALE
         for i, riga in enumerate(righe[2:], 3):
-            # copy_worksheet aggiunge in fondo — poi sposta
-            new_ws = wb.copy_worksheet(ws_inter)
-            new_ws.title = f'POS_{i}'
-            # Sposta prima di PAGINA_FINALE
-            wb.move_sheet(new_ws.title, offset=-(len(wb.sheetnames)-1-fin_idx)-1)
-            # Risostituisci con valori della posizione corretta
-            sostituisci_foglio(new_ws, {**mapping_doc, **mapping_riga(riga, sc1)})
-            nascondi_righe_vuote(new_ws)
+            # Carica foglio intermedio pulito dal template
+            wb_fresh = load_workbook(TEMPLATE_PATH)
+            ws_fresh = wb_fresh['PAGINE_INTERMEDIE']
+            sostituisci_foglio(ws_fresh, {**mapping_doc, **mapping_riga(riga, sc1)})
+            nascondi_righe_vuote(ws_fresh)
+            # Aggiungi al workbook copiando celle in un nuovo foglio
+            fin_idx = wb.sheetnames.index('PAGINA_FINALE')
+            new_ws = wb.create_sheet(f'POS_{i}', fin_idx)
+            # Copia dimensioni
+            for col, dim in ws_fresh.column_dimensions.items():
+                if dim.width: new_ws.column_dimensions[col].width = dim.width
+            for row_idx, dim in ws_fresh.row_dimensions.items():
+                if dim.height: new_ws.row_dimensions[row_idx].height = dim.height
+                if dim.hidden: new_ws.row_dimensions[row_idx].hidden = dim.hidden
+            # Copia merge
+            for merge in ws_fresh.merged_cells.ranges:
+                try: new_ws.merge_cells(str(merge))
+                except: pass
+            # Copia celle
+            for row in ws_fresh.iter_rows():
+                for cell in row:
+                    if isinstance(cell, MergedCell): continue
+                    nc = new_ws.cell(row=cell.row, column=cell.column)
+                    nc.value = cell.value
+                    if cell.has_style:
+                        nc.font = copy.copy(cell.font)
+                        nc.fill = copy.copy(cell.fill)
+                        nc.alignment = copy.copy(cell.alignment)
+                        nc.border = copy.copy(cell.border)
+                        nc.number_format = cell.number_format
+            # Page setup
+            new_ws.page_setup.paperSize = ws_fresh.page_setup.paperSize or 9
+            new_ws.page_setup.orientation = ws_fresh.page_setup.orientation or 'portrait'
+            new_ws.page_setup.fitToPage = True
+            new_ws.page_setup.fitToWidth = 1
+            new_ws.page_setup.fitToHeight = 0
+            try: new_ws.sheet_properties.pageSetUpPr.fitToPage = True
+            except: pass
+            if ws_fresh.print_area: new_ws.print_area = ws_fresh.print_area
+            new_ws.sheet_view.showGridLines = False
+            # Copia defaultColWidth via XML patch (openpyxl non lo espone direttamente)
+            new_ws._default_col_width = 2.453125
     else:
         # Solo 1 riga: nascondi tutto il foglio intermedio
         for row in ws_inter.iter_rows():
@@ -281,6 +326,15 @@ def _ripristina_media(xlsx_path, template_path, n_righe):
 
         with zipfile.ZipFile(tmp_p,'w',zipfile.ZIP_DEFLATED) as zout:
             for item,data in items:
+                if item.filename.startswith('xl/worksheets/') and item.filename.endswith('.xml'):
+                    # Fix sheetFormatPr per tutti i fogli
+                    xml = data.decode('utf-8')
+                    xml = re.sub(
+                        r'<sheetFormatPr[^/]*/>',
+                        '<sheetFormatPr defaultColWidth="2.453125" defaultRowHeight="13.9" customHeight="1"/>',
+                        xml
+                    )
+                    data = xml.encode('utf-8')
                 zout.writestr(item, data)
             for name,data in tmpl.items():
                 if name not in existing:
