@@ -1,84 +1,56 @@
 #!/usr/bin/env python3
-"""
-Motore generazione PDF preventivi/ordini Max Porte
-Uso: python3 genera_pdf.py <input_json> <output_pdf>
-"""
-import sys, json, os, subprocess, shutil, copy
+"""Motore generazione PDF preventivi/ordini Max Porte - approccio in-place"""
+import sys, json, os, subprocess, copy, shutil
 from openpyxl import load_workbook
 from openpyxl.cell.cell import MergedCell
-from openpyxl.utils import get_column_letter
 
-TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), 'template_preventivo.xlsx')
+TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'template_preventivo.xlsx')
 
-def sostituisci(val, mapping):
-    """Sostituisce tutti i segnaposto in una stringa."""
-    if not isinstance(val, str): return val
-    for k, v in mapping.items():
-        val = val.replace(k, str(v) if v is not None else '')
-    return val
+def fmt_euro(v):
+    if not v and v != 0: return ''
+    try:
+        return f"{float(v):,.2f}".replace(',','X').replace('.',',').replace('X','.')
+    except: return str(v)
 
-def riga_vuota(ws, row_idx, ncols=41):
-    """Controlla se una riga è tutta vuota."""
-    for c in range(1, ncols+1):
-        cell = ws.cell(row=row_idx, column=c)
-        if isinstance(cell, MergedCell): continue
-        if cell.value and str(cell.value).strip() and '*' not in str(cell.value):
-            return False
-    return True
-
-def ha_segnaposto_valorizzati(ws, row_idx, dati, ncols=41):
-    """Controlla se almeno un segnaposto in una riga ha un valore non vuoto."""
-    for c in range(1, ncols+1):
-        cell = ws.cell(row=row_idx, column=c)
-        if isinstance(cell, MergedCell): continue
-        if cell.value and isinstance(cell.value, str) and '*' in cell.value:
-            sostituto = sostituisci(cell.value, dati)
-            if sostituto.strip():
-                return True
-    return False
-
-def compila_foglio(ws, mapping):
-    """Sostituisce tutti i segnaposto nel foglio."""
+def sostituisci_foglio(ws, mapping):
     for row in ws.iter_rows():
         for cell in row:
             if isinstance(cell, MergedCell): continue
             if cell.value and isinstance(cell.value, str):
-                cell.value = sostituisci(cell.value, mapping)
+                val = cell.value
+                for k, v in mapping.items():
+                    val = val.replace(k, str(v) if v is not None else '')
+                cell.value = val
 
-def genera_qr(testo, size_px=80):
-    return None
-
-def copia_riga_template(ws_dest, ws_src, src_row, dest_row):
-    """Copia una riga dal foglio sorgente al foglio destinazione."""
-    for cell in ws_src[src_row]:
-        if isinstance(cell, MergedCell): continue
-        dest_cell = ws_dest.cell(row=dest_row, column=cell.column)
-        dest_cell.value = cell.value
-        if cell.has_style:
-            import copy
-            dest_cell.font = copy.copy(cell.font)
-            dest_cell.fill = copy.copy(cell.fill)
-            dest_cell.alignment = copy.copy(cell.alignment)
-            dest_cell.border = copy.copy(cell.border)
-            dest_cell.number_format = cell.number_format
+def nascondi_righe_vuote(ws):
+    for row in ws.iter_rows():
+        row_idx = row[0].row
+        has_real = False
+        has_placeholder = False
+        for cell in row:
+            if isinstance(cell, MergedCell): continue
+            if cell.value and isinstance(cell.value, str):
+                v = cell.value.strip()
+                if '*' in v: has_placeholder = True
+                elif v: has_real = True
+            elif cell.value is not None:
+                has_real = True
+        if has_placeholder and not has_real:
+            ws.row_dimensions[row_idx].hidden = True
 
 def genera_preventivo(dati_json, output_path):
     data = json.loads(dati_json)
     doc = data['documento']
     righe = data['righe']
-    tipo = data.get('tipo', 'preventivo')
 
-    # Mapping globale documento
-    sc1 = doc.get('sconto1', 0)
-    sc2 = doc.get('sconto2', 0)
-    sc_label = f"{sc1}%" if sc2 == 0 else f"{sc1}%+{sc2}%"
-    
-    tot_imponibile = doc.get('totale_imponibile', 0)
-    tot_netto = doc.get('totale_netto', tot_imponibile * (1-sc1/100) * (1-sc2/100))
+    sc1 = float(doc.get('sconto1', 0))
+    tot_imp = float(doc.get('totale_imponibile', 0))
+    tot_netto = round(tot_imp * (1 - sc1/100), 2)
     iva_pct = 22
     iva_euro = round(tot_netto * iva_pct / 100, 2)
     tot_iva = round(tot_netto + iva_euro, 2)
 
+    # Mapping documento
     mapping_doc = {
         '*TIPO_DOCUMENTO*': doc.get('tipo_documento', 'PREVENTIVO'),
         '*DATA_GENERAZIONE_DOCUMENTO': doc.get('data', ''),
@@ -88,11 +60,15 @@ def genera_preventivo(dati_json, output_path):
         '*RAGIONE SOCIALE*': doc.get('ragione_sociale', ''),
         '*RAGIONE SOCIALE RIGA 2*': doc.get('ragione_sociale_riga2', ''),
         '*INDIRIZZO*': doc.get('indirizzo', ''),
+        '*INDIRIZZO RIGA 2*': '',
         '*CAP* *CITTÀ* *(PROVINCIA)*': f"{doc.get('cap','')} {doc.get('citta','')} ({doc.get('provincia','')})",
         '*PAESE*': doc.get('paese', 'Italia'),
         '*NOME DESTINAZIONE*': doc.get('dest_nome', doc.get('ragione_sociale','')),
         '*NOME DESTINAZIONE RIGA 2*': '',
-        '*CAP* *CITTÀ* *(PROVINCIA)*': f"{doc.get('dest_cap','')} {doc.get('dest_citta','')} ({doc.get('dest_provincia','')})",
+        '*NOME DESTINAZIONE RIGA 2': '',
+        '*INDIRIZZO DESTINAZIONE*': doc.get('dest_indirizzo', doc.get('indirizzo','')),
+        '*CAP* *CITTÀ DEST* *(PROVINCIA DEST)*': f"{doc.get('dest_cap','')} {doc.get('dest_citta','')} ({doc.get('dest_provincia','')})",
+        '*PAESE DEST*': doc.get('dest_paese', 'Italia'),
         '*RIFERIMENTO_CLIENTE*': doc.get('riferimento_cliente', ''),
         '*CODICE_CLIENTE*': doc.get('codice_cliente', ''),
         '*AGENTE*': doc.get('agente', ''),
@@ -111,173 +87,88 @@ def genera_preventivo(dati_json, output_path):
         '*EMAIL_2*': doc.get('email2', ''),
         '*SDI*': doc.get('sdi', ''),
         '*PEC*': doc.get('pec', ''),
-        '*GIORNI_VALIDITÀ_OFFERTA*': doc.get('validita_offerta', '30'),
-        '*BARCODE_DOCUMENTO*': '',  # inserito come immagine
-        # Riepilogo finale
-        '*SOMMA_TOTALI_POSIZIONI*': f"{tot_imponibile:,.2f}".replace(',','X').replace('.',',').replace('X','.'),
-        '*SCONTO*': '',
+        '*GIORNI_VALIDITÀ_OFFERTA*': str(doc.get('validita_offerta', '30')),
+        '*BARCODE_DOCUMENTO*': '',
+        '*SOMMA_TOTALI_POSIZIONI*': fmt_euro(tot_imp),
+        '*SCONTO*': f"{int(sc1)}%" if sc1 else '',
         '*OMAGGI*': '',
         '*SCONTO_PAGAMENTO*': '',
-        '*TOTALE_MERCE_SCONTATO*': f"{tot_netto:,.2f}".replace(',','X').replace('.',',').replace('X','.'),
-        '*TOTALE_IMPONIBILE*': f"{tot_netto:,.2f}".replace(',','X').replace('.',',').replace('X','.'),
-        '*TOTALE_IVA*': f"{iva_euro:,.2f}".replace(',','X').replace('.',',').replace('X','.'),
-        '*TOTALE_IMBALLO*': '',
+        '*TOTALE_MERCE_SCONTATO*': fmt_euro(tot_netto),
+        '*TOTALE_IMPONIBILE*': fmt_euro(tot_netto),
+        '*TOTALE_IVA*': fmt_euro(iva_euro),
+        '*TOTALE_IMBALLO*': fmt_euro(doc.get('totale_imballo', '')),
         '*TOTALE_TRASPORTO*': '',
         '*TOTALE_SPESE*': '',
-        '*SOMMA_RIEPILOGO_OFFERTA*': f"{tot_iva:,.2f}".replace(',','X').replace('.',',').replace('X','.'),
+        '*SOMMA_RIEPILOGO_OFFERTA*': fmt_euro(tot_iva),
     }
 
-    # Carica template
-    wb_tmpl = load_workbook(TEMPLATE_PATH)
-    ws_prima = wb_tmpl['PRIMA_PAGINA']
-    ws_inter = wb_tmpl['PAGINE_INTERMEDIE']
-    ws_finale = wb_tmpl['PAGINA_FINALE']
-
-    # Trova le righe di una posizione nel foglio intermedio
-    # La posizione inizia alla riga con *POSIZIONE* e finisce alla riga con *TOTALE_POSIZIONE*
-    pos_start = None
-    pos_end = None
-    for row in ws_inter.iter_rows():
-        for cell in row:
-            if isinstance(cell, MergedCell): continue
-            if cell.value and '*POSIZIONE*' in str(cell.value):
-                pos_start = cell.row
-            if cell.value and '*TOTALE_POSIZIONE*' in str(cell.value):
-                pos_end = cell.row
-                break
-        if pos_end: break
-
-    # Crea workbook output
-    from openpyxl import Workbook
-    wb_out = Workbook()
-    wb_out.remove(wb_out.active)
-
-    def crea_foglio_da_template(ws_src, sheet_name):
-        ws_new = wb_out.create_sheet(sheet_name)
-        ws_new.sheet_view.showGridLines = False
-        # Copia dimensioni colonne
-        for col, dim in ws_src.column_dimensions.items():
-            ws_new.column_dimensions[col].width = dim.width
-        # Copia altezze righe
-        for row, dim in ws_src.row_dimensions.items():
-            ws_new.row_dimensions[row].height = dim.height
-        # Copia merge
-        for merge in ws_src.merged_cells.ranges:
-            ws_new.merge_cells(str(merge))
-        # Copia celle
-        import copy
-        for row in ws_src.iter_rows():
-            for cell in row:
-                if isinstance(cell, MergedCell): continue
-                nc = ws_new.cell(row=cell.row, column=cell.column)
-                nc.value = cell.value
-                if cell.has_style:
-                    nc.font = copy.copy(cell.font)
-                    nc.fill = copy.copy(cell.fill)
-                    nc.alignment = copy.copy(cell.alignment)
-                    nc.border = copy.copy(cell.border)
-                    nc.number_format = cell.number_format
-        # Copia page setup dal template originale
-        ws_new.page_setup.paperSize = ws_src.page_setup.paperSize or ws_new.PAPERSIZE_A4
-        ws_new.page_setup.orientation = ws_src.page_setup.orientation or 'portrait'
-        ws_new.page_setup.fitToPage = True
-        ws_new.page_setup.fitToWidth = 1
-        ws_new.page_setup.fitToHeight = 0
-        ws_new.sheet_properties.pageSetUpPr.fitToPage = True
-        # Copia margini
-        if ws_src.page_margins:
-            from openpyxl.worksheet.page import PageMargins
-            ws_new.page_margins = PageMargins(
-                left=ws_src.page_margins.left,
-                right=ws_src.page_margins.right,
-                top=ws_src.page_margins.top,
-                bottom=ws_src.page_margins.bottom,
-                header=ws_src.page_margins.header,
-                footer=ws_src.page_margins.footer
-            )
-        # Copia print area
-        if ws_src.print_area:
-            ws_new.print_area = ws_src.print_area
-        return ws_new
-
-    # Determina come distribuire le righe nei fogli
-    # Prima pagina: 1 porta, Pagine intermedie: N porte, Ultima pagina: ultima porta + totali
-    n = len(righe)
-    
-    if n == 0:
-        print("Nessuna riga", file=sys.stderr)
-        return
-
-    def compila_posizione(ws, riga_tmpl_start, riga_tmpl_end, dest_start, riga_data, sc):
-        """Compila il blocco di una posizione con i dati della riga."""
-        fmt = lambda v: f"{v:,.2f}".replace(',','X').replace('.',',').replace('X','.') if isinstance(v,(int,float)) and v else ''
-        pr = riga_data.get('prezzo_base', 0)
-        pr_netto = round(pr * (1-sc/100), 2) if pr else 0
-        
-        mapping_riga = {
-            '*POSIZIONE*': riga_data.get('posizione',''),
-            '*L*': str(riga_data.get('larghezza','')),
-            '*H*': str(riga_data.get('altezza','')),
-            '*S*': str(riga_data.get('spessore','')),
-            '*SENSO*': riga_data.get('senso',''),
-            '*APERTURA*': riga_data.get('apertura',''),
-            '*QUANTITÀ*': str(riga_data.get('quantita',1)),
-            '*UM*': riga_data.get('um','NR'),
-            '*PRODOTTO*': riga_data.get('modello',''),
-            '*SERIE*': riga_data.get('serie',''),
-            '*MODELLO*': riga_data.get('modello',''),
-            '*FINITURA*': riga_data.get('finitura',''),
-            '*FINITURA_TELAIO*': riga_data.get('finitura_telaio',''),
-            '*FINITURA_COPRIFILI*': riga_data.get('finitura_coprifili',''),
-            '*COLORE_PIETRA*': riga_data.get('colore_pietra',''),
-            '*COLORE_INSERTO_ALLUMINIO*': riga_data.get('colore_inserto',''),
-            '*TIPO_DI_VETRO*': riga_data.get('vetro',''),
-            '*INCISIONI_O_STAMPE_DECORATIVE*': riga_data.get('incisioni',''),
-            '*BUGNA_O_PANNELLO*': riga_data.get('bugna',''),
-            '*TIPOLOGIA*': riga_data.get('apertura',''),
-            '*SENSO*': riga_data.get('senso_apertura',''),
-            '*SERRATURA*': riga_data.get('serratura',''),
-            '*SPALLA*': riga_data.get('spalla',''),
-            '*FERRAMENTA*': riga_data.get('ferramenta',''),
-            '*MANIGLIA*': riga_data.get('maniglia',''),
-            '*VERSIONE_MANIGLIA*': riga_data.get('versione_maniglia',''),
-            '*COLORE_MANIGLIA*': riga_data.get('colore_maniglia',''),
-            '*KIT_VARSAVIA_SCORREVOLE*': riga_data.get('kit_varsavia',''),
-            '*KIT_RIM_16_SCORREVOLE*': riga_data.get('kit_rim16',''),
+    def mapping_riga(r, sc):
+        sc = float(sc)
+        def scont(v):
+            try: return fmt_euro(round(float(v)*(1-sc/100),2)) if v else ''
+            except: return ''
+        return {
+            '*POSIZIONE*': r.get('posizione',''),
+            '*L*': str(r.get('larghezza','')),
+            '*H*': str(r.get('altezza','')),
+            '*S*': str(r.get('spessore','')),
+            '*SENSO*': r.get('senso',''),
+            '*APERTURA*': r.get('apertura',''),
+            '*QUANTITÀ*': str(r.get('quantita',1)),
+            '*UM*': r.get('um','NR'),
+            '*PRODOTTO*': r.get('modello',''),
+            '*SERIE*': r.get('serie',''),
+            '*MODELLO*': r.get('modello',''),
+            '*FINITURA*': r.get('finitura',''),
+            '*FINITURA_TELAIO*': r.get('finitura_telaio',''),
+            '*FINITURA_COPRIFILI*': r.get('finitura_coprifili',''),
+            '*COLORE_PIETRA*': r.get('colore_pietra',''),
+            '*COLORE_INSERTO_ALLUMINIO*': r.get('colore_inserto',''),
+            '*TIPO_DI_VETRO*': r.get('vetro',''),
+            '*INCISIONI_O_STAMPE_DECORATIVE*': r.get('incisioni',''),
+            '*BUGNA_O_PANNELLO*': r.get('bugna',''),
+            '*TIPOLOGIA*': r.get('apertura',''),
+            '*SERRATURA*': r.get('serratura',''),
+            '*SPALLA*': r.get('spalla',''),
+            '*FERRAMENTA*': r.get('ferramenta',''),
+            '*MANIGLIA*': r.get('maniglia',''),
+            '*VERSIONE_MANIGLIA*': r.get('versione_maniglia',''),
+            '*COLORE_MANIGLIA*': r.get('colore_maniglia',''),
+            '*KIT_VARSAVIA_SCORREVOLE*': r.get('kit_varsavia',''),
+            '*KIT_RIM_16_SCORREVOLE*': r.get('kit_rim16',''),
             '*LAVORAZIONI_EXTRA*': '',
             '*ACCESSORI*': '',
-            '*SUPPLEMENTO_FUORI_MISURA_L_SI_NO*': riga_data.get('fuori_misura_l',''),
-            '*SUPPLEMENTO_FUORI_MISURA_H_SI_NO*': riga_data.get('fuori_misura_h',''),
+            '*SUPPLEMENTO_FUORI_MISURA_L_SI_NO*': r.get('fuori_misura_l',''),
+            '*SUPPLEMENTO_FUORI_MISURA_H_SI_NO*': r.get('fuori_misura_h',''),
             '*SUPPLEMENTO_RIFILATURA_SI_NO*': '',
-            '*STANZA*': riga_data.get('stanza',''),
-            '*NOTE_RIGA*': riga_data.get('note_riga',''),
-            # Prezzi
+            '*STANZA*': r.get('stanza',''),
+            '*NOTE_RIGA*': r.get('note_riga',''),
             '*SC*': str(int(sc)) if sc else '',
-            '*PREZZO_MODELLO_LISTINO*': fmt(riga_data.get('prezzo_base',0)),
-            '*PREZZO_MODELLO_SCONTATO*': fmt(round(riga_data.get('prezzo_base',0)*(1-sc/100),2)),
-            '*PREZZO_FINITURA_LISTINO*': fmt(riga_data.get('prezzo_finitura',0)) if riga_data.get('prezzo_finitura') else '',
-            '*PREZZO_FINITURA_SCONTATO*': fmt(round(riga_data.get('prezzo_finitura',0)*(1-sc/100),2)) if riga_data.get('prezzo_finitura') else '',
+            '*PREZZO_MODELLO_LISTINO*': fmt_euro(r.get('prezzo_base',0)),
+            '*PREZZO_MODELLO_SCONTATO*': scont(r.get('prezzo_base',0)),
+            '*PREZZO_FINITURA_LISTINO*': fmt_euro(r.get('prezzo_finitura','')) if r.get('prezzo_finitura') else '',
+            '*PREZZO_FINITURA_SCONTATO*': scont(r.get('prezzo_finitura',0)) if r.get('prezzo_finitura') else '',
             '*SUPPLEMENTO_BICOLORE_LISTINO*': '',
             '*SUPPLEMENTO_BICOLORE_SCONTATO*': '',
             '*SUPPLEMENTO_COLORE_INSERTO_LISTINO*': '',
             '*SUPPLEMENTO_COLORE_INSERTO_SCONTATO*': '',
-            '*PREZZO_VETRO_LISTINO*': fmt(riga_data.get('prezzo_vetro',0)) if riga_data.get('prezzo_vetro') else '',
-            '*PREZZO_VETRO_SCONTATO*': fmt(round(riga_data.get('prezzo_vetro',0)*(1-sc/100),2)) if riga_data.get('prezzo_vetro') else '',
+            '*PREZZO_VETRO_LISTINO*': fmt_euro(r.get('prezzo_vetro','')) if r.get('prezzo_vetro') else '',
+            '*PREZZO_VETRO_SCONTATO*': scont(r.get('prezzo_vetro',0)) if r.get('prezzo_vetro') else '',
             '*PREZZO_INCISIONE_O_STAMPA_LISTINO*': '',
             '*PREZZO_INCISIONE_O_STAMPA_SCONTATO*': '',
-            '*SUPPLEMENTO_SERRATURA_LISTINO*': fmt(riga_data.get('prezzo_serratura',0)) if riga_data.get('prezzo_serratura') else '',
-            '*SUPPLEMENTO_SERRATURA_SCONTATO*': fmt(round(riga_data.get('prezzo_serratura',0)*(1-sc/100),2)) if riga_data.get('prezzo_serratura') else '',
-            '*SUPPLEMENTO_STIPITE_LISTINO*': fmt(riga_data.get('prezzo_telaio',0)) if riga_data.get('prezzo_telaio') else '',
-            '*SUPPLEMENTO_STIPITE_SCONTATO*': fmt(round(riga_data.get('prezzo_telaio',0)*(1-sc/100),2)) if riga_data.get('prezzo_telaio') else '',
-            '*SUPPLEMENTO_COLORE_FERRAMENTA_LISTINO*': fmt(riga_data.get('prezzo_ferramenta',0)) if riga_data.get('prezzo_ferramenta') else '',
-            '*SUPPLEMENTO_COLORE_FERRAMENTA_SCONTATO*': fmt(round(riga_data.get('prezzo_ferramenta',0)*(1-sc/100),2)) if riga_data.get('prezzo_ferramenta') else '',
-            '*PREZZO_MANIGLIA_LISTINO*': fmt(riga_data.get('prezzo_maniglia',0)) if riga_data.get('prezzo_maniglia') else '',
-            '*PREZZO_MANIGLIA_SCONTATO*': fmt(round(riga_data.get('prezzo_maniglia',0)*(1-sc/100),2)) if riga_data.get('prezzo_maniglia') else '',
+            '*SUPPLEMENTO_SERRATURA_LISTINO*': fmt_euro(r.get('prezzo_serratura','')) if r.get('prezzo_serratura') else '',
+            '*SUPPLEMENTO_SERRATURA_SCONTATO*': scont(r.get('prezzo_serratura',0)) if r.get('prezzo_serratura') else '',
+            '*SUPPLEMENTO_STIPITE_LISTINO*': fmt_euro(r.get('prezzo_telaio','')) if r.get('prezzo_telaio') else '',
+            '*SUPPLEMENTO_STIPITE_SCONTATO*': scont(r.get('prezzo_telaio',0)) if r.get('prezzo_telaio') else '',
+            '*SUPPLEMENTO_COLORE_FERRAMENTA_LISTINO*': fmt_euro(r.get('prezzo_ferramenta','')) if r.get('prezzo_ferramenta') else '',
+            '*SUPPLEMENTO_COLORE_FERRAMENTA_SCONTATO*': scont(r.get('prezzo_ferramenta',0)) if r.get('prezzo_ferramenta') else '',
+            '*PREZZO_MANIGLIA_LISTINO*': fmt_euro(r.get('prezzo_maniglia','')) if r.get('prezzo_maniglia') else '',
+            '*PREZZO_MANIGLIA_SCONTATO*': scont(r.get('prezzo_maniglia',0)) if r.get('prezzo_maniglia') else '',
             '*PREZZO_KIT_VARSAVIA_SCORREVOLE_LISTINO*': '',
             '*PREZZO_KIT_VARSAVIA_SCORREVOLE_SCONTATO*': '',
             '*PREZZO_KIT_RIM_16_SCORREVOLE_LISTINO*': '',
             '*PREZZO_KIT_RIM_16_SCORREVOLE_SCONTATO*': '',
-            '*PREZZO_LAVORAZIONI_EXTRA_LISTINO*': fmt(riga_data.get('prezzo_extra',0)) if riga_data.get('prezzo_extra') else '',
+            '*PREZZO_LAVORAZIONI_EXTRA_LISTINO*': fmt_euro(r.get('prezzo_extra','')) if r.get('prezzo_extra') else '',
             '*PREZZO_LAVORAZIONI_EXTRA_SCONTATO*': '',
             '*PREZZO_ACCESSORI_LISTINO*': '',
             '*PREZZO_ACCESSORI_SCONTATO*': '',
@@ -287,65 +178,56 @@ def genera_preventivo(dati_json, output_path):
             '*SUPPLEMENTO_FUORI_MISURA_H_SCONTATO*': '',
             '*SUPPLEMENTO_RIFILATURA_LISTINO*': '',
             '*SUPPLEMENTO_RIFILATURA_SCONTATO*': '',
-            '*TOTALE_RIGA*': '',  # non usato per singola riga
-            '*TOTALE_POSIZIONE*': fmt(riga_data.get('prezzo_totale',0)),
+            '*TOTALE_RIGA*': '',
+            '*TOTALE_POSIZIONE*': fmt_euro(r.get('prezzo_totale',0)),
             '*IMMAGINE*': '',
         }
-        return mapping_riga
 
-    # Per semplicità generiamo un unico foglio con prima pagina + posizioni + finale
-    # La struttura multi-foglio la implementeremo nella versione avanzata
-    ws_out = crea_foglio_da_template(ws_prima, 'Preventivo')
-    # Forza area di stampa A1:AO fino all'ultima riga usata
-    ws_out.print_area = 'A1:AO200'
-    
-    # Compila dati documento nella prima pagina
-    compila_foglio(ws_out, {**mapping_doc})
+    # Carica template fresco per ogni generazione
+    wb = load_workbook(TEMPLATE_PATH)
 
-    # Ora aggiungi le righe posizioni dopo la riga *POSIZIONE* nella prima pagina
-    # Trova riga *POSIZIONE* nel foglio output
-    pos_row_out = None
-    pos_end_out = None
-    for row in ws_out.iter_rows():
-        for cell in row:
-            if isinstance(cell, MergedCell): continue
-            if cell.value and '*POSIZIONE*' in str(cell.value):
-                pos_row_out = cell.row
-            if cell.value and '*TOTALE_POSIZIONE*' in str(cell.value):
-                pos_end_out = cell.row
-                break
-        if pos_end_out: break
+    if len(righe) == 0:
+        print("Nessuna riga", file=sys.stderr)
+        sys.exit(1)
 
-    if pos_row_out and pos_end_out and len(righe) > 0:
-        sc = doc.get('sconto1', 0)
-        
-        # Prima porta: usa le righe già nel template
-        mapping_r0 = compila_posizione(ws_out, pos_row_out, pos_end_out, pos_row_out, righe[0], sc)
-        compila_foglio(ws_out, mapping_r0)
+    # Prima pagina: intestazione + prima riga
+    ws_prima = wb['PRIMA_PAGINA']
+    full_mapping = {**mapping_doc, **mapping_riga(righe[0], sc1)}
+    sostituisci_foglio(ws_prima, full_mapping)
+    nascondi_righe_vuote(ws_prima)
 
-    # Compila anche il foglio finale per i totali
-    ws_fin = crea_foglio_da_template(ws_finale, 'Finale')
-    compila_foglio(ws_fin, {**mapping_doc})
+    # Pagine intermedie: righe 2..N-1 (se esistono)
+    ws_inter = wb['PAGINE_INTERMEDIE']
+    if len(righe) > 2:
+        # Per ora usa la prima riga intermedia come placeholder
+        sostituisci_foglio(ws_inter, {**mapping_doc, **mapping_riga(righe[1], sc1)})
+        nascondi_righe_vuote(ws_inter)
+    else:
+        # Nascondi tutto il foglio intermedio
+        for row in ws_inter.iter_rows():
+            ws_inter.row_dimensions[row[0].row].hidden = True
 
-    # Salva workbook temporaneo
+    # Pagina finale: ultima riga + totali
+    ws_finale = wb['PAGINA_FINALE']
+    ultima = righe[-1] if len(righe) > 1 else righe[0]
+    sostituisci_foglio(ws_finale, {**mapping_doc, **mapping_riga(ultima, sc1)})
+    nascondi_righe_vuote(ws_finale)
+
+    # Salva e converti
     tmp_xlsx = output_path.replace('.pdf', '_tmp.xlsx')
-    wb_out.save(tmp_xlsx)
+    wb.save(tmp_xlsx)
 
-    # Converti in PDF con LibreOffice
-    out_dir = os.path.dirname(output_path)
+    out_dir = os.path.dirname(os.path.abspath(output_path))
     r = subprocess.run([
         'libreoffice', '--headless',
         '--convert-to', 'pdf',
         '--outdir', out_dir, tmp_xlsx
     ], capture_output=True, text=True, timeout=60,
     env={**os.environ, 'HOME': '/tmp'})
-    
-    # Rinomina output
+
     tmp_pdf = tmp_xlsx.replace('.xlsx', '.pdf')
-    # LibreOffice può restituire exit code 1 anche in caso di successo
-    # Verifichiamo l'esistenza del file PDF invece del return code
     if os.path.exists(tmp_pdf):
-        os.rename(tmp_pdf, output_path)
+        os.replace(tmp_pdf, output_path)
         try: os.remove(tmp_xlsx)
         except: pass
         print(f"PDF generato: {output_path}", file=sys.stderr)
@@ -355,7 +237,6 @@ def genera_preventivo(dati_json, output_path):
 
 if __name__ == '__main__':
     if len(sys.argv) > 1:
-        # sys.argv[1] è il path del file JSON
         with open(sys.argv[1], 'r') as f:
             input_json = f.read()
     else:
