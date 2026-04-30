@@ -5,12 +5,23 @@ from openpyxl import load_workbook
 from openpyxl.cell.cell import MergedCell
 
 TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'template_preventivo.xlsx')
+# Fallback per Railway o ambienti diversi
+if not os.path.exists(TEMPLATE_PATH):
+    for candidate in [
+        '/app/template_preventivo.xlsx',
+        os.path.join(os.getcwd(), 'template_preventivo.xlsx'),
+    ]:
+        if os.path.exists(candidate):
+            TEMPLATE_PATH = candidate
+            break
 
 def fmt_euro(v):
     if not v and v != 0: return ''
     try:
-        return f"{float(v):,.2f}".replace(',','X').replace('.',',').replace('X','.')
-    except: return str(v)
+        f = float(v)
+        if f == 0: return ''  # zero = campo vuoto nel PDF
+        return f"{f:,.2f}".replace(',','X').replace('.',',').replace('X','.')
+    except: return str(v) if v else ''
 
 def sostituisci_foglio(ws, mapping):
     for row in ws.iter_rows():
@@ -23,19 +34,41 @@ def sostituisci_foglio(ws, mapping):
                 cell.value = val
 
 def nascondi_righe_vuote(ws):
-    for row in ws.iter_rows():
+    """
+    Nasconde le righe della sezione posizione dove il valore è vuoto.
+    Una riga va nascosta se:
+    - col 16 (valore) è vuota o ha solo segnaposto rimasti
+    - le colonne prezzi hanno solo '€ ' senza numeri
+    """
+    import re
+
+    def ha_valore_reale(v):
+        if not v: return False
+        s = str(v).strip()
+        if not s: return False
+        if '*' in s: return False  # segnaposto non sostituito
+        # Ignora "€ " senza numero, "50%" standalone, "-", "X", "x"
+        if re.match(r'^€\s*$', s): return False
+        if re.match(r'^\d+%$', s): return False
+        if s in ('-', 'X', 'x', '€'): return False
+        return True
+
+    for row in ws.iter_rows(min_row=31):  # solo sezione posizione
         row_idx = row[0].row
-        has_real = False
-        has_placeholder = False
-        for cell in row:
-            if isinstance(cell, MergedCell): continue
-            if cell.value and isinstance(cell.value, str):
-                v = cell.value.strip()
-                if '*' in v: has_placeholder = True
-                elif v: has_real = True
-            elif cell.value is not None:
-                has_real = True
-        if has_placeholder and not has_real:
+        cells = {cell.column: cell for cell in row if not isinstance(cell, MergedCell)}
+
+        # Ottieni valore colonna 16 (P = descrizione)
+        val16 = cells.get(16)
+        desc_vuoto = not ha_valore_reale(val16.value if val16 else None)
+
+        # Ottieni valori colonne prezzi (28, 31, 33, 36)
+        prezzi_vuoti = all(
+            not ha_valore_reale(cells.get(c).value if cells.get(c) else None)
+            for c in [28, 33, 36]
+        )
+
+        # Nascondi se descrizione vuota E prezzi vuoti
+        if desc_vuoto and prezzi_vuoti:
             ws.row_dimensions[row_idx].hidden = True
 
 def genera_preventivo(dati_json, output_path):
@@ -112,6 +145,8 @@ def genera_preventivo(dati_json, output_path):
             '*L*': str(r.get('larghezza','')),
             '*H*': str(r.get('altezza','')),
             '*S*': str(r.get('spessore','')),
+            '*COD_SENSO*': r.get('senso',''),
+            '*COD_APERTURA*': r.get('apertura',''),
             '*SENSO*': r.get('senso',''),
             '*APERTURA*': r.get('apertura',''),
             '*QUANTITÀ*': str(r.get('quantita',1)),
@@ -216,6 +251,41 @@ def genera_preventivo(dati_json, output_path):
     # Salva e converti
     tmp_xlsx = output_path.replace('.pdf', '_tmp.xlsx')
     wb.save(tmp_xlsx)
+
+    # Ripristina immagini e drawing dal template originale (openpyxl le perde)
+    import zipfile
+    tmp_patched = tmp_xlsx.replace('.xlsx', '_p.xlsx')
+    try:
+        # Leggi file media e drawing dal template
+        with zipfile.ZipFile(TEMPLATE_PATH, 'r') as zt:
+            tmpl_extras = {
+                name: zt.read(name) for name in zt.namelist()
+                if name.startswith('xl/media/') or
+                   name.startswith('xl/drawings/') or
+                   name.startswith('xl/charts/')
+            }
+
+        with zipfile.ZipFile(tmp_xlsx, 'r') as zin:
+            items = [(item, zin.read(item.filename)) for item in zin.infolist()]
+
+        # Nomi già presenti nel file generato
+        existing = {item.filename for item, _ in items}
+
+        with zipfile.ZipFile(tmp_patched, 'w', zipfile.ZIP_DEFLATED) as zout:
+            for item, data in items:
+                zout.writestr(item, data)
+            # Aggiungi i file mancanti dal template
+            for name, data in tmpl_extras.items():
+                if name not in existing:
+                    zout.writestr(name, data)
+
+        os.replace(tmp_patched, tmp_xlsx)
+    except Exception as e:
+        print(f"Media copy warning: {e}", file=sys.stderr)
+        try: os.remove(tmp_patched)
+        except: pass
+
+
 
     out_dir = os.path.dirname(os.path.abspath(output_path))
     r = subprocess.run([
