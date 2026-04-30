@@ -3,7 +3,6 @@ const fs = require('fs');
 const path = require('path');
 const spawn = require('child_process').spawn;
 const os = require('os');
-
 const PORT = process.env.PORT || 3000;
 const HTML = `<!DOCTYPE html>
 <html lang="it">
@@ -4760,6 +4759,7 @@ async function esportaPDF(tipo, id) {
         spessore: r.spessore_muro_mm || '',
         senso: r.senso_apertura || '',
         apertura: r.nome_apertura || '',
+        codice_apertura: r.codice_apertura || '',
         quantita: r.quantita || 1,
         um: 'NR',
         serie: r.nome_serie || '',
@@ -4958,7 +4958,6 @@ async function esportaPDF(tipo, id) {
 </body>
 </html>
 `;
-
 function generaPDF(payload, callback) {
   const tmpJson = path.join(os.tmpdir(), 'prev_' + Date.now() + '.json');
   const tmpPdf = path.join(os.tmpdir(), 'prev_' + Date.now() + '.pdf');
@@ -4977,21 +4976,15 @@ function generaPDF(payload, callback) {
     }
   });
 }
-
 const server = http.createServer(function(req, res) {
-  // Serve file statici (logo ecc.)
   if (req.method === 'GET' && req.url === '/logo-maxporte.png') {
     const logoPath = path.join(__dirname, 'logo-maxporte.png');
     if (fs.existsSync(logoPath)) {
       res.writeHead(200, {'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400'});
       res.end(fs.readFileSync(logoPath));
-    } else {
-      res.writeHead(404); res.end('Logo not found');
-    }
+    } else { res.writeHead(404); res.end('Logo not found'); }
     return;
   }
-
-  // Endpoint generazione PDF
   if (req.method === 'POST' && req.url === '/genera-pdf') {
     let body = '';
     req.on('data', function(chunk) { body += chunk.toString(); });
@@ -4999,10 +4992,8 @@ const server = http.createServer(function(req, res) {
       try {
         const payload = JSON.parse(body);
         generaPDF(payload, function(err, pdfData) {
-          if (err) {
-            res.writeHead(500, {'Content-Type': 'text/plain'});
-            res.end(err.message);
-          } else {
+          if (err) { res.writeHead(500, {'Content-Type': 'text/plain'}); res.end(err.message); }
+          else {
             const numero = (payload.documento && payload.documento.numero) || 'documento';
             res.writeHead(200, {
               'Content-Type': 'application/pdf',
@@ -5012,17 +5003,11 @@ const server = http.createServer(function(req, res) {
             res.end(pdfData);
           }
         });
-      } catch(e) {
-        res.writeHead(400, {'Content-Type': 'text/plain'});
-        res.end('JSON non valido: ' + e.message);
-      }
+      } catch(e) { res.writeHead(400, {'Content-Type': 'text/plain'}); res.end('JSON non valido: ' + e.message); }
     });
     return;
   }
-
-  // Serve HTML principale
   res.writeHead(200, {'Content-Type': 'text/html;charset=utf-8', 'Cache-Control': 'no-store'});
   res.end(HTML);
 });
-
 server.listen(PORT, function() { console.log('MPX Gestionale avviato su porta ' + PORT); });

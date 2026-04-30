@@ -146,7 +146,7 @@ def genera_preventivo(dati_json, output_path):
             '*H*': str(r.get('altezza','')),
             '*S*': str(r.get('spessore','')),
             '*COD_SENSO*': r.get('senso',''),
-            '*COD_APERTURA*': r.get('codice_apertura', r.get('apertura','')),
+            '*COD_APERTURA*': r.get('codice_apertura','') or r.get('apertura','').split()[0] if r.get('apertura') else '',
             '*SENSO*': r.get('senso',''),
             '*APERTURA*': r.get('nome_apertura', r.get('apertura','')),
             '*QUANTITÀ*': str(r.get('quantita',1)),
@@ -267,10 +267,9 @@ def genera_preventivo(dati_json, output_path):
     wb.save(tmp_xlsx)
 
     # Ripristina immagini, drawing e rels dal template originale
-    import zipfile as zf_mod
+    import zipfile as zf_mod, re as re_mod
     tmp_patched = tmp_xlsx.replace('.xlsx', '_p.xlsx')
     try:
-        # File da copiare dal template
         with zf_mod.ZipFile(TEMPLATE_PATH, 'r') as zt:
             tmpl_files = {}
             for name in zt.namelist():
@@ -278,23 +277,34 @@ def genera_preventivo(dati_json, output_path):
                     name.startswith('xl/drawings/') or
                     name.startswith('xl/worksheets/_rels/')):
                     tmpl_files[name] = zt.read(name)
+            inter_rels = tmpl_files.get('xl/worksheets/_rels/sheet2.xml.rels', b'')
 
         with zf_mod.ZipFile(tmp_xlsx, 'r') as zin:
             items = [(item, zin.read(item.filename)) for item in zin.infolist()]
 
         existing = {item.filename for item, _ in items}
 
+        # Trova fogli extra senza rels
+        ws_files = {n for n in existing if re_mod.match(r'xl/worksheets/sheet\d+\.xml$', n)}
+        extra_rels = []
+        for ws_name in ws_files:
+            rels_name = ws_name.replace('xl/worksheets/', 'xl/worksheets/_rels/') + '.rels'
+            if rels_name not in existing and rels_name not in tmpl_files:
+                extra_rels.append(rels_name)
+
         with zf_mod.ZipFile(tmp_patched, 'w', zf_mod.ZIP_DEFLATED) as zout:
             for item, data in items:
                 zout.writestr(item, data)
-            # Aggiungi tutti i file del template mancanti
             for name, data in tmpl_files.items():
                 if name not in existing:
                     zout.writestr(name, data)
+            for rels_name in extra_rels:
+                zout.writestr(rels_name, inter_rels)
 
         os.replace(tmp_patched, tmp_xlsx)
     except Exception as e:
         print(f"Media copy warning: {e}", file=sys.stderr)
+        import traceback; traceback.print_exc(file=sys.stderr)
         try: os.remove(tmp_patched)
         except: pass
 
