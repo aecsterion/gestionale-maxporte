@@ -76,7 +76,7 @@ def mapping_riga(r, sc):
         '*SERRATURA*': r.get('serratura',''),
         '*SPALLA*': r.get('spalla',''),
         '*FERRAMENTA*': r.get('ferramenta',''),
-        '*MANIGLIA* - *VERSIONE_MANIGLIA*': (r.get('maniglia','') + (' - ' + r.get('versione_maniglia','') if r.get('versione_maniglia') else '')).strip(' -') or '',
+        '*MANIGLIA* - *VERSIONE_MANIGLIA*': '',
         '*MANIGLIA*': r.get('maniglia',''),
         '*VERSIONE_MANIGLIA*': r.get('versione_maniglia',''),
         '*COLORE_MANIGLIA*': r.get('colore_maniglia',''),
@@ -136,10 +136,9 @@ def genera_preventivo(dati_json, output_path):
 
     sc1 = float(doc.get('sconto1', 0))
     tot_imp = float(doc.get('totale_imponibile', 0))
-    tot_netto = round(tot_imp * (1-sc1/100), 2)
-    iva_pct = 22
-    iva_euro = round(tot_netto * iva_pct/100, 2)
-    tot_iva = round(tot_netto + iva_euro, 2)
+    tot_netto = round(tot_imp*(1-sc1/100), 2)
+    iva_euro = round(tot_netto*22/100, 2)
+    tot_iva = round(tot_netto+iva_euro, 2)
 
     mapping_doc = {
         '*TIPO_DOCUMENTO*': doc.get('tipo_documento','PREVENTIVO'),
@@ -180,55 +179,63 @@ def genera_preventivo(dati_json, output_path):
         '*BARCODE_DOCUMENTO*': '',
         '*SOMMA_TOTALI_POSIZIONI*': fmt_euro(tot_imp),
         '*SCONTO*': f"{int(sc1)}%" if sc1 else '',
-        '*OMAGGI*': '',
-        '*SCONTO_PAGAMENTO*': '',
+        '*OMAGGI*': '', '*SCONTO_PAGAMENTO*': '',
         '*TOTALE_MERCE_SCONTATO*': fmt_euro(tot_netto),
         '*TOTALE_IMPONIBILE*': fmt_euro(tot_netto),
         '*TOTALE_IVA*': fmt_euro(iva_euro),
         '*TOTALE_IMBALLO*': fmt_euro(doc.get('totale_imballo','')),
-        '*TOTALE_TRASPORTO*': '',
-        '*TOTALE_SPESE*': '',
+        '*TOTALE_TRASPORTO*': '', '*TOTALE_SPESE*': '',
         '*SOMMA_RIEPILOGO_OFFERTA*': fmt_euro(tot_iva),
     }
 
-    if len(righe) == 0:
+    if not righe:
         print("Nessuna riga", file=sys.stderr); sys.exit(1)
 
-    # Genera ogni foglio come xlsx separato, poi unisce via zipfile
-    # Struttura: sheet1=PRIMA_PAGINA, sheet2..N=PAGINE_INTERMEDIE, sheetN+1=PAGINA_FINALE
-    tmp_dir = os.path.dirname(os.path.abspath(output_path))
-    base = os.path.basename(output_path).replace('.pdf','')
-    tmp_files = []
+    # Carica template
+    wb = load_workbook(TEMPLATE_PATH)
 
-    def genera_foglio(sheet_name, full_mapping, idx):
-        wb = load_workbook(TEMPLATE_PATH)
-        ws = wb[sheet_name]
-        sostituisci_foglio(ws, full_mapping)
-        nascondi_righe_vuote(ws)
-        # Elimina gli altri fogli
-        for s in list(wb.sheetnames):
-            if s != sheet_name:
-                del wb[s]
-        path = os.path.join(tmp_dir, f'{base}_s{idx}.xlsx')
-        wb.save(path)
-        tmp_files.append(path)
-        return path
+    # 1. PRIMA PAGINA (pos 1)
+    ws1 = wb['PRIMA_PAGINA']
+    sostituisci_foglio(ws1, {**mapping_doc, **mapping_riga(righe[0], sc1)})
+    nascondi_righe_vuote(ws1)
 
-    # Prima pagina
-    genera_foglio('PRIMA_PAGINA', {**mapping_doc, **mapping_riga(righe[0], sc1)}, 1)
+    # 2. PAGINE INTERMEDIE (pos 2..N)
+    ws_inter = wb['PAGINE_INTERMEDIE']
+    ws_fin = wb['PAGINA_FINALE']
 
-    # Pagine intermedie (posizioni 2..N)
-    for i, riga in enumerate(righe[1:], 2):
-        genera_foglio('PAGINE_INTERMEDIE', {**mapping_doc, **mapping_riga(riga, sc1)}, i)
+    if len(righe) >= 2:
+        # Compila la prima pagina intermedia con pos 2
+        sostituisci_foglio(ws_inter, {**mapping_doc, **mapping_riga(righe[1], sc1)})
+        nascondi_righe_vuote(ws_inter)
 
-    # Pagina finale
-    genera_foglio('PAGINA_FINALE', {**mapping_doc}, len(righe)+1)
+        # Per pos 3..N: aggiungi copie PRIMA di PAGINA_FINALE
+        fin_idx = wb.sheetnames.index('PAGINA_FINALE')
+        for i, riga in enumerate(righe[2:], 3):
+            # copy_worksheet aggiunge in fondo — poi sposta
+            new_ws = wb.copy_worksheet(ws_inter)
+            new_ws.title = f'POS_{i}'
+            # Sposta prima di PAGINA_FINALE
+            wb.move_sheet(new_ws.title, offset=-(len(wb.sheetnames)-1-fin_idx)-1)
+            # Risostituisci con valori della posizione corretta
+            sostituisci_foglio(new_ws, {**mapping_doc, **mapping_riga(riga, sc1)})
+            nascondi_righe_vuote(new_ws)
+    else:
+        # Solo 1 riga: nascondi tutto il foglio intermedio
+        for row in ws_inter.iter_rows():
+            ws_inter.row_dimensions[row[0].row].hidden = True
 
-    # Unisci tutti gli xlsx in uno solo via zipfile
+    # 3. PAGINA FINALE (totali)
+    sostituisci_foglio(ws_fin, {**mapping_doc})
+    nascondi_righe_vuote(ws_fin)
+
+    # Salva
     tmp_xlsx = output_path.replace('.pdf','_tmp.xlsx')
-    _merge_xlsx(tmp_files, tmp_xlsx, TEMPLATE_PATH)
+    wb.save(tmp_xlsx)
 
-    # Converti in PDF
+    # Ripristina media/drawing/rels dal template
+    _ripristina_media(tmp_xlsx, TEMPLATE_PATH, len(righe))
+
+    # Converti PDF
     out_dir = os.path.dirname(os.path.abspath(output_path))
     r = subprocess.run(['libreoffice','--headless','--convert-to','pdf',
         '--outdir', out_dir, tmp_xlsx],
@@ -238,104 +245,54 @@ def genera_preventivo(dati_json, output_path):
     tmp_pdf = tmp_xlsx.replace('.xlsx','.pdf')
     if os.path.exists(tmp_pdf):
         os.replace(tmp_pdf, output_path)
+        try: os.remove(tmp_xlsx)
+        except: pass
         print(f"PDF generato: {output_path}", file=sys.stderr)
     else:
-        print(f"Errore LibreOffice: {r.stderr[:300]}", file=sys.stderr)
+        print(f"Errore: {r.stderr[:200]}", file=sys.stderr)
         sys.exit(1)
 
-    # Pulizia
-    for f in tmp_files:
-        try: os.remove(f)
+
+def _ripristina_media(xlsx_path, template_path, n_righe):
+    """Copia media, drawing e rels mancanti dal template."""
+    tmp_p = xlsx_path.replace('.xlsx','_p.xlsx')
+    try:
+        with zipfile.ZipFile(template_path,'r') as zt:
+            tmpl = {}
+            for name in zt.namelist():
+                if (name.startswith('xl/media/') or
+                    name.startswith('xl/drawings/') or
+                    name.startswith('xl/worksheets/_rels/')):
+                    tmpl[name] = zt.read(name)
+            # rels del foglio intermedio (sheet2) per i fogli extra
+            inter_rels = tmpl.get('xl/worksheets/_rels/sheet2.xml.rels', b'')
+
+        with zipfile.ZipFile(xlsx_path,'r') as zin:
+            items = [(item, zin.read(item.filename)) for item in zin.infolist()]
+        existing = {item.filename for item,_ in items}
+
+        # Trova fogli extra senza rels
+        ws_files = {n for n in existing if re.match(r'^xl/worksheets/sheet\d+\.xml$',n)}
+        extra_rels = []
+        for ws_name in ws_files:
+            rels = ws_name.replace('xl/worksheets/','xl/worksheets/_rels/')+'.rels'
+            if rels not in existing and rels not in tmpl:
+                extra_rels.append(rels)
+
+        with zipfile.ZipFile(tmp_p,'w',zipfile.ZIP_DEFLATED) as zout:
+            for item,data in items:
+                zout.writestr(item, data)
+            for name,data in tmpl.items():
+                if name not in existing:
+                    zout.writestr(name, data)
+            for rels in extra_rels:
+                zout.writestr(rels, inter_rels)
+
+        os.replace(tmp_p, xlsx_path)
+    except Exception as e:
+        print(f"Media warning: {e}", file=sys.stderr)
+        try: os.remove(tmp_p)
         except: pass
-    try: os.remove(tmp_xlsx)
-    except: pass
-
-
-def _merge_xlsx(sheet_files, output_path, template_path):
-    """
-    Unisce più xlsx single-sheet in un unico xlsx multi-sheet.
-    Ogni file in sheet_files contribuisce con il suo unico foglio.
-    Copia media e drawing dal template originale.
-    """
-    import xml.etree.ElementTree as ET
-
-    # Leggi il template originale per prendere le parti comuni
-    with zipfile.ZipFile(template_path,'r') as zt:
-        tmpl = {name: zt.read(name) for name in zt.namelist()}
-
-    # Parti comuni da mantenere (tutto tranne i fogli e i loro rels)
-    skip_patterns = [
-        r'^xl/worksheets/sheet\d+\.xml$',
-        r'^xl/worksheets/_rels/sheet\d+\.xml\.rels$',
-        r'^xl/sharedStrings\.xml$',  # sarà ricalcolato
-    ]
-
-    def should_skip(name):
-        for p in skip_patterns:
-            if re.match(p, name): return True
-        return False
-
-    # Leggi ogni foglio xlsx
-    sheets_data = []
-    for fpath in sheet_files:
-        with zipfile.ZipFile(fpath,'r') as zf:
-            all_names = zf.namelist()
-            # Trova il foglio (sheet1.xml)
-            ws_name = next((n for n in all_names if re.match(r'^xl/worksheets/sheet1\.xml$',n)), None)
-            rels_name = 'xl/worksheets/_rels/sheet1.xml.rels'
-            ws_data = zf.read(ws_name) if ws_name else b''
-            rels_data = zf.read(rels_name) if rels_name in all_names else b''
-            # SharedStrings
-            ss_data = zf.read('xl/sharedStrings.xml') if 'xl/sharedStrings.xml' in all_names else b''
-            sheets_data.append({'ws': ws_data, 'rels': rels_data, 'ss': ss_data})
-
-    # Costruisci il workbook.xml con N fogli
-    # Usa il workbook.xml del template come base e aggiorna i sheet refs
-    wb_xml = tmpl.get('xl/workbook.xml', b'').decode('utf-8')
-    wb_rels = tmpl.get('xl/_rels/workbook.xml.rels', b'').decode('utf-8')
-
-    # Ricostruisci la lista sheets nel workbook.xml
-    # Sostituisci il blocco <sheets>...</sheets>
-    n = len(sheets_data)
-    sheets_xml = '<sheets>'
-    for i in range(1, n+1):
-        name_map = {1:'PRIMA_PAGINA', len(sheets_data):'PAGINA_FINALE'}
-        sh_name = name_map.get(i, f'PAGINE_INTERMEDIE_{i-1}')
-        sheets_xml += f'<sheet name="{sh_name}" sheetId="{i}" r:id="rId{i}"/>'
-    sheets_xml += '</sheets>'
-    wb_xml = re.sub(r'<sheets>.*?</sheets>', sheets_xml, wb_xml, flags=re.DOTALL)
-
-    # Ricostruisci workbook.xml.rels
-    rels_xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
-    rels_xml += '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-    for i in range(1, n+1):
-        rels_xml += f'<Relationship Id="rId{i}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet{i}.xml"/>'
-    # Aggiungi styles e sharedStrings
-    existing_rels = re.findall(r'<Relationship[^/]*/>', wb_rels)
-    for rel in existing_rels:
-        if 'worksheet' not in rel and 'sharedStrings' not in rel:
-            # Rinumera l'Id
-            rel = re.sub(r'Id="rId\d+"', f'Id="rId{n + existing_rels.index(rel) + 1}"', rel)
-            rels_xml += rel
-    rels_xml += '</Relationships>'
-
-    # Costruisci il file output
-    with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as zout:
-        # Scrivi tutte le parti comuni dal template
-        for name, data in tmpl.items():
-            if should_skip(name): continue
-            if name == 'xl/workbook.xml':
-                zout.writestr(name, wb_xml.encode('utf-8'))
-            elif name == 'xl/_rels/workbook.xml.rels':
-                zout.writestr(name, rels_xml.encode('utf-8'))
-            else:
-                zout.writestr(name, data)
-
-        # Scrivi i fogli
-        for i, sheet in enumerate(sheets_data, 1):
-            zout.writestr(f'xl/worksheets/sheet{i}.xml', sheet['ws'])
-            if sheet['rels']:
-                zout.writestr(f'xl/worksheets/_rels/sheet{i}.xml.rels', sheet['rels'])
 
 
 if __name__ == '__main__':
