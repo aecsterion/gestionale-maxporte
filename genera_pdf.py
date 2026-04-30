@@ -146,9 +146,9 @@ def genera_preventivo(dati_json, output_path):
             '*H*': str(r.get('altezza','')),
             '*S*': str(r.get('spessore','')),
             '*COD_SENSO*': r.get('senso',''),
-            '*COD_APERTURA*': r.get('apertura',''),
+            '*COD_APERTURA*': r.get('codice_apertura', r.get('apertura','')),
             '*SENSO*': r.get('senso',''),
-            '*APERTURA*': r.get('apertura',''),
+            '*APERTURA*': r.get('nome_apertura', r.get('apertura','')),
             '*QUANTITÀ*': str(r.get('quantita',1)),
             '*UM*': r.get('um','NR'),
             '*PRODOTTO*': r.get('modello',''),
@@ -225,57 +225,70 @@ def genera_preventivo(dati_json, output_path):
         print("Nessuna riga", file=sys.stderr)
         sys.exit(1)
 
-    # Prima pagina: intestazione + prima riga
-    ws_prima = wb['PRIMA_PAGINA']
-    full_mapping = {**mapping_doc, **mapping_riga(righe[0], sc1)}
-    sostituisci_foglio(ws_prima, full_mapping)
-    nascondi_righe_vuote(ws_prima)
+    # PRIMA PAGINA: intestazione + posizione 1
+    ws1 = wb['PRIMA_PAGINA']
+    sostituisci_foglio(ws1, {**mapping_doc, **mapping_riga(righe[0], sc1)})
+    nascondi_righe_vuote(ws1)
 
-    # Pagine intermedie: righe 2..N-1 (se esistono)
-    ws_inter = wb['PAGINE_INTERMEDIE']
-    if len(righe) > 2:
-        # Per ora usa la prima riga intermedia come placeholder
-        sostituisci_foglio(ws_inter, {**mapping_doc, **mapping_riga(righe[1], sc1)})
-        nascondi_righe_vuote(ws_inter)
+    # PAGINE INTERMEDIE: duplicate per posizioni 2..N
+    # Partiamo dal foglio template e duplichiamo per ogni posizione extra
+    ws_inter_tmpl = wb['PAGINE_INTERMEDIE']
+
+    if len(righe) > 1:
+        # Compila il foglio intermedio con la seconda posizione
+        sostituisci_foglio(ws_inter_tmpl, {**mapping_doc, **mapping_riga(righe[1], sc1)})
+        nascondi_righe_vuote(ws_inter_tmpl)
+
+        # Per le posizioni 3..N aggiungi fogli intermedi
+        for i, riga in enumerate(righe[2:], 3):
+            # Carica un template fresco per la nuova pagina
+            wb_fresh = load_workbook(TEMPLATE_PATH)
+            ws_fresh = wb_fresh['PAGINE_INTERMEDIE']
+            sostituisci_foglio(ws_fresh, {**mapping_doc, **mapping_riga(riga, sc1)})
+            nascondi_righe_vuote(ws_fresh)
+            # Copia il foglio nel workbook principale
+            new_ws = wb.copy_worksheet(ws_inter_tmpl)
+            new_ws.title = f'POS_{i}'
+            # Risostituisci con i valori corretti
+            sostituisci_foglio(new_ws, {**mapping_doc, **mapping_riga(riga, sc1)})
+            nascondi_righe_vuote(new_ws)
     else:
-        # Nascondi tutto il foglio intermedio
-        for row in ws_inter.iter_rows():
-            ws_inter.row_dimensions[row[0].row].hidden = True
+        # Solo una riga: nascondi tutto il foglio intermedio
+        for r in ws_inter_tmpl.iter_rows():
+            ws_inter_tmpl.row_dimensions[r[0].row].hidden = True
 
-    # Pagina finale: ultima riga + totali
-    ws_finale = wb['PAGINA_FINALE']
-    ultima = righe[-1] if len(righe) > 1 else righe[0]
-    sostituisci_foglio(ws_finale, {**mapping_doc, **mapping_riga(ultima, sc1)})
-    nascondi_righe_vuote(ws_finale)
+    # PAGINA FINALE: totali
+    ws_fin = wb['PAGINA_FINALE']
+    sostituisci_foglio(ws_fin, {**mapping_doc})
+    nascondi_righe_vuote(ws_fin)
 
     # Salva e converti
     tmp_xlsx = output_path.replace('.pdf', '_tmp.xlsx')
     wb.save(tmp_xlsx)
 
-    # Ripristina immagini e drawing dal template originale (openpyxl le perde)
-    import zipfile
+    # Ripristina immagini, drawing e rels dal template originale
+    import zipfile as zf_mod
     tmp_patched = tmp_xlsx.replace('.xlsx', '_p.xlsx')
     try:
-        # Leggi file media e drawing dal template
-        with zipfile.ZipFile(TEMPLATE_PATH, 'r') as zt:
-            tmpl_extras = {
-                name: zt.read(name) for name in zt.namelist()
-                if name.startswith('xl/media/') or
-                   name.startswith('xl/drawings/') or
-                   name.startswith('xl/charts/')
-            }
+        # File da copiare dal template
+        with zf_mod.ZipFile(TEMPLATE_PATH, 'r') as zt:
+            tmpl_files = {}
+            for name in zt.namelist():
+                if (name.startswith('xl/media/') or
+                    name.startswith('xl/drawings/') or
+                    name.startswith('xl/worksheets/_rels/')):
+                    tmpl_files[name] = zt.read(name)
 
-        with zipfile.ZipFile(tmp_xlsx, 'r') as zin:
+        with zf_mod.ZipFile(tmp_xlsx, 'r') as zin:
             items = [(item, zin.read(item.filename)) for item in zin.infolist()]
 
-        # Nomi già presenti nel file generato
         existing = {item.filename for item, _ in items}
 
-        with zipfile.ZipFile(tmp_patched, 'w', zipfile.ZIP_DEFLATED) as zout:
+        with zf_mod.ZipFile(tmp_patched, 'w', zf_mod.ZIP_DEFLATED) as zout:
             for item, data in items:
                 zout.writestr(item, data)
-            # Aggiungi i file mancanti dal template
-            for name, data in tmpl_extras.items():
+            # Aggiungi tutti i file del template mancanti
+            for name, data in tmpl_files.items():
                 if name not in existing:
                     zout.writestr(name, data)
 
