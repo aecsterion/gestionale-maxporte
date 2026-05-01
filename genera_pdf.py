@@ -85,6 +85,36 @@ def _init_pos_ranges():
                     end = cell.row
         _POS_RANGES[sheet] = (start, end)
 
+def pulisci_euro_vuoti(ws, sheet_name=None):
+    """Rimuove '€ ' e '50%' dalle righe che non hanno prezzi valorizzati."""
+    _init_pos_ranges()
+    pos_start, pos_end = _POS_RANGES.get(sheet_name or ws.title, (None, None))
+    if not pos_start or not pos_end:
+        return
+    
+    import re as re2
+    def is_euro_vuoto(v):
+        if not v: return False
+        return bool(re2.match(r'^€\s*$', str(v).strip()))
+    def is_solo_pct(v):
+        if not v: return False
+        return bool(re2.match(r'^\d+%$', str(v).strip()))
+    
+    for row in ws.iter_rows(min_row=pos_start, max_row=pos_end):
+        cells = {cell.column: cell for cell in row if not isinstance(cell, MergedCell)}
+        # Controlla se tutti i prezzi sono vuoti (solo "€ ")
+        prezzo_cols = [28, 31, 33, 36]
+        tutti_vuoti = all(
+            not cells.get(col) or not cells.get(col).value or 
+            is_euro_vuoto(cells.get(col).value) or is_solo_pct(cells.get(col).value)
+            for col in prezzo_cols
+        )
+        if tutti_vuoti:
+            # Rimuovi i "€ " e "50%" da questa riga
+            for col, cell in cells.items():
+                if cell.value and (is_euro_vuoto(cell.value) or is_solo_pct(cell.value)):
+                    cell.value = ''
+
 def nascondi_vuote(ws, sheet_name=None):
     def ok(v):
         if not v: return False
@@ -97,18 +127,25 @@ def nascondi_vuote(ws, sheet_name=None):
     _init_pos_ranges()
     pos_start, pos_end = _POS_RANGES.get(sheet_name or ws.title, (None, None))
 
-    # Se non c'è sezione posizione (es. PAGINA_FINALE) non nascondere nulla
-    if not pos_start or not pos_end:
-        return
+    # Nascondi righe della sezione posizione con valore vuoto
+    if pos_start and pos_end:
+        for row in ws.iter_rows(min_row=pos_start, max_row=pos_end):
+            cells = {c.column: c for c in row if not isinstance(c, MergedCell)}
+            v16 = cells.get(16)
+            desc_ok = ok(v16.value if v16 else None)
+            prz_ok = any(ok(cells.get(c).value if cells.get(c) else None) for c in [28,33,36])
+            if not desc_ok and not prz_ok:
+                ws.row_dimensions[row[0].row].hidden = True
 
-    # Nascondi solo le righe DENTRO la sezione posizione
-    for row in ws.iter_rows(min_row=pos_start, max_row=pos_end):
+    # Nascondi righe riepilogo con valore = 0 o vuoto (col 37)
+    # Righe opzionali: SCONTO, OMAGGI, SCONTO PAGAMENTO, IMBALLO, TRASPORTO, SPESE
+    righe_opzionali_riepilogo = {33, 34, 35, 39, 40, 41}  # righe PAGINA_FINALE
+    for row_idx in righe_opzionali_riepilogo:
+        row = list(ws.iter_rows(min_row=row_idx, max_row=row_idx))[0]
         cells = {c.column: c for c in row if not isinstance(c, MergedCell)}
-        v16 = cells.get(16)
-        desc_ok = ok(v16.value if v16 else None)
-        prz_ok = any(ok(cells.get(c).value if cells.get(c) else None) for c in [28,33,36])
-        if not desc_ok and not prz_ok:
-            ws.row_dimensions[row[0].row].hidden = True
+        v37 = cells.get(37)
+        if not ok(v37.value if v37 else None):
+            ws.row_dimensions[row_idx].hidden = True
 
 def map_riga(r, sc):
     sc = float(sc)
@@ -156,7 +193,7 @@ def map_riga(r, sc):
         '*SUPPLEMENTO_RIFILATURA_SI_NO*': '',
         '*STANZA*': r.get('stanza',''),
         '*NOTE_RIGA*': r.get('note_riga',''),
-        '*SC*': str(int(sc)) if sc else '',
+        '*SC*': str(int(sc)) if sc else '',  # sconto applicato solo se c'è un prezzo
         '*PREZZO_MODELLO_LISTINO*': fmt_euro(r.get('prezzo_base',0)),
         '*PREZZO_MODELLO_SCONTATO*': s(r.get('prezzo_base',0)),
         '*PREZZO_FINITURA_LISTINO*': fmt_euro(r.get('prezzo_finitura','')) if r.get('prezzo_finitura') else '',
@@ -182,7 +219,7 @@ def map_riga(r, sc):
         '*SUPPLEMENTO_FUORI_MISURA_L_LISTINO*': '', '*SUPPLEMENTO_FUORI_MISURA_L_SCONTATO*': '',
         '*SUPPLEMENTO_FUORI_MISURA_H_LISTINO*': '', '*SUPPLEMENTO_FUORI_MISURA_H_SCONTATO*': '',
         '*SUPPLEMENTO_RIFILATURA_LISTINO*': '', '*SUPPLEMENTO_RIFILATURA_SCONTATO*': '',
-        '*TOTALE_RIGA*': '',
+        '*TOTALE_RIGA*': fmt_euro(r.get('totale_riga_netto', 0)),
         '*TOTALE_POSIZIONE*': fmt_euro(r.get('prezzo_totale',0)),
         '*IMMAGINE*': '',
     }
@@ -208,6 +245,7 @@ def genera_foglio(sheet_name, mapping, tmp_path):
     wb = load_workbook(TEMPLATE_PATH)
     ws = wb[sheet_name]
     sostituisci(ws, mapping)
+    pulisci_euro_vuoti(ws, sheet_name)
     nascondi_vuote(ws, sheet_name)
     # Rimuovi gli altri fogli
     for s in list(wb.sheetnames):
@@ -218,34 +256,29 @@ def genera_foglio(sheet_name, mapping, tmp_path):
     return tmp_path
 
 def _ripristina_media(xlsx_path):
-    """Copia immagini e drawing dal template nel file generato."""
-    import zipfile, re as re_mod
+    """Copia solo i rels dei worksheet dal template — NON le immagini."""
+    import zipfile as zf2
     tmp_p = xlsx_path + '_tmp'
     try:
-        with zipfile.ZipFile(TEMPLATE_PATH, 'r') as zt:
+        with zf2.ZipFile(TEMPLATE_PATH, 'r') as zt:
             extra = {n: zt.read(n) for n in zt.namelist()
-                     if n.startswith('xl/media/') or
-                        n.startswith('xl/drawings/') or
-                        n.startswith('xl/worksheets/_rels/')}
+                     if n.startswith('xl/worksheets/_rels/')}
 
-        with zipfile.ZipFile(xlsx_path, 'r') as zin:
+        with zf2.ZipFile(xlsx_path, 'r') as zin:
             items = [(i, zin.read(i.filename)) for i in zin.infolist()]
         existing = {i.filename for i, _ in items}
 
-        with zipfile.ZipFile(tmp_p, 'w', zipfile.ZIP_DEFLATED) as zout:
+        with zf2.ZipFile(tmp_p, 'w', zf2.ZIP_DEFLATED) as zout:
             for item, data in items:
                 zout.writestr(item, data)
             for name, data in extra.items():
                 if name not in existing:
                     zout.writestr(name, data)
 
-        import os as os_mod
-        os_mod.replace(tmp_p, xlsx_path)
+        os.replace(tmp_p, xlsx_path)
     except Exception as e:
         print(f"Media warning: {e}", file=sys.stderr)
-        try:
-            import os as os_mod
-            os_mod.remove(tmp_p)
+        try: os.remove(tmp_p)
         except: pass
 
 def genera_preventivo(dati_json, output_path):

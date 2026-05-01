@@ -4724,8 +4724,8 @@ async function esportaPDF(tipo, id) {
         cellulare: an.cellulare || '',
         email1: an.email || '',
         email2: an.email2 || '',
-        sdi: an.sdi || '',
-        pec: an.pec || '',
+        sdi: an.codice_sdi || '',
+        pec: an.pec_fatturazione || an.pec || '',
         banca: an.banca || '',
         cin_abi_cab: an.cin_abi_cab || '',
         referente: an.referente || '',
@@ -4790,6 +4790,7 @@ async function esportaPDF(tipo, id) {
         prezzo_extra: r.prezzo_extra_incisioni || 0,
         prezzo_unitario: r.prezzo_unitario || 0,
         prezzo_totale: r.prezzo_totale_riga || 0,
+        totale_riga_netto: r.prezzo_totale_riga ? Math.round(r.prezzo_totale_riga * (1 - (doc.sconto1||0)/100) * 100) / 100 : 0,
         sconto: doc.sconto1 || 0,
         // Kit obbligatori
         kit_varsavia: r.kit_varsavia || '',
