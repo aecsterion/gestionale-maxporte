@@ -5,7 +5,7 @@ from openpyxl import load_workbook
 from openpyxl.cell.cell import MergedCell
 
 TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'template_preventivo.xlsx')
-VERSION = "2026-05-02-v1"  # marker deploy
+VERSION = "2026-05-02-v2"  # marker deploy
 if not os.path.exists(TEMPLATE_PATH):
     for c in ['/app/template_preventivo.xlsx', os.path.join(os.getcwd(), 'template_preventivo.xlsx')]:
         if os.path.exists(c): TEMPLATE_PATH = c; break
@@ -238,7 +238,7 @@ def map_riga(r, sc):
         '*SUPPLEMENTO_FUORI_MISURA_H_LISTINO*': '', '*SUPPLEMENTO_FUORI_MISURA_H_SCONTATO*': '',
         '*SUPPLEMENTO_RIFILATURA_LISTINO*': '', '*SUPPLEMENTO_RIFILATURA_SCONTATO*': '',
         '*TOTALE_RIGA*': '',
-        '*TOTALE_RIGA_MODELLO*': fmt_euro(r.get('totale_riga_netto', 0)),
+        '*TOTALE_RIGA_MODELLO*': s(r.get('prezzo_base', 0)),
         '*TOTALE_RIGA_COLORE*': s(r.get('prezzo_finitura',0)) if r.get('prezzo_finitura') else '',
         '*TOTALE_RIGA_COLORE_TELAIO*': '',
         '*TOTALE_RIGA_COLORE_COPRIFILI*': '',
