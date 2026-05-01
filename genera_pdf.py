@@ -132,27 +132,30 @@ def nascondi_vuote(ws, sheet_name=None):
         for row in ws.iter_rows(min_row=pos_start, max_row=pos_end):
             cells = {c.column: c for c in row if not isinstance(c, MergedCell)}
             v16 = cells.get(16)
+            v28 = cells.get(28)
             desc_ok = ok(v16.value if v16 else None)
-            prz_ok = any(ok(cells.get(c).value if cells.get(c) else None) for c in [28,33,36])
+            prz_ok = ok(v28.value if v28 else None)
+            # Nascondi solo se sia descrizione che prezzo listino sono vuoti
             if not desc_ok and not prz_ok:
                 ws.row_dimensions[row[0].row].hidden = True
 
     # Nascondi righe riepilogo opzionali con valore vuoto (col 37)
-    righe_opzionali_riepilogo = {33, 34, 35, 39, 40, 41}
-    for row_idx in righe_opzionali_riepilogo:
-        try:
-            row = list(ws.iter_rows(min_row=row_idx, max_row=row_idx))[0]
-            cells = {c.column: c for c in row if not isinstance(c, MergedCell)}
-            v37 = cells.get(37)
-            val = v37.value if v37 else None
-            # Nascondi se vuoto, solo "€", o segnaposto non sostituito
-            def val_vuoto(v):
-                if not v: return True
-                s = str(v).strip()
-                return not s or '*' in s or re.match(r'^€\s*$', s)
-            if val_vuoto(val):
-                ws.row_dimensions[row_idx].hidden = True
-        except: pass
+    # Nascondi righe riepilogo opzionali con valore vuoto (SOLO su PAGINA_FINALE)
+    if (sheet_name or ws.title) == 'PAGINA_FINALE':
+        righe_opzionali_riepilogo = {33, 34, 35, 39, 40, 41}
+        for row_idx in righe_opzionali_riepilogo:
+            try:
+                row = list(ws.iter_rows(min_row=row_idx, max_row=row_idx))[0]
+                cells = {c.column: c for c in row if not isinstance(c, MergedCell)}
+                v37 = cells.get(37)
+                val = v37.value if v37 else None
+                def val_vuoto(v):
+                    if not v: return True
+                    s = str(v).strip()
+                    return not s or '*' in s or re.match(r'^€\s*$', s)
+                if val_vuoto(val):
+                    ws.row_dimensions[row_idx].hidden = True
+            except: pass
 
 def map_riga(r, sc):
     sc = float(sc)
