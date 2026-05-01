@@ -9,6 +9,46 @@ if not os.path.exists(TEMPLATE_PATH):
     for c in ['/app/template_preventivo.xlsx', os.path.join(os.getcwd(), 'template_preventivo.xlsx')]:
         if os.path.exists(c): TEMPLATE_PATH = c; break
 
+LOGO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logo-report.png')
+if not os.path.exists(LOGO_PATH):
+    for c in ['/app/logo-report.png', os.path.join(os.getcwd(), 'logo-report.png')]:
+        if os.path.exists(c): LOGO_PATH = c; break
+
+def aggiungi_logo(pdf_path, logo_path):
+    """Sovrappone il logo su ogni pagina del PDF."""
+    if not os.path.exists(logo_path):
+        print(f"Logo non trovato: {logo_path}", file=sys.stderr)
+        return
+    try:
+        from reportlab.pdfgen import canvas as rl_canvas
+        from reportlab.lib.units import mm
+        from pypdf import PdfReader, PdfWriter
+        import io
+
+        reader = PdfReader(pdf_path)
+        writer = PdfWriter()
+
+        for page in reader.pages:
+            w = float(page.mediabox.width)
+            h = float(page.mediabox.height)
+            buf = io.BytesIO()
+            c = rl_canvas.Canvas(buf, pagesize=(w, h))
+            c.drawImage(logo_path, 14*mm, h - 35*mm,
+                        width=28*mm, height=28*mm,
+                        preserveAspectRatio=True, mask='auto')
+            c.save()
+            buf.seek(0)
+            overlay = PdfReader(buf).pages[0]
+            page.merge_page(overlay)
+            writer.add_page(page)
+
+        tmp = pdf_path + '_logo'
+        with open(tmp, 'wb') as f:
+            writer.write(f)
+        os.replace(tmp, pdf_path)
+    except Exception as e:
+        print(f"Logo warning: {e}", file=sys.stderr)
+
 def fmt_euro(v):
     if not v and v != 0: return ''
     try:
@@ -324,6 +364,9 @@ def genera_preventivo(dati_json, output_path):
     for f in xlsx_files + pdf_files:
         try: os.remove(f)
         except: pass
+
+    # Aggiungi logo
+    aggiungi_logo(output_path, LOGO_PATH)
 
     print(f"PDF generato: {output_path}", file=sys.stderr)
 

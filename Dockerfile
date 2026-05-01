@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y \
     libreoffice-writer \
     pdftk \
     --no-install-recommends \
-    && pip3 install openpyxl --break-system-packages \
+    && pip3 install openpyxl pypdf reportlab --break-system-packages \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
