@@ -5,6 +5,7 @@ from openpyxl import load_workbook
 from openpyxl.cell.cell import MergedCell
 
 TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'template_preventivo.xlsx')
+VERSION = "2026-05-02-v1"  # marker deploy
 if not os.path.exists(TEMPLATE_PATH):
     for c in ['/app/template_preventivo.xlsx', os.path.join(os.getcwd(), 'template_preventivo.xlsx')]:
         if os.path.exists(c): TEMPLATE_PATH = c; break
@@ -136,15 +137,22 @@ def nascondi_vuote(ws, sheet_name=None):
             if not desc_ok and not prz_ok:
                 ws.row_dimensions[row[0].row].hidden = True
 
-    # Nascondi righe riepilogo con valore = 0 o vuoto (col 37)
-    # Righe opzionali: SCONTO, OMAGGI, SCONTO PAGAMENTO, IMBALLO, TRASPORTO, SPESE
-    righe_opzionali_riepilogo = {33, 34, 35, 39, 40, 41}  # righe PAGINA_FINALE
+    # Nascondi righe riepilogo opzionali con valore vuoto (col 37)
+    righe_opzionali_riepilogo = {33, 34, 35, 39, 40, 41}
     for row_idx in righe_opzionali_riepilogo:
-        row = list(ws.iter_rows(min_row=row_idx, max_row=row_idx))[0]
-        cells = {c.column: c for c in row if not isinstance(c, MergedCell)}
-        v37 = cells.get(37)
-        if not ok(v37.value if v37 else None):
-            ws.row_dimensions[row_idx].hidden = True
+        try:
+            row = list(ws.iter_rows(min_row=row_idx, max_row=row_idx))[0]
+            cells = {c.column: c for c in row if not isinstance(c, MergedCell)}
+            v37 = cells.get(37)
+            val = v37.value if v37 else None
+            # Nascondi se vuoto, solo "€", o segnaposto non sostituito
+            def val_vuoto(v):
+                if not v: return True
+                s = str(v).strip()
+                return not s or '*' in s or re.match(r'^€\s*$', s)
+            if val_vuoto(val):
+                ws.row_dimensions[row_idx].hidden = True
+        except: pass
 
 def map_riga(r, sc):
     sc = float(sc)
@@ -197,8 +205,12 @@ def map_riga(r, sc):
         '*PREZZO_MODELLO_SCONTATO*': s(r.get('prezzo_base',0)),
         '*PREZZO_FINITURA_LISTINO*': fmt_euro(r.get('prezzo_finitura','')) if r.get('prezzo_finitura') else '',
         '*PREZZO_FINITURA_SCONTATO*': s(r.get('prezzo_finitura',0)) if r.get('prezzo_finitura') else '',
-        '*SUPPLEMENTO_BICOLORE_LISTINO*': '', '*SUPPLEMENTO_BICOLORE_SCONTATO*': '',
+        '*SUPPLEMENTO_BICOLORE_LISTINO*': '',
+        '*SUPPLEMENTO_BICOLORE_SCONTATO*': '',
+        '*TOTALE_RIGA_COLORE_TELAIO*': '',
+        '*TOTALE_RIGA_COLORE_COPRIFILI*': '',
         '*SUPPLEMENTO_COLORE_INSERTO_LISTINO*': '', '*SUPPLEMENTO_COLORE_INSERTO_SCONTATO*': '',
+        '*SUPPLEMENTO_COLORE_PIETRA*': '', '*SUPPLEMENTO_COLORE_PIETRA_SCONTATO*': '',
         '*PREZZO_VETRO_LISTINO*': fmt_euro(r.get('prezzo_vetro','')) if r.get('prezzo_vetro') else '',
         '*PREZZO_VETRO_SCONTATO*': s(r.get('prezzo_vetro',0)) if r.get('prezzo_vetro') else '',
         '*PREZZO_INCISIONE_O_STAMPA_LISTINO*': '', '*PREZZO_INCISIONE_O_STAMPA_SCONTATO*': '',
@@ -304,6 +316,8 @@ def genera_preventivo(dati_json, output_path):
     data = json.loads(dati_json)
     doc = data['documento']
     righe = data['righe']
+    global _POS_RANGES
+    _POS_RANGES = {}  # reset cache per ogni documento
     if not righe: print("Nessuna riga", file=sys.stderr); sys.exit(1)
 
     sc1 = float(doc.get('sconto1', 0))
@@ -351,7 +365,7 @@ def genera_preventivo(dati_json, output_path):
         '*GIORNI_VALIDITÀ_OFFERTA*': str(doc.get('validita_offerta','30')),
         '*BARCODE_DOCUMENTO*': '',
         '*SOMMA_TOTALI_POSIZIONI*': fmt_euro(tot_imp),
-        '*SCONTO*': f"{int(sc1)}%" if sc1 else '',
+        '*SCONTO*': fmt_euro(round(tot_imp - tot_netto, 2)) if sc1 else '',
         '*OMAGGI*': '', '*SCONTO_PAGAMENTO*': '',
         '*TOTALE_MERCE_SCONTATO*': fmt_euro(tot_netto),
         '*TOTALE_IMPONIBILE*': fmt_euro(tot_netto),
@@ -421,7 +435,7 @@ def genera_preventivo(dati_json, output_path):
     # Aggiungi logo
     aggiungi_logo(output_path, LOGO_PATH)
 
-    print(f"PDF generato: {output_path}", file=sys.stderr)
+    print(f"genera_pdf.py {VERSION} - template: {TEMPLATE_PATH}", file=sys.stderr)
 
 if __name__ == '__main__':
     if len(sys.argv) > 1:
