@@ -4932,26 +4932,6 @@ async function esportaPDF(tipo, id) {
 
 
 <!-- MODAL CONFIGURATORE PORTA -->
-<div class="form-overlay" id="modal-cfg" style="background:rgba(0,0,0,0.75)">
-  <div class="form-modal" style="width:min(820px,100%);max-height:90vh;display:flex;flex-direction:column">
-    <div class="form-modal-head">
-      <div style="display:flex;flex-direction:column;gap:6px;flex:1">
-        <span class="form-modal-title">Configuratore porta</span>
-        <div id="cfg-stepper" style="display:flex;align-items:center;gap:4px;flex-wrap:wrap"></div>
-      </div>
-      <div style="display:flex;align-items:center;gap:16px">
-        <div style="text-align:right">
-          <div style="font-size:11px;color:rgba(255,255,255,0.5)">Prezzo unitario</div>
-          <div id="cfg-prezzo-unitario" style="font-size:18px;font-weight:500;color:#fff">€ 0,00</div>
-        </div>
-        <button class="form-close" onclick="closeCfg()">×</button>
-      </div>
-    </div>
-    <div id="cfg-body" style="padding:20px;overflow-y:auto;flex:1">
-      <div class="loading"><div class="spinner"></div></div>
-    </div>
-  </div>
-</div>
 
 
 
