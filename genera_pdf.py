@@ -86,31 +86,32 @@ def _init_pos_ranges():
         _POS_RANGES[sheet] = (start, end)
 
 def pulisci_euro_vuoti(ws, sheet_name=None):
-    """Rimuove '€ ' e '50%' dalle righe che non hanno prezzi valorizzati."""
+    """Rimuove euro e sconto vuoti, e il totale riga dalle righe senza prezzo listino."""
     _init_pos_ranges()
     pos_start, pos_end = _POS_RANGES.get(sheet_name or ws.title, (None, None))
     if not pos_start or not pos_end:
         return
-    
-    import re as re2
+
     def is_euro_vuoto(v):
         if not v: return False
-        return bool(re2.match(r'^€\s*$', str(v).strip()))
+        return bool(re.match(r'^€\s*$', str(v).strip()))
     def is_solo_pct(v):
         if not v: return False
-        return bool(re2.match(r'^\d+%$', str(v).strip()))
-    
+        return bool(re.match(r'^\d+%$', str(v).strip()))
+    def ha_prezzo(v):
+        if not v: return False
+        s = str(v).strip()
+        # Ha prezzo se contiene cifre (es "€ 366,00")
+        return bool(re.search(r'\d', s))
+
     for row in ws.iter_rows(min_row=pos_start, max_row=pos_end):
         cells = {cell.column: cell for cell in row if not isinstance(cell, MergedCell)}
-        # Controlla se tutti i prezzi sono vuoti (solo "€ ")
-        prezzo_cols = [28, 31, 33, 36]
-        tutti_vuoti = all(
-            not cells.get(col) or not cells.get(col).value or 
-            is_euro_vuoto(cells.get(col).value) or is_solo_pct(cells.get(col).value)
-            for col in prezzo_cols
-        )
-        if tutti_vuoti:
-            # Rimuovi i "€ " e "50%" da questa riga
+        # Controlla se c'è un prezzo listino valorizzato (col28)
+        v28 = cells.get(28)
+        prezzo_listino_ok = v28 and ha_prezzo(v28.value if v28 else None)
+
+        if not prezzo_listino_ok:
+            # Nessun prezzo listino: rimuovi € vuoti, %, e totale riga
             for col, cell in cells.items():
                 if cell.value and (is_euro_vuoto(cell.value) or is_solo_pct(cell.value)):
                     cell.value = ''
@@ -326,6 +327,7 @@ def genera_preventivo(dati_json, output_path):
         '*CIN* *ABI* *CAB*': doc.get('cin_abi_cab',''),
         '*EMAIL_1*': doc.get('email1',''),
         '*EMAIL_2*': doc.get('email2',''),
+        '*CODICE_SDI*': doc.get('sdi',''),
         '*SDI*': doc.get('sdi',''),
         '*PEC*': doc.get('pec',''),
         '*GIORNI_VALIDITÀ_OFFERTA*': str(doc.get('validita_offerta','30')),
