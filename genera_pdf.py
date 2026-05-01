@@ -86,9 +86,10 @@ def _init_pos_ranges():
         _POS_RANGES[sheet] = (start, end)
 
 def pulisci_euro_vuoti(ws, sheet_name=None):
-    """Rimuove euro e sconto vuoti, e il totale riga dalle righe senza prezzo listino."""
+    """Rimuove euro e sconto vuoti dalle righe senza prezzo listino nella sezione posizione."""
     _init_pos_ranges()
     pos_start, pos_end = _POS_RANGES.get(sheet_name or ws.title, (None, None))
+    # Solo sulla sezione posizione — non toccare riepilogo o intestazione
     if not pos_start or not pos_end:
         return
 
@@ -101,7 +102,6 @@ def pulisci_euro_vuoti(ws, sheet_name=None):
     def ha_prezzo(v):
         if not v: return False
         s = str(v).strip()
-        # Ha prezzo se contiene cifre (es "€ 366,00")
         return bool(re.search(r'\d', s))
 
     for row in ws.iter_rows(min_row=pos_start, max_row=pos_end):
@@ -109,9 +109,7 @@ def pulisci_euro_vuoti(ws, sheet_name=None):
         # Controlla se c'è un prezzo listino valorizzato (col28)
         v28 = cells.get(28)
         prezzo_listino_ok = v28 and ha_prezzo(v28.value if v28 else None)
-
         if not prezzo_listino_ok:
-            # Nessun prezzo listino: rimuovi € vuoti, %, e totale riga
             for col, cell in cells.items():
                 if cell.value and (is_euro_vuoto(cell.value) or is_solo_pct(cell.value)):
                     cell.value = ''
