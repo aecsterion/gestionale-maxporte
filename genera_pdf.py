@@ -27,7 +27,25 @@ def sostituisci(ws, mapping):
                     val = val.replace(k, str(v) if v is not None else '')
                 cell.value = val
 
-def nascondi_vuote(ws):
+# Range fissi della sezione posizione (letti dal template una volta sola)
+_POS_RANGES = {}
+def _init_pos_ranges():
+    global _POS_RANGES
+    if _POS_RANGES: return
+    wb = load_workbook(TEMPLATE_PATH)
+    for sheet in wb.sheetnames:
+        ws = wb[sheet]
+        start = end = None
+        for row in ws.iter_rows():
+            for cell in row:
+                if isinstance(cell, MergedCell): continue
+                if cell.value and '*POSIZIONE*' in str(cell.value):
+                    start = cell.row + 1
+                if cell.value and '*TOTALE_POSIZIONE*' in str(cell.value):
+                    end = cell.row
+        _POS_RANGES[sheet] = (start, end)
+
+def nascondi_vuote(ws, sheet_name=None):
     def ok(v):
         if not v: return False
         s = str(v).strip()
@@ -35,16 +53,16 @@ def nascondi_vuote(ws):
         if re.match(r'^€\s*$', s) or re.match(r'^\d+%$', s): return False
         if s in ('-','X','x','€'): return False
         return True
-    # Trova riga inizio sezione posizione
-    min_r = None
-    for row in ws.iter_rows():
-        for cell in row:
-            if isinstance(cell, MergedCell): continue
-            if cell.value and '*POSIZIONE*' in str(cell.value):
-                min_r = cell.row + 1; break
-        if min_r: break
-    if not min_r: min_r = 19
-    for row in ws.iter_rows(min_row=min_r):
+
+    _init_pos_ranges()
+    pos_start, pos_end = _POS_RANGES.get(sheet_name or ws.title, (None, None))
+
+    # Se non c'è sezione posizione (es. PAGINA_FINALE) non nascondere nulla
+    if not pos_start or not pos_end:
+        return
+
+    # Nascondi solo le righe DENTRO la sezione posizione
+    for row in ws.iter_rows(min_row=pos_start, max_row=pos_end):
         cells = {c.column: c for c in row if not isinstance(c, MergedCell)}
         v16 = cells.get(16)
         desc_ok = ok(v16.value if v16 else None)
@@ -150,7 +168,7 @@ def genera_foglio(sheet_name, mapping, tmp_path):
     wb = load_workbook(TEMPLATE_PATH)
     ws = wb[sheet_name]
     sostituisci(ws, mapping)
-    nascondi_vuote(ws)
+    nascondi_vuote(ws, sheet_name)
     # Rimuovi gli altri fogli
     for s in list(wb.sheetnames):
         if s != sheet_name: del wb[s]
