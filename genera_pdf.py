@@ -258,7 +258,7 @@ def map_riga(r, sc):
         '*TOTALE_RIGA_FUORI_MISURA_L*': '',
         '*TOTALE_RIGA_FUORI_MISURA_H*': '',
         '*TOTALE_RIGA_RIFILATURA*': '',
-        '*TOTALE_POSIZIONE*': fmt_euro(r.get('prezzo_totale',0)),
+        '*TOTALE_POSIZIONE*': fmt_euro(r.get('totale_riga_netto', 0)),
         '*IMMAGINE*': '',
     }
 
