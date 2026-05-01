@@ -135,8 +135,12 @@ def nascondi_vuote(ws, sheet_name=None):
             v28 = cells.get(28)
             desc_ok = ok(v16.value if v16 else None)
             prz_ok = ok(v28.value if v28 else None)
+            # Controlla anche col22 (label totale) e col36 (totale posizione)
+            v22 = cells.get(22)
+            v36 = cells.get(36)
+            extra_ok = ok(v22.value if v22 else None) or ok(v36.value if v36 else None)
             # Nascondi solo se sia descrizione che prezzo listino sono vuoti
-            if not desc_ok and not prz_ok:
+            if not desc_ok and not prz_ok and not extra_ok:
                 ws.row_dimensions[row[0].row].hidden = True
 
     # Nascondi righe riepilogo opzionali con valore vuoto (col 37)
