@@ -131,11 +131,18 @@ def map_riga(r, sc):
 
 def xlsx_to_pdf(xlsx_path, out_dir):
     """Converti un xlsx in PDF e ritorna il path del PDF."""
+    # LibreOffice necessita di una home dir scrivibile
+    lo_home = '/tmp/lo_home'
+    os.makedirs(lo_home, exist_ok=True)
+    env = {**os.environ, 'HOME': lo_home, 'TMPDIR': '/tmp'}
     r = subprocess.run(
-        ['libreoffice','--headless','--convert-to','pdf','--outdir', out_dir, xlsx_path],
-        capture_output=True, text=True, timeout=60,
-        env={**os.environ, 'HOME':'/tmp'})
-    pdf = xlsx_path.replace('.xlsx','.pdf')
+        ['libreoffice', '--headless', '--norestore', '--nofirststartwizard',
+         '--convert-to', 'pdf', '--outdir', out_dir, xlsx_path],
+        capture_output=True, text=True, timeout=60, env=env)
+    pdf = xlsx_path.replace('.xlsx', '.pdf')
+    if not os.path.exists(pdf):
+        print(f"LO stderr: {r.stderr[:300]}", file=sys.stderr)
+        print(f"LO stdout: {r.stdout[:300]}", file=sys.stderr)
     return pdf if os.path.exists(pdf) else None
 
 def genera_foglio(sheet_name, mapping, tmp_path):
