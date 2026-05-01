@@ -1,12 +1,13 @@
 FROM node:18-slim
 
-# Installa Python, LibreOffice e dipendenze
+# Installa Python, LibreOffice, pdftk e dipendenze
 RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
     python3-openpyxl \
     libreoffice-calc \
     libreoffice-writer \
+    pdftk \
     --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
