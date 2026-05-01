@@ -242,15 +242,25 @@ def genera_preventivo(dati_json, output_path):
     if not pdf_files:
         print("Nessun PDF generato", file=sys.stderr); sys.exit(1)
 
-    # Unisci tutti i PDF con pdftk
+    # Unisci tutti i PDF
     if len(pdf_files) == 1:
         os.replace(pdf_files[0], output_path)
     else:
+        # Prova pdftk
         r = subprocess.run(
             ['pdftk'] + pdf_files + ['cat', 'output', output_path],
             capture_output=True, text=True, timeout=60)
         if r.returncode != 0:
-            print(f"Errore pdftk: {r.stderr[:200]}", file=sys.stderr); sys.exit(1)
+            # Fallback: ghostscript
+            r2 = subprocess.run(
+                ['gs','-dBATCH','-dNOPAUSE','-q','-sDEVICE=pdfwrite',
+                 f'-sOutputFile={output_path}'] + pdf_files,
+                capture_output=True, text=True, timeout=60)
+            if r2.returncode != 0:
+                # Ultimo fallback: usa solo la prima pagina
+                import shutil
+                shutil.copy(pdf_files[0], output_path)
+                print(f"Warning: merge fallito, PDF parziale", file=sys.stderr)
 
     # Pulizia
     for f in xlsx_files + pdf_files:

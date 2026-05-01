@@ -4958,13 +4958,29 @@ async function esportaPDF(tipo, id) {
 </body>
 </html>
 `;
+
 function generaPDF(payload, callback) {
   const tmpJson = path.join(os.tmpdir(), 'prev_' + Date.now() + '.json');
   const tmpPdf = path.join(os.tmpdir(), 'prev_' + Date.now() + '.pdf');
-  fs.writeFileSync(tmpJson, JSON.stringify(payload));
-  const proc = spawn('python3', [path.join(__dirname, 'genera_pdf.py'), tmpJson, tmpPdf]);
+  try {
+    fs.writeFileSync(tmpJson, JSON.stringify(payload));
+  } catch(e) {
+    return callback(new Error('Scrittura JSON fallita: ' + e.message));
+  }
+  const scriptPath = path.join(__dirname, 'genera_pdf.py');
+  if (!fs.existsSync(scriptPath)) {
+    return callback(new Error('genera_pdf.py non trovato in: ' + __dirname));
+  }
+  const tmplPath = path.join(__dirname, 'template_preventivo.xlsx');
+  if (!fs.existsSync(tmplPath)) {
+    return callback(new Error('template_preventivo.xlsx non trovato in: ' + __dirname));
+  }
+  const proc = spawn('python3', [scriptPath, tmpJson, tmpPdf]);
   let stderr = '';
   proc.stderr.on('data', function(d) { stderr += d.toString(); });
+  proc.on('error', function(err) {
+    callback(new Error('spawn python3 fallito: ' + err.message));
+  });
   proc.on('close', function(code) {
     try { fs.unlinkSync(tmpJson); } catch(e) {}
     if (code === 0 && fs.existsSync(tmpPdf)) {
@@ -4972,10 +4988,11 @@ function generaPDF(payload, callback) {
       try { fs.unlinkSync(tmpPdf); } catch(e) {}
       callback(null, pdfData);
     } else {
-      callback(new Error('Generazione PDF fallita: ' + stderr));
+      callback(new Error('Python exit ' + code + ': ' + stderr.slice(-500)));
     }
   });
 }
+
 const server = http.createServer(function(req, res) {
   if (req.method === 'GET' && req.url === '/logo-maxporte.png') {
     const logoPath = path.join(__dirname, 'logo-maxporte.png');
@@ -4992,8 +5009,11 @@ const server = http.createServer(function(req, res) {
       try {
         const payload = JSON.parse(body);
         generaPDF(payload, function(err, pdfData) {
-          if (err) { res.writeHead(500, {'Content-Type': 'text/plain'}); res.end(err.message); }
-          else {
+          if (err) {
+            console.error('generaPDF error:', err.message);
+            res.writeHead(500, {'Content-Type': 'text/plain'});
+            res.end(err.message);
+          } else {
             const numero = (payload.documento && payload.documento.numero) || 'documento';
             res.writeHead(200, {
               'Content-Type': 'application/pdf',
@@ -5003,7 +5023,10 @@ const server = http.createServer(function(req, res) {
             res.end(pdfData);
           }
         });
-      } catch(e) { res.writeHead(400, {'Content-Type': 'text/plain'}); res.end('JSON non valido: ' + e.message); }
+      } catch(e) {
+        res.writeHead(400, {'Content-Type': 'text/plain'});
+        res.end('JSON non valido: ' + e.message);
+      }
     });
     return;
   }
