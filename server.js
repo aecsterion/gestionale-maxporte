@@ -1483,7 +1483,7 @@ function updateCfgStepper(current){
 }
 
 async function cfgSerie(){
-  const {data} = await sb.from('serie').select('*').eq('attivo',true).order('nome');
+  const {data} = await sb.from('serie').select('*').order('nome');
   const cards = (data||[]).map(s=>\`
     <div onclick="selSerie('\${s.codice}','\${s.nome}')"
       style="border:\${CFG.serie===s.codice?'2px solid var(--red)':'0.5px solid var(--border)'};
@@ -4961,13 +4961,13 @@ async function esportaPDF(tipo, id) {
 function generaPDF(payload, callback) {
   const tmpJson = path.join(os.tmpdir(), 'prev_' + Date.now() + '.json');
   const tmpPdf = path.join(os.tmpdir(), 'prev_' + Date.now() + '.pdf');
-  try { fs.writeFileSync(tmpJson, JSON.stringify(payload)); } catch(e) { return callback(new Error('Scrittura JSON fallita: ' + e.message)); }
+  try { fs.writeFileSync(tmpJson, JSON.stringify(payload)); } catch(e) { return callback(new Error('Scrittura JSON: ' + e.message)); }
   const scriptPath = path.join(__dirname, 'genera_pdf.py');
-  if (!fs.existsSync(scriptPath)) { return callback(new Error('genera_pdf.py non trovato in: ' + __dirname)); }
+  if (!fs.existsSync(scriptPath)) { return callback(new Error('genera_pdf.py non trovato')); }
   const proc = spawn('python3', [scriptPath, tmpJson, tmpPdf]);
   let stderr = '';
   proc.stderr.on('data', function(d) { stderr += d.toString(); });
-  proc.on('error', function(err) { callback(new Error('spawn python3 fallito: ' + err.message)); });
+  proc.on('error', function(err) { callback(new Error('spawn: ' + err.message)); });
   proc.on('close', function(code) {
     try { fs.unlinkSync(tmpJson); } catch(e) {}
     if (code === 0 && fs.existsSync(tmpPdf)) {
@@ -4998,7 +4998,7 @@ const server = http.createServer(function(req, res) {
             res.end(pdfData);
           }
         });
-      } catch(e) { res.writeHead(400,{'Content-Type':'text/plain'}); res.end('JSON non valido: '+e.message); }
+      } catch(e) { res.writeHead(400,{'Content-Type':'text/plain'}); res.end('JSON: '+e.message); }
     });
     return;
   }
