@@ -155,7 +155,40 @@ def genera_foglio(sheet_name, mapping, tmp_path):
     for s in list(wb.sheetnames):
         if s != sheet_name: del wb[s]
     wb.save(tmp_path)
+    # Ripristina media e drawing dal template (openpyxl le perde)
+    _ripristina_media(tmp_path)
     return tmp_path
+
+def _ripristina_media(xlsx_path):
+    """Copia immagini e drawing dal template nel file generato."""
+    import zipfile, re as re_mod
+    tmp_p = xlsx_path + '_tmp'
+    try:
+        with zipfile.ZipFile(TEMPLATE_PATH, 'r') as zt:
+            extra = {n: zt.read(n) for n in zt.namelist()
+                     if n.startswith('xl/media/') or
+                        n.startswith('xl/drawings/') or
+                        n.startswith('xl/worksheets/_rels/')}
+
+        with zipfile.ZipFile(xlsx_path, 'r') as zin:
+            items = [(i, zin.read(i.filename)) for i in zin.infolist()]
+        existing = {i.filename for i, _ in items}
+
+        with zipfile.ZipFile(tmp_p, 'w', zipfile.ZIP_DEFLATED) as zout:
+            for item, data in items:
+                zout.writestr(item, data)
+            for name, data in extra.items():
+                if name not in existing:
+                    zout.writestr(name, data)
+
+        import os as os_mod
+        os_mod.replace(tmp_p, xlsx_path)
+    except Exception as e:
+        print(f"Media warning: {e}", file=sys.stderr)
+        try:
+            import os as os_mod
+            os_mod.remove(tmp_p)
+        except: pass
 
 def genera_preventivo(dati_json, output_path):
     data = json.loads(dati_json)
