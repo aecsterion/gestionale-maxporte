@@ -4790,7 +4790,11 @@ async function esportaPDF(tipo, id) {
         prezzo_extra: r.prezzo_extra_incisioni || 0,
         prezzo_unitario: r.prezzo_unitario || 0,
         prezzo_totale: r.prezzo_totale_riga || 0,
-        totale_riga_netto: r.prezzo_totale_riga ? Math.round(r.prezzo_totale_riga * (1 - (doc.sconto1||0)/100) * 100) / 100 : 0,
+        totale_riga_netto: (() => {
+          const sc = doc.sconto1 || 0;
+          const tot = r.prezzo_totale_riga || r.prezzo_unitario || r.prezzo_base || 0;
+          return tot ? Math.round(tot * (1 - sc/100) * 100) / 100 : 0;
+        })(),
         sconto: doc.sconto1 || 0,
         // Kit obbligatori
         kit_varsavia: r.kit_varsavia || '',
