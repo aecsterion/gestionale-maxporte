@@ -1483,7 +1483,7 @@ function updateCfgStepper(current){
 }
 
 async function cfgSerie(){
-  const {data} = await sb.from('serie').select('*').eq('attiva',true).order('nome');
+  const {data} = await sb.from('serie').select('*').eq('attivo',true).order('nome');
   const cards = (data||[]).map(s=>\`
     <div onclick="selSerie('\${s.codice}','\${s.nome}')"
       style="border:\${CFG.serie===s.codice?'2px solid var(--red)':'0.5px solid var(--border)'};
@@ -4958,48 +4958,30 @@ async function esportaPDF(tipo, id) {
 </body>
 </html>
 `;
-
 function generaPDF(payload, callback) {
   const tmpJson = path.join(os.tmpdir(), 'prev_' + Date.now() + '.json');
   const tmpPdf = path.join(os.tmpdir(), 'prev_' + Date.now() + '.pdf');
-  try {
-    fs.writeFileSync(tmpJson, JSON.stringify(payload));
-  } catch(e) {
-    return callback(new Error('Scrittura JSON fallita: ' + e.message));
-  }
+  try { fs.writeFileSync(tmpJson, JSON.stringify(payload)); } catch(e) { return callback(new Error('Scrittura JSON fallita: ' + e.message)); }
   const scriptPath = path.join(__dirname, 'genera_pdf.py');
-  if (!fs.existsSync(scriptPath)) {
-    return callback(new Error('genera_pdf.py non trovato in: ' + __dirname));
-  }
-  const tmplPath = path.join(__dirname, 'template_preventivo.xlsx');
-  if (!fs.existsSync(tmplPath)) {
-    return callback(new Error('template_preventivo.xlsx non trovato in: ' + __dirname));
-  }
+  if (!fs.existsSync(scriptPath)) { return callback(new Error('genera_pdf.py non trovato in: ' + __dirname)); }
   const proc = spawn('python3', [scriptPath, tmpJson, tmpPdf]);
   let stderr = '';
   proc.stderr.on('data', function(d) { stderr += d.toString(); });
-  proc.on('error', function(err) {
-    callback(new Error('spawn python3 fallito: ' + err.message));
-  });
+  proc.on('error', function(err) { callback(new Error('spawn python3 fallito: ' + err.message)); });
   proc.on('close', function(code) {
     try { fs.unlinkSync(tmpJson); } catch(e) {}
     if (code === 0 && fs.existsSync(tmpPdf)) {
       const pdfData = fs.readFileSync(tmpPdf);
       try { fs.unlinkSync(tmpPdf); } catch(e) {}
       callback(null, pdfData);
-    } else {
-      callback(new Error('Python exit ' + code + ': ' + stderr.slice(-500)));
-    }
+    } else { callback(new Error('Python exit ' + code + ': ' + stderr.slice(-500))); }
   });
 }
-
 const server = http.createServer(function(req, res) {
   if (req.method === 'GET' && req.url === '/logo-maxporte.png') {
-    const logoPath = path.join(__dirname, 'logo-maxporte.png');
-    if (fs.existsSync(logoPath)) {
-      res.writeHead(200, {'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400'});
-      res.end(fs.readFileSync(logoPath));
-    } else { res.writeHead(404); res.end('Logo not found'); }
+    const p = path.join(__dirname, 'logo-maxporte.png');
+    if (fs.existsSync(p)) { res.writeHead(200, {'Content-Type':'image/png','Cache-Control':'public,max-age=86400'}); res.end(fs.readFileSync(p)); }
+    else { res.writeHead(404); res.end('Not found'); }
     return;
   }
   if (req.method === 'POST' && req.url === '/genera-pdf') {
@@ -5009,28 +4991,18 @@ const server = http.createServer(function(req, res) {
       try {
         const payload = JSON.parse(body);
         generaPDF(payload, function(err, pdfData) {
-          if (err) {
-            console.error('generaPDF error:', err.message);
-            res.writeHead(500, {'Content-Type': 'text/plain'});
-            res.end(err.message);
-          } else {
+          if (err) { console.error('generaPDF error:', err.message); res.writeHead(500, {'Content-Type':'text/plain'}); res.end(err.message); }
+          else {
             const numero = (payload.documento && payload.documento.numero) || 'documento';
-            res.writeHead(200, {
-              'Content-Type': 'application/pdf',
-              'Content-Disposition': 'attachment; filename="' + numero + '.pdf"',
-              'Content-Length': pdfData.length
-            });
+            res.writeHead(200, {'Content-Type':'application/pdf','Content-Disposition':'attachment; filename="'+numero+'.pdf"','Content-Length':pdfData.length});
             res.end(pdfData);
           }
         });
-      } catch(e) {
-        res.writeHead(400, {'Content-Type': 'text/plain'});
-        res.end('JSON non valido: ' + e.message);
-      }
+      } catch(e) { res.writeHead(400,{'Content-Type':'text/plain'}); res.end('JSON non valido: '+e.message); }
     });
     return;
   }
-  res.writeHead(200, {'Content-Type': 'text/html;charset=utf-8', 'Cache-Control': 'no-store'});
+  res.writeHead(200,{'Content-Type':'text/html;charset=utf-8','Cache-Control':'no-store'});
   res.end(HTML);
 });
 server.listen(PORT, function() { console.log('MPX Gestionale avviato su porta ' + PORT); });
