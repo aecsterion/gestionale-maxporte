@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """Motore generazione PDF preventivi/ordini Max Porte"""
-import sys, json, os, subprocess, copy, re, zipfile
+import sys, json, os, subprocess, re, glob
 from openpyxl import load_workbook
 from openpyxl.cell.cell import MergedCell
 
 TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'template_preventivo.xlsx')
 if not os.path.exists(TEMPLATE_PATH):
     for c in ['/app/template_preventivo.xlsx', os.path.join(os.getcwd(), 'template_preventivo.xlsx')]:
-        if os.path.exists(c):
-            TEMPLATE_PATH = c; break
+        if os.path.exists(c): TEMPLATE_PATH = c; break
 
 def fmt_euro(v):
     if not v and v != 0: return ''
@@ -18,7 +17,7 @@ def fmt_euro(v):
         return f"{f:,.2f}".replace(',','X').replace('.',',').replace('X','.')
     except: return str(v) if v else ''
 
-def sostituisci_foglio(ws, mapping):
+def sostituisci(ws, mapping):
     for row in ws.iter_rows():
         for cell in row:
             if isinstance(cell, MergedCell): continue
@@ -28,36 +27,34 @@ def sostituisci_foglio(ws, mapping):
                     val = val.replace(k, str(v) if v is not None else '')
                 cell.value = val
 
-def nascondi_righe_vuote(ws, min_row=None):
-    def ha_valore(v):
+def nascondi_vuote(ws):
+    def ok(v):
         if not v: return False
         s = str(v).strip()
         if not s or '*' in s: return False
-        if re.match(r'^€\s*$', s): return False
-        if re.match(r'^\d+%$', s): return False
+        if re.match(r'^€\s*$', s) or re.match(r'^\d+%$', s): return False
         if s in ('-','X','x','€'): return False
         return True
-    # Trova automaticamente la riga della sezione posizione
-    if min_row is None:
-        for row in ws.iter_rows():
-            for cell in row:
-                if isinstance(cell, MergedCell): continue
-                if cell.value and '*POSIZIONE*' in str(cell.value):
-                    min_row = cell.row + 1
-                    break
-            if min_row: break
-        if not min_row: min_row = 19
-    for row in ws.iter_rows(min_row=min_row):
-        cells = {cell.column: cell for cell in row if not isinstance(cell, MergedCell)}
-        val16 = cells.get(16)
-        desc_vuoto = not ha_valore(val16.value if val16 else None)
-        prezzi_vuoti = all(not ha_valore(cells.get(c).value if cells.get(c) else None) for c in [28,33,36])
-        if desc_vuoto and prezzi_vuoti:
+    # Trova riga inizio sezione posizione
+    min_r = None
+    for row in ws.iter_rows():
+        for cell in row:
+            if isinstance(cell, MergedCell): continue
+            if cell.value and '*POSIZIONE*' in str(cell.value):
+                min_r = cell.row + 1; break
+        if min_r: break
+    if not min_r: min_r = 19
+    for row in ws.iter_rows(min_row=min_r):
+        cells = {c.column: c for c in row if not isinstance(c, MergedCell)}
+        v16 = cells.get(16)
+        desc_ok = ok(v16.value if v16 else None)
+        prz_ok = any(ok(cells.get(c).value if cells.get(c) else None) for c in [28,33,36])
+        if not desc_ok and not prz_ok:
             ws.row_dimensions[row[0].row].hidden = True
 
-def mapping_riga(r, sc):
+def map_riga(r, sc):
     sc = float(sc)
-    def scont(v):
+    def s(v): 
         try: return fmt_euro(round(float(v)*(1-sc/100),2)) if v else ''
         except: return ''
     return {
@@ -103,48 +100,61 @@ def mapping_riga(r, sc):
         '*NOTE_RIGA*': r.get('note_riga',''),
         '*SC*': str(int(sc)) if sc else '',
         '*PREZZO_MODELLO_LISTINO*': fmt_euro(r.get('prezzo_base',0)),
-        '*PREZZO_MODELLO_SCONTATO*': scont(r.get('prezzo_base',0)),
+        '*PREZZO_MODELLO_SCONTATO*': s(r.get('prezzo_base',0)),
         '*PREZZO_FINITURA_LISTINO*': fmt_euro(r.get('prezzo_finitura','')) if r.get('prezzo_finitura') else '',
-        '*PREZZO_FINITURA_SCONTATO*': scont(r.get('prezzo_finitura',0)) if r.get('prezzo_finitura') else '',
-        '*SUPPLEMENTO_BICOLORE_LISTINO*': '',
-        '*SUPPLEMENTO_BICOLORE_SCONTATO*': '',
-        '*SUPPLEMENTO_COLORE_INSERTO_LISTINO*': '',
-        '*SUPPLEMENTO_COLORE_INSERTO_SCONTATO*': '',
+        '*PREZZO_FINITURA_SCONTATO*': s(r.get('prezzo_finitura',0)) if r.get('prezzo_finitura') else '',
+        '*SUPPLEMENTO_BICOLORE_LISTINO*': '', '*SUPPLEMENTO_BICOLORE_SCONTATO*': '',
+        '*SUPPLEMENTO_COLORE_INSERTO_LISTINO*': '', '*SUPPLEMENTO_COLORE_INSERTO_SCONTATO*': '',
         '*PREZZO_VETRO_LISTINO*': fmt_euro(r.get('prezzo_vetro','')) if r.get('prezzo_vetro') else '',
-        '*PREZZO_VETRO_SCONTATO*': scont(r.get('prezzo_vetro',0)) if r.get('prezzo_vetro') else '',
-        '*PREZZO_INCISIONE_O_STAMPA_LISTINO*': '',
-        '*PREZZO_INCISIONE_O_STAMPA_SCONTATO*': '',
+        '*PREZZO_VETRO_SCONTATO*': s(r.get('prezzo_vetro',0)) if r.get('prezzo_vetro') else '',
+        '*PREZZO_INCISIONE_O_STAMPA_LISTINO*': '', '*PREZZO_INCISIONE_O_STAMPA_SCONTATO*': '',
         '*SUPPLEMENTO_SERRATURA_LISTINO*': fmt_euro(r.get('prezzo_serratura','')) if r.get('prezzo_serratura') else '',
-        '*SUPPLEMENTO_SERRATURA_SCONTATO*': scont(r.get('prezzo_serratura',0)) if r.get('prezzo_serratura') else '',
+        '*SUPPLEMENTO_SERRATURA_SCONTATO*': s(r.get('prezzo_serratura',0)) if r.get('prezzo_serratura') else '',
         '*SUPPLEMENTO_STIPITE_LISTINO*': fmt_euro(r.get('prezzo_telaio','')) if r.get('prezzo_telaio') else '',
-        '*SUPPLEMENTO_STIPITE_SCONTATO*': scont(r.get('prezzo_telaio',0)) if r.get('prezzo_telaio') else '',
+        '*SUPPLEMENTO_STIPITE_SCONTATO*': s(r.get('prezzo_telaio',0)) if r.get('prezzo_telaio') else '',
         '*SUPPLEMENTO_COLORE_FERRAMENTA_LISTINO*': fmt_euro(r.get('prezzo_ferramenta','')) if r.get('prezzo_ferramenta') else '',
-        '*SUPPLEMENTO_COLORE_FERRAMENTA_SCONTATO*': scont(r.get('prezzo_ferramenta',0)) if r.get('prezzo_ferramenta') else '',
+        '*SUPPLEMENTO_COLORE_FERRAMENTA_SCONTATO*': s(r.get('prezzo_ferramenta',0)) if r.get('prezzo_ferramenta') else '',
         '*PREZZO_MANIGLIA_LISTINO*': fmt_euro(r.get('prezzo_maniglia','')) if r.get('prezzo_maniglia') else '',
-        '*PREZZO_MANIGLIA_SCONTATO*': scont(r.get('prezzo_maniglia',0)) if r.get('prezzo_maniglia') else '',
-        '*PREZZO_KIT_VARSAVIA_SCORREVOLE_LISTINO*': '',
-        '*PREZZO_KIT_VARSAVIA_SCORREVOLE_SCONTATO*': '',
-        '*PREZZO_KIT_RIM_16_SCORREVOLE_LISTINO*': '',
-        '*PREZZO_KIT_RIM_16_SCORREVOLE_SCONTATO*': '',
+        '*PREZZO_MANIGLIA_SCONTATO*': s(r.get('prezzo_maniglia',0)) if r.get('prezzo_maniglia') else '',
+        '*PREZZO_KIT_VARSAVIA_SCORREVOLE_LISTINO*': '', '*PREZZO_KIT_VARSAVIA_SCORREVOLE_SCONTATO*': '',
+        '*PREZZO_KIT_RIM_16_SCORREVOLE_LISTINO*': '', '*PREZZO_KIT_RIM_16_SCORREVOLE_SCONTATO*': '',
         '*PREZZO_LAVORAZIONI_EXTRA_LISTINO*': fmt_euro(r.get('prezzo_extra','')) if r.get('prezzo_extra') else '',
         '*PREZZO_LAVORAZIONI_EXTRA_SCONTATO*': '',
-        '*PREZZO_ACCESSORI_LISTINO*': '',
-        '*PREZZO_ACCESSORI_SCONTATO*': '',
-        '*SUPPLEMENTO_FUORI_MISURA_L_LISTINO*': '',
-        '*SUPPLEMENTO_FUORI_MISURA_L_SCONTATO*': '',
-        '*SUPPLEMENTO_FUORI_MISURA_H_LISTINO*': '',
-        '*SUPPLEMENTO_FUORI_MISURA_H_SCONTATO*': '',
-        '*SUPPLEMENTO_RIFILATURA_LISTINO*': '',
-        '*SUPPLEMENTO_RIFILATURA_SCONTATO*': '',
+        '*PREZZO_ACCESSORI_LISTINO*': '', '*PREZZO_ACCESSORI_SCONTATO*': '',
+        '*SUPPLEMENTO_FUORI_MISURA_L_LISTINO*': '', '*SUPPLEMENTO_FUORI_MISURA_L_SCONTATO*': '',
+        '*SUPPLEMENTO_FUORI_MISURA_H_LISTINO*': '', '*SUPPLEMENTO_FUORI_MISURA_H_SCONTATO*': '',
+        '*SUPPLEMENTO_RIFILATURA_LISTINO*': '', '*SUPPLEMENTO_RIFILATURA_SCONTATO*': '',
         '*TOTALE_RIGA*': '',
         '*TOTALE_POSIZIONE*': fmt_euro(r.get('prezzo_totale',0)),
         '*IMMAGINE*': '',
     }
 
+def xlsx_to_pdf(xlsx_path, out_dir):
+    """Converti un xlsx in PDF e ritorna il path del PDF."""
+    r = subprocess.run(
+        ['libreoffice','--headless','--convert-to','pdf','--outdir', out_dir, xlsx_path],
+        capture_output=True, text=True, timeout=60,
+        env={**os.environ, 'HOME':'/tmp'})
+    pdf = xlsx_path.replace('.xlsx','.pdf')
+    return pdf if os.path.exists(pdf) else None
+
+def genera_foglio(sheet_name, mapping, tmp_path):
+    """Carica il template, compila il foglio indicato, salva come xlsx."""
+    wb = load_workbook(TEMPLATE_PATH)
+    ws = wb[sheet_name]
+    sostituisci(ws, mapping)
+    nascondi_vuote(ws)
+    # Rimuovi gli altri fogli
+    for s in list(wb.sheetnames):
+        if s != sheet_name: del wb[s]
+    wb.save(tmp_path)
+    return tmp_path
+
 def genera_preventivo(dati_json, output_path):
     data = json.loads(dati_json)
     doc = data['documento']
     righe = data['righe']
+    if not righe: print("Nessuna riga", file=sys.stderr); sys.exit(1)
 
     sc1 = float(doc.get('sconto1', 0))
     tot_imp = float(doc.get('totale_imponibile', 0))
@@ -152,7 +162,7 @@ def genera_preventivo(dati_json, output_path):
     iva_euro = round(tot_netto*22/100, 2)
     tot_iva = round(tot_netto+iva_euro, 2)
 
-    mapping_doc = {
+    md = {
         '*TIPO_DOCUMENTO*': doc.get('tipo_documento','PREVENTIVO'),
         '*DATA_GENERAZIONE_DOCUMENTO': doc.get('data',''),
         '*CODICE_PREVENTIVO*': doc.get('numero',''),
@@ -200,154 +210,54 @@ def genera_preventivo(dati_json, output_path):
         '*SOMMA_RIEPILOGO_OFFERTA*': fmt_euro(tot_iva),
     }
 
-    if not righe:
-        print("Nessuna riga", file=sys.stderr); sys.exit(1)
+    tmp_dir = os.path.dirname(os.path.abspath(output_path))
+    base = os.path.basename(output_path).replace('.pdf','')
+    xlsx_files = []
+    pdf_files = []
 
-    # Carica template
-    wb = load_workbook(TEMPLATE_PATH)
+    # PRIMA PAGINA
+    p = os.path.join(tmp_dir, f'{base}_p1.xlsx')
+    genera_foglio('PRIMA_PAGINA', {**md, **map_riga(righe[0], sc1)}, p)
+    xlsx_files.append(p)
 
-    # 1. PRIMA PAGINA (pos 1)
-    ws1 = wb['PRIMA_PAGINA']
-    sostituisci_foglio(ws1, {**mapping_doc, **mapping_riga(righe[0], sc1)})
-    nascondi_righe_vuote(ws1)
+    # PAGINE INTERMEDIE (pos 2..N)
+    for i, riga in enumerate(righe[1:], 2):
+        p = os.path.join(tmp_dir, f'{base}_p{i}.xlsx')
+        genera_foglio('PAGINE_INTERMEDIE', {**md, **map_riga(riga, sc1)}, p)
+        xlsx_files.append(p)
 
-    # 2. PAGINE INTERMEDIE (pos 2..N)
-    ws_inter = wb['PAGINE_INTERMEDIE']
-    ws_fin = wb['PAGINA_FINALE']
+    # PAGINA FINALE
+    p = os.path.join(tmp_dir, f'{base}_fin.xlsx')
+    genera_foglio('PAGINA_FINALE', {**md}, p)
+    xlsx_files.append(p)
 
-    if len(righe) >= 2:
-        # Compila la prima pagina intermedia con pos 2
-        sostituisci_foglio(ws_inter, {**mapping_doc, **mapping_riga(righe[1], sc1)})
-        nascondi_righe_vuote(ws_inter)
+    # Converti ogni xlsx in PDF
+    for xlsx in xlsx_files:
+        pdf = xlsx_to_pdf(xlsx, tmp_dir)
+        if pdf:
+            pdf_files.append(pdf)
+        else:
+            print(f"Errore conversione: {xlsx}", file=sys.stderr)
 
-        # Per pos 3..N: carica template fresco, compila e inserisce prima di PAGINA_FINALE
-        for i, riga in enumerate(righe[2:], 3):
-            # Carica foglio intermedio pulito dal template
-            wb_fresh = load_workbook(TEMPLATE_PATH)
-            ws_fresh = wb_fresh['PAGINE_INTERMEDIE']
-            sostituisci_foglio(ws_fresh, {**mapping_doc, **mapping_riga(riga, sc1)})
-            nascondi_righe_vuote(ws_fresh)
-            # Aggiungi al workbook copiando celle in un nuovo foglio
-            fin_idx = wb.sheetnames.index('PAGINA_FINALE')
-            new_ws = wb.create_sheet(f'POS_{i}', fin_idx)
-            # Copia dimensioni
-            for col, dim in ws_fresh.column_dimensions.items():
-                if dim.width: new_ws.column_dimensions[col].width = dim.width
-            for row_idx, dim in ws_fresh.row_dimensions.items():
-                if dim.height: new_ws.row_dimensions[row_idx].height = dim.height
-                if dim.hidden: new_ws.row_dimensions[row_idx].hidden = dim.hidden
-            # Copia merge
-            for merge in ws_fresh.merged_cells.ranges:
-                try: new_ws.merge_cells(str(merge))
-                except: pass
-            # Copia celle
-            for row in ws_fresh.iter_rows():
-                for cell in row:
-                    if isinstance(cell, MergedCell): continue
-                    nc = new_ws.cell(row=cell.row, column=cell.column)
-                    nc.value = cell.value
-                    if cell.has_style:
-                        nc.font = copy.copy(cell.font)
-                        nc.fill = copy.copy(cell.fill)
-                        nc.alignment = copy.copy(cell.alignment)
-                        nc.border = copy.copy(cell.border)
-                        nc.number_format = cell.number_format
-            # Page setup
-            new_ws.page_setup.paperSize = ws_fresh.page_setup.paperSize or 9
-            new_ws.page_setup.orientation = ws_fresh.page_setup.orientation or 'portrait'
-            new_ws.page_setup.fitToPage = True
-            new_ws.page_setup.fitToWidth = 1
-            new_ws.page_setup.fitToHeight = 0
-            try: new_ws.sheet_properties.pageSetUpPr.fitToPage = True
-            except: pass
-            if ws_fresh.print_area: new_ws.print_area = ws_fresh.print_area
-            new_ws.sheet_view.showGridLines = False
-            # Copia defaultColWidth via XML patch (openpyxl non lo espone direttamente)
-            new_ws._default_col_width = 2.453125
+    if not pdf_files:
+        print("Nessun PDF generato", file=sys.stderr); sys.exit(1)
+
+    # Unisci tutti i PDF con pdftk
+    if len(pdf_files) == 1:
+        os.replace(pdf_files[0], output_path)
     else:
-        # Solo 1 riga: nascondi tutto il foglio intermedio
-        for row in ws_inter.iter_rows():
-            ws_inter.row_dimensions[row[0].row].hidden = True
+        r = subprocess.run(
+            ['pdftk'] + pdf_files + ['cat', 'output', output_path],
+            capture_output=True, text=True, timeout=60)
+        if r.returncode != 0:
+            print(f"Errore pdftk: {r.stderr[:200]}", file=sys.stderr); sys.exit(1)
 
-    # 3. PAGINA FINALE (totali)
-    sostituisci_foglio(ws_fin, {**mapping_doc})
-    nascondi_righe_vuote(ws_fin)
-
-    # Salva
-    tmp_xlsx = output_path.replace('.pdf','_tmp.xlsx')
-    wb.save(tmp_xlsx)
-
-    # Ripristina media/drawing/rels dal template
-    _ripristina_media(tmp_xlsx, TEMPLATE_PATH, len(righe))
-
-    # Converti PDF
-    out_dir = os.path.dirname(os.path.abspath(output_path))
-    r = subprocess.run(['libreoffice','--headless','--convert-to','pdf',
-        '--outdir', out_dir, tmp_xlsx],
-        capture_output=True, text=True, timeout=120,
-        env={**os.environ, 'HOME':'/tmp'})
-
-    tmp_pdf = tmp_xlsx.replace('.xlsx','.pdf')
-    if os.path.exists(tmp_pdf):
-        os.replace(tmp_pdf, output_path)
-        try: os.remove(tmp_xlsx)
-        except: pass
-        print(f"PDF generato: {output_path}", file=sys.stderr)
-    else:
-        print(f"Errore: {r.stderr[:200]}", file=sys.stderr)
-        sys.exit(1)
-
-
-def _ripristina_media(xlsx_path, template_path, n_righe):
-    """Copia media, drawing e rels mancanti dal template."""
-    tmp_p = xlsx_path.replace('.xlsx','_p.xlsx')
-    try:
-        with zipfile.ZipFile(template_path,'r') as zt:
-            tmpl = {}
-            for name in zt.namelist():
-                if (name.startswith('xl/media/') or
-                    name.startswith('xl/drawings/') or
-                    name.startswith('xl/worksheets/_rels/')):
-                    tmpl[name] = zt.read(name)
-            # rels del foglio intermedio (sheet2) per i fogli extra
-            inter_rels = tmpl.get('xl/worksheets/_rels/sheet2.xml.rels', b'')
-
-        with zipfile.ZipFile(xlsx_path,'r') as zin:
-            items = [(item, zin.read(item.filename)) for item in zin.infolist()]
-        existing = {item.filename for item,_ in items}
-
-        # Trova fogli extra senza rels
-        ws_files = {n for n in existing if re.match(r'^xl/worksheets/sheet\d+\.xml$',n)}
-        extra_rels = []
-        for ws_name in ws_files:
-            rels = ws_name.replace('xl/worksheets/','xl/worksheets/_rels/')+'.rels'
-            if rels not in existing and rels not in tmpl:
-                extra_rels.append(rels)
-
-        with zipfile.ZipFile(tmp_p,'w',zipfile.ZIP_DEFLATED) as zout:
-            for item,data in items:
-                if item.filename.startswith('xl/worksheets/') and item.filename.endswith('.xml'):
-                    # Fix sheetFormatPr per tutti i fogli
-                    xml = data.decode('utf-8')
-                    xml = re.sub(
-                        r'<sheetFormatPr[^/]*/>',
-                        '<sheetFormatPr defaultColWidth="2.453125" defaultRowHeight="13.9" customHeight="1"/>',
-                        xml
-                    )
-                    data = xml.encode('utf-8')
-                zout.writestr(item, data)
-            for name,data in tmpl.items():
-                if name not in existing:
-                    zout.writestr(name, data)
-            for rels in extra_rels:
-                zout.writestr(rels, inter_rels)
-
-        os.replace(tmp_p, xlsx_path)
-    except Exception as e:
-        print(f"Media warning: {e}", file=sys.stderr)
-        try: os.remove(tmp_p)
+    # Pulizia
+    for f in xlsx_files + pdf_files:
+        try: os.remove(f)
         except: pass
 
+    print(f"PDF generato: {output_path}", file=sys.stderr)
 
 if __name__ == '__main__':
     if len(sys.argv) > 1:
