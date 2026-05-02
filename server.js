@@ -3024,6 +3024,16 @@ async function renderPreventivoDetail(id){
 async function eliminaRiga(tabella, rigaId, docId, mode){
   if(!confirm('Eliminare questa riga?')) return;
   await sb.from(tabella).delete().eq('id',rigaId);
+  // Rinumera le righe rimanenti in sequenza
+  const fk = mode==='preventivo' ? 'preventivo_id' : 'ordine_id';
+  const {data:rimanenti} = await sb.from(tabella).select('id,riga_numero').eq(fk,docId).order('riga_numero',{ascending:true});
+  if(rimanenti && rimanenti.length){
+    for(let i=0;i<rimanenti.length;i++){
+      if(rimanenti[i].riga_numero !== i+1){
+        await sb.from(tabella).update({riga_numero:i+1}).eq('id',rimanenti[i].id);
+      }
+    }
+  }
   await ricalcolaTotale(docId, mode);
   if(mode==='preventivo') renderPreventivoDetail(docId);
   else renderOrdineDetail(docId);

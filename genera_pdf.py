@@ -5,7 +5,7 @@ from openpyxl import load_workbook
 from openpyxl.cell.cell import MergedCell
 
 TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'template_preventivo.xlsx')
-VERSION = "2026-05-02-v6"  # marker deploy
+VERSION = "2026-05-02-v7"  # marker deploy
 if not os.path.exists(TEMPLATE_PATH):
     for c in ['/app/template_preventivo.xlsx', os.path.join(os.getcwd(), 'template_preventivo.xlsx')]:
         if os.path.exists(c): TEMPLATE_PATH = c; break
@@ -278,23 +278,40 @@ def xlsx_to_pdf(xlsx_path, out_dir):
         print(f"LO stdout: {r.stdout[:300]}", file=sys.stderr)
     return pdf if os.path.exists(pdf) else None
 
+def _leggi_footer_template(sheet_name):
+    """Legge il blocco headerFooter XML originale dal template per lo sheet indicato."""
+    import zipfile as _zft, re as _ret
+    sheet_idx = {'PRIMA_PAGINA': 1, 'PAGINE_INTERMEDIE': 2, 'PAGINA_FINALE': 3}
+    idx = sheet_idx.get(sheet_name, 1)
+    sheet_file = f'xl/worksheets/sheet{idx}.xml'
+    try:
+        with _zft.ZipFile(TEMPLATE_PATH, 'r') as _zt:
+            _orig_xml = _zt.read(sheet_file).decode('utf-8')
+        _m = _ret.search(r'<headerFooter>.*?</headerFooter>', _orig_xml, _ret.DOTALL)
+        return _m.group(0) if _m else None
+    except Exception as _e:
+        print(f'Footer template warning: {_e}', file=sys.stderr)
+        return None
+
 def genera_foglio(sheet_name, mapping, tmp_path, num_pagina=1, totale_pagine=1):
     """Carica il template, compila il foglio indicato, salva come xlsx."""
     wb = load_workbook(TEMPLATE_PATH)
     ws = wb[sheet_name]
     sostituisci(ws, mapping)
-    # Pulisci pattern residui tipo "NomeManiglia - " o " - " quando versione_maniglia è vuota
-    from openpyxl.cell.cell import MergedCell as _MC
-    import re as _re
-    for _row in ws.iter_rows():
-        for _cell in _row:
-            if isinstance(_cell, _MC): continue
-            if _cell.value and isinstance(_cell.value, str):
-                # Rimuovi " - " finale o iniziale rimasto da *MANIGLIA* - *VERSIONE_MANIGLIA*
-                _v = _re.sub(r'\s*-\s*$', '', _cell.value.strip())
-                _v = _re.sub(r'^\s*-\s*', '', _v)
-                _cell.value = _v if _v else None
-    # Sostituisci segnaposti nel footer — patch diretta XML dopo save
+    # Pulisci pattern residui tipo "NomeManiglia - " o " - " quando versione_maniglia e' vuota
+    from openpyxl.cell.cell import MergedCell as _MC2
+    for _row2 in ws.iter_rows():
+        for _cell2 in _row2:
+            if isinstance(_cell2, _MC2): continue
+            if _cell2.value and isinstance(_cell2.value, str):
+                _v2 = _cell2.value.strip()
+                # Rimuovi trattino finale es: 'NomeManiglia - ' -> 'NomeManiglia'
+                while _v2.endswith(' - '): _v2 = _v2[:-3].rstrip()
+                while _v2.endswith('-'): _v2 = _v2[:-1].rstrip()
+                # Rimuovi trattino iniziale es: ' - ' -> ''
+                while _v2.startswith('- '): _v2 = _v2[2:].lstrip()
+                _cell2.value = _v2 if _v2 else None
+        # Sostituisci segnaposti nel footer — patch diretta XML dopo save
     # (openpyxl aggiunge tag vuoti che LibreOffice headless ignora)
     _footer_num = str(num_pagina)
     _footer_tot = str(totale_pagine)
@@ -307,6 +324,7 @@ def genera_foglio(sheet_name, mapping, tmp_path, num_pagina=1, totale_pagine=1):
     # Patch footer diretto nell'XML: openpyxl aggiunge tag vuoti che LibreOffice ignora
     # Sostituiamo il blocco headerFooter con versione pulita come nel template originale
     import zipfile as _zf, re as _re2
+    _hf_template = _leggi_footer_template(sheet_name)
     _tmp_patch = tmp_path + '_fp'
     try:
         with _zf.ZipFile(tmp_path, 'r') as _zin:
@@ -315,14 +333,12 @@ def genera_foglio(sheet_name, mapping, tmp_path, num_pagina=1, totale_pagine=1):
             for _item, _data in _items:
                 if _item.filename.startswith('xl/worksheets/sheet') and _item.filename.endswith('.xml'):
                     _xml = _data.decode('utf-8')
-                    # Leggi il footer originale dal template e sostituisci i segnaposti
-                    with _zf.ZipFile(TEMPLATE_PATH, 'r') as _zt:
-                        _orig_xml = _zt.read(_item.filename).decode('utf-8')
-                    _m = _re2.search(r'<headerFooter>.*?</headerFooter>', _orig_xml, _re2.DOTALL)
-                    if _m:
-                        _hf_orig = _m.group(0)
-                        _hf_new = _hf_orig.replace('*NUMERO_PAGINA*', _footer_num).replace('*TOTALE_PAGINE*', _footer_tot)
+                    # Usa il footer letto dal template per il foglio corretto
+                    if _hf_template:
+                        _hf_new = _hf_template.replace('*NUMERO_PAGINA*', _footer_num).replace('*TOTALE_PAGINE*', _footer_tot)
                         _xml = _re2.sub(r'<headerFooter>.*?</headerFooter>', _hf_new, _xml, flags=_re2.DOTALL)
+                        if '<headerFooter>' not in _xml:
+                            _xml = _xml.replace('</worksheet>', _hf_new + '</worksheet>')
                     _zout.writestr(_item, _xml.encode('utf-8'))
                 else:
                     _zout.writestr(_item, _data)
