@@ -298,19 +298,29 @@ def genera_foglio(sheet_name, mapping, tmp_path, num_pagina=1, totale_pagine=1):
     wb = load_workbook(TEMPLATE_PATH)
     ws = wb[sheet_name]
     sostituisci(ws, mapping)
-    # Pulisci pattern residui tipo "NomeManiglia - " o " - " quando versione_maniglia e' vuota
+    # Pulisci pattern residui: sostituisci PRIMA con nome+versione combinati
+    # poi pulisci cella per cella i trattini rimasti
     from openpyxl.cell.cell import MergedCell as _MC2
+    _nome_man = mapping.get('*MANIGLIA*', '')
+    _vers_man = mapping.get('*VERSIONE_MANIGLIA*', '')
+    _man_display = _nome_man
+    if _vers_man: _man_display = (_nome_man + ' - ' + _vers_man).strip(' -')
+    # Sostituisci direttamente la cella combinata prima della pulizia generale
     for _row2 in ws.iter_rows():
         for _cell2 in _row2:
             if isinstance(_cell2, _MC2): continue
             if _cell2.value and isinstance(_cell2.value, str):
-                _v2 = _cell2.value.strip()
-                # Rimuovi trattino finale es: 'NomeManiglia - ' -> 'NomeManiglia'
-                while _v2.endswith(' - '): _v2 = _v2[:-3].rstrip()
-                while _v2.endswith('-'): _v2 = _v2[:-1].rstrip()
-                # Rimuovi trattino iniziale es: ' - ' -> ''
-                while _v2.startswith('- '): _v2 = _v2[2:].lstrip()
-                _cell2.value = _v2 if _v2 else None
+                _v2 = _cell2.value
+                # Sostituisci il pattern combinato maniglia - versione
+                if '*MANIGLIA*' in _v2 or '*VERSIONE_MANIGLIA*' in _v2:
+                    _cell2.value = _man_display if _man_display else None
+                    continue
+                # Pulisci trattini residui da altre sostituzioni parziali
+                _v2 = _v2.strip()
+                if _v2 in ('-', ' - ', '- ', ' -'): _cell2.value = None; continue
+                if _v2.endswith(' -') or _v2.endswith(' - '):
+                    _v2 = _v2.rstrip(' -').rstrip()
+                    _cell2.value = _v2 if _v2 else None
         # Sostituisci segnaposti nel footer — patch diretta XML dopo save
     # (openpyxl aggiunge tag vuoti che LibreOffice headless ignora)
     _footer_num = str(num_pagina)
@@ -426,6 +436,7 @@ def genera_preventivo(dati_json, output_path):
         '*ABI*': doc.get('abi',''),
         '*CAB*': doc.get('cab',''),
         '*EMAIL_1*': doc.get('email1',''),
+        '*EMAIL_ORDINI*': doc.get('email_ordini',''),
         '*EMAIL_2*': doc.get('email2',''),
         '*CODICE_SDI*': doc.get('sdi',''),
         '*SDI*': doc.get('sdi',''),
