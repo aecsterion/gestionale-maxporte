@@ -1202,20 +1202,17 @@ async function apriModalInvioPreventivo(docId) {
   const nomeCliente = an.ragione_sociale || '';
 
   // Testo predefinito
-  const testo = `Gentile ${nomeCliente},
-
-in allegato trova il nostro preventivo n° ${numero} relativo alla fornitura di porte interne.
-
-Restiamo a Sua disposizione per qualsiasi chiarimento o per un sopralluogo tecnico gratuito.
-
-Cordiali saluti,
-Max Porte di Rimasti Massimilian
-Tel. 011 9084622
-info@maxporte.it – www.maxporte.it`;
+  const testo = 'Gentile ' + nomeCliente + ',\n\n' +
+    'in allegato trova il nostro preventivo n\u00b0 ' + numero + ' relativo alla fornitura di porte interne.\n\n' +
+    'Restiamo a Sua disposizione per qualsiasi chiarimento o per un sopralluogo tecnico gratuito.\n\n' +
+    'Cordiali saluti,\n' +
+    'Max Porte di Rimasti Massimilian\n' +
+    'Tel. 011 9084622\n' +
+    'info@maxporte.it \u2013 www.maxporte.it';
 
   document.getElementById('invia-email-to').value = emailCliente;
   document.getElementById('invia-email-cc').value = '';
-  document.getElementById('invia-oggetto').value = `Preventivo n° ${numero} – Max Porte`;
+  document.getElementById('invia-oggetto').value = 'Preventivo n\u00b0 ' + numero + ' \u2013 Max Porte';
   document.getElementById('invia-testo').value = testo;
 
   _invioDocId = docId;
@@ -4956,7 +4953,7 @@ async function buildPreventivoPayload(id) {
       cellulare_referente: an.cellulare_referente || '',
       email_referente: an.email || '',
       codice_cliente: an.codice || '',
-      agente: ag.nome ? `${ag.nome} ${ag.cognome}` : '',
+      agente: ag.nome ? (ag.nome + ' ' + ag.cognome) : '',
       dest_nome: doc.indirizzo_destinazione ? an.ragione_sociale : '',
       dest_indirizzo: doc.indirizzo_destinazione || '',
       dest_cap: doc.cap_destinazione || '',
