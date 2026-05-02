@@ -3178,7 +3178,7 @@ async function renderPreventivoDetail(id){
     <div style="display:flex;gap:8px">
       <button class="btn btn-sm" onclick="openConfiguratore('preventivo','\${id}','\${prev.listino}')">+ Aggiungi porta</button>
       <button class="btn btn-sm" onclick="esportaPDF('preventivo','\${id}')">📄 Esporta PDF</button>
-      \${prev.stato==='bozza'?\`<button class="btn btn-sm" onclick="apriModalInvioPreventivo(\'\\${id}\')"nvia</button>\`:''}
+      \${prev.stato==='bozza'?\`<button class="btn btn-sm" onclick="apriModalInvioPreventivo(\'\\${id}\')">Invia</button>\`:''}
       \${prev.stato==='inviato'?\`<button class="btn btn-red btn-sm" onclick="firmaPreventivo('\${id}')">Firma e converti in ordine</button>\`:''}
     </div>
   </div>
