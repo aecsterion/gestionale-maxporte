@@ -3,7 +3,8 @@ const fs = require('fs');
 const path = require('path');
 const spawn = require('child_process').spawn;
 const os = require('os');
-const nodemailer = require('nodemailer');
+let nodemailer;
+try{nodemailer=require('nodemailer');}catch(e){console.warn('nodemailer non disponibile:',e.message);}
 const PORT = process.env.PORT || 3000;
 const HTML = `<!DOCTYPE html>
 <html lang="it">
@@ -5200,7 +5201,10 @@ function generaPDF(payload, callback) {
 // SMTP
 const SMTP_CONFIG={host:'smtps.aruba.it',port:465,secure:true,auth:{user:'commerciale@maxporte.it',pass:process.env.SMTP_PASSWORD||''}};
 const SMTP_FROM='"Max Porte" <commerciale@maxporte.it>';
-function creaTransporter(){return nodemailer.createTransport(SMTP_CONFIG);}
+function creaTransporter(){
+  if(!nodemailer) throw new Error('nodemailer non installato. Aggiungi al package.json.');
+  return nodemailer.createTransport(SMTP_CONFIG);
+}
 
 const server = http.createServer(function(req, res) {
   if (req.method === 'GET' && req.url === '/logo-maxporte.png') {
