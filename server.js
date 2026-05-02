@@ -651,7 +651,7 @@ tr.data-row:hover td{background:var(--beige);cursor:pointer}
   <div class="form-modal" style="max-width:600px">
     <div class="form-modal-head">
       <span class="form-modal-title">Invia preventivo</span>
-      <button class="form-close" onclick="closeForm(\'modal-invia-preventivo\')">x</button>
+      <button class="form-close" onclick="closeForm('modal-invia-preventivo')">x</button>
     </div>
     <div class="form-modal-body">
       <div class="form-field"><label>A *</label><input type="email" id="invia-email-to"></div>
@@ -661,7 +661,7 @@ tr.data-row:hover td{background:var(--beige);cursor:pointer}
       <p style="font-size:12px;color:var(--mid)">Il PDF sara allegato automaticamente</p>
     </div>
     <div class="form-modal-foot">
-      <button class="btn" onclick="closeForm(\'modal-invia-preventivo\')">Annulla</button>
+      <button class="btn" onclick="closeForm('modal-invia-preventivo')">Annulla</button>
       <button class="btn btn-red" id="btn-invia-conferma" onclick="confermaInvioPreventivo()">Invia</button>
     </div>
   </div>
@@ -1233,8 +1233,8 @@ async function apriModalInvioPreventivo(docId){
   var doc=r.data;if(!doc){toast('Preventivo non trovato','err');return;}
   var an=doc.anagrafiche||{};var numero=doc.numero||'preventivo';
   var nome=an.ragione_sociale||'';var email=an.email_principale||an.email||'';
-  var testo='Gentile '+nome+',\n\nin allegato trova il preventivo n. '+numero+'.\n\n'+
-    'Restiamo a Sua disposizione.\n\nCordiali saluti,\nMax Porte\nTel. 011 9084622';
+  var testo='Gentile '+nome+',\\n\\nin allegato trova il preventivo n. '+numero+'.\\n\\n'+
+    'Restiamo a Sua disposizione.\\n\\nCordiali saluti,\\nMax Porte\\nTel. 011 9084622';
   document.getElementById('invia-email-to').value=email;
   document.getElementById('invia-email-cc').value='';
   document.getElementById('invia-oggetto').value='Preventivo n. '+numero+' - Max Porte';
