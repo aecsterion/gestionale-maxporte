@@ -1022,6 +1022,11 @@ async function filterAna(val){
   document.querySelector('#main-content tbody').innerHTML = rows||'<tr><td colspan="7" style="text-align:center;color:var(--mid);padding:24px;font-style:italic">Nessun risultato</td></tr>';
 }
 
+async function editAnagrafica(id){
+  const {data} = await sb.from('anagrafiche').select('*').eq('id',id).single();
+  if(data) openFormAnagrafica(data);
+}
+
 async function openFormAnagrafica(data){
   document.getElementById('form-ana-title').textContent = data?'Modifica anagrafica':'Nuova anagrafica';
   document.getElementById('ana-id').value = data?.id||'';
