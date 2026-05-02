@@ -1070,6 +1070,46 @@ function aggiornaCampiPerTipo(tipo){
   if(fieldEmailOrdini){
     fieldEmailOrdini.style.display = (tipo==='fornitore'||tipo==='entrambi') ? '' : 'none';
   }
+  const sezFornitore = document.getElementById('ana-section-fornitore');
+  if(sezFornitore){
+    sezFornitore.style.display = (tipo==='fornitore'||tipo==='entrambi') ? '' : 'none';
+  }
+}
+
+async function saveAnagrafica(){
+  let valid=true;
+  const req=['ana-tipo','ana-ragione'];
+  req.forEach(id=>{const el=document.getElementById(id);const p=el.closest('.form-field');if(!el.value.trim()){p.classList.add('invalid');valid=false;}else p.classList.remove('invalid');});
+  if(!valid){toast('Compila i campi obbligatori (contrassegnati con *)','err');anaTab('generale',document.querySelectorAll('.form-tab')[0]);return;}
+  const payload={
+    tipo:v('ana-tipo'),canale:v('ana-canale')||null,natura_giuridica:v('ana-natura')||null,
+    ragione_sociale:v('ana-ragione'),partita_iva:v('ana-piva')||null,codice_fiscale:v('ana-cf')||null,
+    regime_fiscale:v('ana-regime')||'ordinario',codice_rea:v('ana-rea')||null,
+    ritenuta_acconto:document.getElementById('ana-ritenuta').checked,
+    indirizzo:v('ana-indirizzo')||null,cap:v('ana-cap')||null,citta:v('ana-citta')||null,
+    provincia:v('ana-provincia')||null,paese:v('ana-paese')||'IT',
+    sede_op_diversa:document.getElementById('ana-sede-op').checked,
+    sede_op_indirizzo:v('ana-so-indirizzo')||null,sede_op_cap:v('ana-so-cap')||null,sede_op_citta:v('ana-so-citta')||null,
+    codice_sdi:v('ana-sdi')||null,pec_fatturazione:v('ana-pec-fatt')||null,pec:v('ana-pec')||null,
+    split_payment:document.getElementById('ana-split').checked,
+    iban:v('ana-iban')||null,bic_swift:v('ana-bic')||null,banca:v('ana-banca')||null,intestatario_conto:v('ana-intestatario')||null,
+    cin:v('ana-cin')||null,abi:v('ana-abi')||null,cab:v('ana-cab')||null,
+    email_principale:v('ana-email-principale')||null,telefono_principale:v('ana-telefono-principale')||null,cellulare_principale:v('ana-cellulare-principale')||null,
+    codice:v('ana-codice')||null,
+    referente:v('ana-referente')||null,email:v('ana-email')||null,email_ordini:v('ana-email-ordini')||null,telefono:v('ana-telefono')||null,
+    cellulare_referente:v('ana-cellulare-referente')||null,
+    condizioni_pagamento:v('ana-pagamento')||null,fido_commerciale:v('ana-fido')||null,agente_id:v('ana-agente-id')||null,
+    categoria_fornitura:v('ana-cat-forn')||null,lead_time_giorni:v('ana-leadtime')||null,
+    valutazione:v('ana-valutazione')||null,note:v('ana-note')||null,stato:'attivo'
+  };
+  const id=document.getElementById('ana-id').value;
+  let error;
+  if(id){const r=await sb.from('anagrafiche').update(payload).eq('id',id);error=r.error;}
+  else{const r=await sb.from('anagrafiche').insert([payload]);error=r.error;}
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast(id?'Anagrafica aggiornata':'Anagrafica salvata','ok');
+  closeForm('form-anagrafica');
+  renderAnagrafiche();
 }
 
 function v(id){const el=document.getElementById(id);return el?el.value.trim():'';}
