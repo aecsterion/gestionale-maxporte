@@ -4,8 +4,11 @@ const path = require('path');
 const spawn = require('child_process').spawn;
 const os = require('os');
 let nodemailer;
-try{nodemailer=require('nodemailer');}catch(e){console.warn('nodemailer non disponibile');}
-const SMTP_CONFIG={host:'smtp.aruba.it',port:587,secure:false,auth:{user:'commerciale@maxporte.it',pass:process.env.SMTP_PASSWORD||''},tls:{rejectUnauthorized:false}};
+try{nodemailer=require('nodemailer');}catch(e){console.warn('nodemailer non disponibile:',e.message);}
+const SMTP_CONFIG={host:'smtps.aruba.it',port:465,secure:true,
+  auth:{user:'commerciale@maxporte.it',pass:process.env.SMTP_PASSWORD||''},
+  connectionTimeout:10000,greetingTimeout:10000,socketTimeout:10000,
+  tls:{rejectUnauthorized:false}};
 const SMTP_FROM='"Max Porte" <commerciale@maxporte.it>';
 function creaTransporter(){
   if(!nodemailer)throw new Error('nodemailer non installato');
@@ -5231,17 +5234,24 @@ const server = http.createServer(function(req, res) {
         generaPDF(d.payload,function(err,pdf){
           console.log('[invia-preventivo] generaPDF callback, err:', err&&err.message);
           if(err){res.writeHead(500,{'Content-Type':'application/json'});res.end(JSON.stringify({ok:false,error:err.message}));return;}
-          console.log('[invia-preventivo] PDF generato, invio email a:', d.email_to);
+          console.log('[invia-preventivo] PDF generato, invio SMTP a:', d.email_to);
           try{
-          creaTransporter().sendMail({
-            from:SMTP_FROM,to:d.email_to,cc:d.email_cc||'',subject:d.oggetto,text:d.testo,
-            attachments:[{filename:d.numero_preventivo+'.pdf',content:pdf,contentType:'application/pdf'}]
-          },function(e2){
-            console.log('[invia-preventivo] sendMail callback, err:', e2&&e2.message);
-            if(e2){res.writeHead(500,{'Content-Type':'application/json'});res.end(JSON.stringify({ok:false,error:e2.message}));}
-            else{res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({ok:true}));}
-          });
-          }catch(smtpErr){console.error('[invia-preventivo] SMTP error:',smtpErr);res.writeHead(500,{'Content-Type':'application/json'});res.end(JSON.stringify({ok:false,error:smtpErr.message}));}
+            const transporter = creaTransporter();
+            transporter.verify(function(verErr){
+              console.log('[invia-preventivo] SMTP verify:', verErr ? verErr.message : 'OK');
+              transporter.sendMail({
+                from:SMTP_FROM,to:d.email_to,cc:d.email_cc||'',subject:d.oggetto,text:d.testo,
+                attachments:[{filename:d.numero_preventivo+'.pdf',content:pdf,contentType:'application/pdf'}]
+              },function(e2,info){
+                console.log('[invia-preventivo] sendMail callback, err:', e2&&e2.message, 'info:', info&&info.messageId);
+                if(e2){res.writeHead(500,{'Content-Type':'application/json'});res.end(JSON.stringify({ok:false,error:e2.message}));}
+                else{res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({ok:true}));}
+              });
+            });
+          }catch(smtpErr){
+            console.error('[invia-preventivo] SMTP error:',smtpErr.message);
+            res.writeHead(500,{'Content-Type':'application/json'});res.end(JSON.stringify({ok:false,error:smtpErr.message}));
+          }
         });
       }catch(e){res.writeHead(400,{'Content-Type':'application/json'});res.end(JSON.stringify({ok:false,error:e.message}));}
     });
