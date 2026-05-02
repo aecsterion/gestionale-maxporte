@@ -414,8 +414,9 @@ tr.data-row:hover td{background:var(--beige);cursor:pointer}
         <div class="form-section">Identificativo</div>
         <div class="form-grid-2">
           <div class="form-field">
-            <label>Codice cliente</label>
-            <input type="text" id="ana-codice" placeholder="Es: CLI-001" style="text-transform:uppercase">
+            <label>Codice cliente / fornitore</label>
+            <input type="text" id="ana-codice" placeholder="Generato automaticamente" style="text-transform:uppercase">
+            <small id="ana-codice-hint" style="color:var(--mid);font-size:11px;margin-top:2px">Il codice viene assegnato automaticamente al salvataggio. Puoi modificarlo manualmente.</small>
           </div>
         </div>
       </div>
@@ -1081,6 +1082,27 @@ function aggiornaCampiPerTipo(tipo){
   }
 }
 
+async function generaCodiceAnagrafica(tipo){
+  const prefisso = tipo==='cliente' ? 'C' : tipo==='fornitore' ? 'F' : 'CF';
+  // Cerca il massimo codice esistente con questo prefisso
+  const {data} = await sb.from('anagrafiche')
+    .select('codice')
+    .like('codice', prefisso + '-%')
+    .order('codice', {ascending: false})
+    .limit(20);
+  let maxNum = 10500; // parte da 10501
+  if(data && data.length){
+    for(const row of data){
+      const match = row.codice && row.codice.match(/-(\d+)$/);
+      if(match){
+        const n = parseInt(match[1]);
+        if(n > maxNum) maxNum = n;
+      }
+    }
+  }
+  return prefisso + '-' + (maxNum + 1);
+}
+
 async function saveAnagrafica(){
   let valid=true;
   const req=['ana-tipo','ana-ragione'];
@@ -1100,7 +1122,16 @@ async function saveAnagrafica(){
     iban:v('ana-iban')||null,bic_swift:v('ana-bic')||null,banca:v('ana-banca')||null,intestatario_conto:v('ana-intestatario')||null,
     cin:v('ana-cin')||null,abi:v('ana-abi')||null,cab:v('ana-cab')||null,
     email_principale:v('ana-email-principale')||null,telefono_principale:v('ana-telefono-principale')||null,cellulare_principale:v('ana-cellulare-principale')||null,
-    codice:v('ana-codice')||null,
+    codice: await (async()=>{
+      const manuale = v('ana-codice');
+      if(manuale) return manuale;
+      const tipo = v('ana-tipo');
+      if(!tipo) return null;
+      // Solo per nuovi inserimenti (non update)
+      const id = document.getElementById('ana-id').value;
+      if(id) return null; // in update non sovrascrivere
+      return await generaCodiceAnagrafica(tipo);
+    })(),
     referente:v('ana-referente')||null,email:v('ana-email')||null,email_ordini:v('ana-email-ordini')||null,telefono:v('ana-telefono')||null,
     cellulare_referente:v('ana-cellulare-referente')||null,
     condizioni_pagamento:v('ana-pagamento')||null,fido_commerciale:v('ana-fido')||null,agente_id:v('ana-agente-id')||null,
