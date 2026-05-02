@@ -5,7 +5,7 @@ from openpyxl import load_workbook
 from openpyxl.cell.cell import MergedCell
 
 TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'template_preventivo.xlsx')
-VERSION = "2026-05-02-v7"  # marker deploy
+VERSION = "2026-05-02-v9"  # marker deploy
 if not os.path.exists(TEMPLATE_PATH):
     for c in ['/app/template_preventivo.xlsx', os.path.join(os.getcwd(), 'template_preventivo.xlsx')]:
         if os.path.exists(c): TEMPLATE_PATH = c; break
@@ -139,8 +139,11 @@ def nascondi_vuote(ws, sheet_name=None):
             v22 = cells.get(22)
             v36 = cells.get(36)
             extra_ok = ok(v22.value if v22 else None) or ok(v36.value if v36 else None)
-            # Nascondi solo se sia descrizione che prezzo listino sono vuoti
-            if not desc_ok and not prz_ok and not extra_ok:
+            # Controlla col33 (prezzo netto) — copre righe con solo prezzo scontato
+            v33 = cells.get(33)
+            netto_ok = ok(v33.value if v33 else None)
+            # Nascondi solo se tutti i valori rilevanti sono vuoti
+            if not desc_ok and not prz_ok and not extra_ok and not netto_ok:
                 ws.row_dimensions[row[0].row].hidden = True
 
     # Nascondi righe riepilogo opzionali con valore vuoto (col 37)
@@ -194,7 +197,6 @@ def map_riga(r, sc):
         '*SERRATURA*': r.get('serratura',''),
         '*SPALLA*': r.get('spalla',''),
         '*FERRAMENTA*': r.get('ferramenta',''),
-        '*MANIGLIA* - *VERSIONE_MANIGLIA*': '',
         '*MANIGLIA*': r.get('maniglia',''),
         '*VERSIONE_MANIGLIA*': r.get('versione_maniglia',''),
         '*COLORE_MANIGLIA*': r.get('colore_maniglia',''),
@@ -327,6 +329,14 @@ def genera_foglio(sheet_name, mapping, tmp_path, num_pagina=1, totale_pagine=1):
     _footer_tot = str(totale_pagine)
     pulisci_euro_vuoti(ws, sheet_name)
     nascondi_vuote(ws, sheet_name)
+    # Forza visibile riga Stipite se codice spalla valorizzato o prezzo_telaio > 0
+    _spalla_val = mapping.get('*SPALLA*', '')
+    _prezzo_telaio = mapping.get('prezzo_telaio', 0) if isinstance(mapping, dict) else 0
+    if _spalla_val or float(_prezzo_telaio or 0) > 0:
+        _stipite_rows = {'PRIMA_PAGINA': 46, 'PAGINE_INTERMEDIE': 34}
+        _sr = _stipite_rows.get(sheet_name)
+        if _sr:
+            ws.row_dimensions[_sr].hidden = False
     # Rimuovi gli altri fogli
     for s in list(wb.sheetnames):
         if s != sheet_name: del wb[s]

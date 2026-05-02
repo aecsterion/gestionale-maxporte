@@ -4832,7 +4832,7 @@ async function esportaPDF(tipo, id) {
         finitura: r.nome_finitura || '',
         tipologia: r.nome_apertura || '',
         senso_apertura: r.senso_apertura || '',
-        spalla: r.codice_spalla || '',
+        spalla: r.codice_spalla || (r.spessore_muro_cm ? r.spessore_muro_cm+'cm' : ''),
         ferramenta: r.nome_ferramenta || '',
         serratura: r.nome_serratura || '',
         maniglia: r.nome_maniglia || '',
