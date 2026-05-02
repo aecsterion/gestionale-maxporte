@@ -5227,15 +5227,21 @@ const server = http.createServer(function(req, res) {
     req.on('end',function(){
       try{
         const d=JSON.parse(body);
+        console.log('[invia-preventivo] avvio generaPDF');
         generaPDF(d.payload,function(err,pdf){
+          console.log('[invia-preventivo] generaPDF callback, err:', err&&err.message);
           if(err){res.writeHead(500,{'Content-Type':'application/json'});res.end(JSON.stringify({ok:false,error:err.message}));return;}
+          console.log('[invia-preventivo] PDF generato, invio email a:', d.email_to);
+          try{
           creaTransporter().sendMail({
             from:SMTP_FROM,to:d.email_to,cc:d.email_cc||'',subject:d.oggetto,text:d.testo,
             attachments:[{filename:d.numero_preventivo+'.pdf',content:pdf,contentType:'application/pdf'}]
           },function(e2){
+            console.log('[invia-preventivo] sendMail callback, err:', e2&&e2.message);
             if(e2){res.writeHead(500,{'Content-Type':'application/json'});res.end(JSON.stringify({ok:false,error:e2.message}));}
             else{res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({ok:true}));}
           });
+          }catch(smtpErr){console.error('[invia-preventivo] SMTP error:',smtpErr);res.writeHead(500,{'Content-Type':'application/json'});res.end(JSON.stringify({ok:false,error:smtpErr.message}));}
         });
       }catch(e){res.writeHead(400,{'Content-Type':'application/json'});res.end(JSON.stringify({ok:false,error:e.message}));}
     });
