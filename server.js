@@ -2661,6 +2661,7 @@ async function aggiungiRigaAlDocumento(){
     codice_spalla:CFG.spalla, tipo_accessorio_telaio:CFG.accessorio_telaio,
     codice_ferramenta:CFG.ferramenta, nome_ferramenta:CFG.nome_ferramenta,
     codice_maniglia:CFG.maniglia, nome_maniglia:CFG.nome_maniglia,
+    codice_colore_maniglia:CFG.colore_maniglia, nome_colore_maniglia:CFG.nome_colore_maniglia||'',
     prezzo_base:CFG.p_base, prezzo_vetro:CFG.p_vetro,
     prezzo_finitura:CFG.p_finitura, prezzo_bugna:CFG.p_bugna,
     prezzo_inserto:CFG.p_inserto, prezzo_apertura:CFG.p_apertura,

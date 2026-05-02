@@ -5,7 +5,7 @@ from openpyxl import load_workbook
 from openpyxl.cell.cell import MergedCell
 
 TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'template_preventivo.xlsx')
-VERSION = "2026-05-02-v4"  # marker deploy
+VERSION = "2026-05-02-v6"  # marker deploy
 if not os.path.exists(TEMPLATE_PATH):
     for c in ['/app/template_preventivo.xlsx', os.path.join(os.getcwd(), 'template_preventivo.xlsx')]:
         if os.path.exists(c): TEMPLATE_PATH = c; break
@@ -283,21 +283,54 @@ def genera_foglio(sheet_name, mapping, tmp_path, num_pagina=1, totale_pagine=1):
     wb = load_workbook(TEMPLATE_PATH)
     ws = wb[sheet_name]
     sostituisci(ws, mapping)
-    # Sostituisci segnaposti nel footer
-    for attr in ('oddFooter', 'evenFooter', 'firstFooter'):
-        hf = getattr(ws, attr, None)
-        if hf:
-            for side in ('left', 'center', 'right'):
-                part = getattr(hf, side, None)
-                if part and part.text:
-                    part.text = part.text.replace('*NUMERO_PAGINA*', str(num_pagina))
-                    part.text = part.text.replace('*TOTALE_PAGINE*', str(totale_pagine))
+    # Pulisci pattern residui tipo "NomeManiglia - " o " - " quando versione_maniglia è vuota
+    from openpyxl.cell.cell import MergedCell as _MC
+    import re as _re
+    for _row in ws.iter_rows():
+        for _cell in _row:
+            if isinstance(_cell, _MC): continue
+            if _cell.value and isinstance(_cell.value, str):
+                # Rimuovi " - " finale o iniziale rimasto da *MANIGLIA* - *VERSIONE_MANIGLIA*
+                _v = _re.sub(r'\s*-\s*$', '', _cell.value.strip())
+                _v = _re.sub(r'^\s*-\s*', '', _v)
+                _cell.value = _v if _v else None
+    # Sostituisci segnaposti nel footer — patch diretta XML dopo save
+    # (openpyxl aggiunge tag vuoti che LibreOffice headless ignora)
+    _footer_num = str(num_pagina)
+    _footer_tot = str(totale_pagine)
     pulisci_euro_vuoti(ws, sheet_name)
     nascondi_vuote(ws, sheet_name)
     # Rimuovi gli altri fogli
     for s in list(wb.sheetnames):
         if s != sheet_name: del wb[s]
     wb.save(tmp_path)
+    # Patch footer diretto nell'XML: openpyxl aggiunge tag vuoti che LibreOffice ignora
+    # Sostituiamo il blocco headerFooter con versione pulita come nel template originale
+    import zipfile as _zf, re as _re2
+    _tmp_patch = tmp_path + '_fp'
+    try:
+        with _zf.ZipFile(tmp_path, 'r') as _zin:
+            _items = [(_i, _zin.read(_i.filename)) for _i in _zin.infolist()]
+        with _zf.ZipFile(_tmp_patch, 'w', _zf.ZIP_DEFLATED) as _zout:
+            for _item, _data in _items:
+                if _item.filename.startswith('xl/worksheets/sheet') and _item.filename.endswith('.xml'):
+                    _xml = _data.decode('utf-8')
+                    # Leggi il footer originale dal template e sostituisci i segnaposti
+                    with _zf.ZipFile(TEMPLATE_PATH, 'r') as _zt:
+                        _orig_xml = _zt.read(_item.filename).decode('utf-8')
+                    _m = _re2.search(r'<headerFooter>.*?</headerFooter>', _orig_xml, _re2.DOTALL)
+                    if _m:
+                        _hf_orig = _m.group(0)
+                        _hf_new = _hf_orig.replace('*NUMERO_PAGINA*', _footer_num).replace('*TOTALE_PAGINE*', _footer_tot)
+                        _xml = _re2.sub(r'<headerFooter>.*?</headerFooter>', _hf_new, _xml, flags=_re2.DOTALL)
+                    _zout.writestr(_item, _xml.encode('utf-8'))
+                else:
+                    _zout.writestr(_item, _data)
+        os.replace(_tmp_patch, tmp_path)
+    except Exception as _e:
+        print(f"Footer patch warning: {_e}", file=sys.stderr)
+        try: os.remove(_tmp_patch)
+        except: pass
     # Ripristina media e drawing dal template (openpyxl le perde)
     _ripristina_media(tmp_path)
     return tmp_path
