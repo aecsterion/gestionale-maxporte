@@ -10,7 +10,7 @@ const HTML = `<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Max Porte — Gestionale</title>
-<!-- MAXPORTE-BUILD-v24APR2026 -->
+<!-- MAXPORTE-BUILD-v02MAG2026 -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2">
 
 
@@ -396,6 +396,28 @@ tr.data-row:hover td{background:var(--beige);cursor:pointer}
             <label for="ana-ritenuta" style="text-transform:none;letter-spacing:0;font-size:13px;color:var(--dark)">Soggetto a ritenuta d'acconto</label>
           </div>
         </div>
+        <div class="form-section">Contatti principali</div>
+        <div class="form-grid">
+          <div class="form-field">
+            <label>Email</label>
+            <input type="email" id="ana-email-principale" placeholder="info@azienda.it">
+          </div>
+          <div class="form-field">
+            <label>Telefono</label>
+            <input type="tel" id="ana-telefono-principale" placeholder="+39 011 123456">
+          </div>
+          <div class="form-field">
+            <label>Cellulare</label>
+            <input type="tel" id="ana-cellulare-principale" placeholder="+39 333 1234567">
+          </div>
+        </div>
+        <div class="form-section">Identificativo</div>
+        <div class="form-grid-2">
+          <div class="form-field">
+            <label>Codice cliente</label>
+            <input type="text" id="ana-codice" placeholder="Es: CLI-001" style="text-transform:uppercase">
+          </div>
+        </div>
       </div>
 
       <!-- TAB SEDE -->
@@ -501,6 +523,21 @@ tr.data-row:hover td{background:var(--beige);cursor:pointer}
             <input type="text" id="ana-intestatario" placeholder="Se diverso da ragione sociale">
           </div>
         </div>
+        <div class="form-section">CIN / ABI / CAB</div>
+        <div class="form-grid">
+          <div class="form-field">
+            <label>CIN</label>
+            <input type="text" id="ana-cin" placeholder="Es: X" maxlength="1" style="text-transform:uppercase">
+          </div>
+          <div class="form-field">
+            <label>ABI</label>
+            <input type="text" id="ana-abi" placeholder="Es: 05428" maxlength="5">
+          </div>
+          <div class="form-field">
+            <label>CAB</label>
+            <input type="text" id="ana-cab" placeholder="Es: 11101" maxlength="5">
+          </div>
+        </div>
       </div>
 
       <!-- TAB COMMERCIALE -->
@@ -512,15 +549,21 @@ tr.data-row:hover td{background:var(--beige);cursor:pointer}
             <input type="text" id="ana-referente" placeholder="Nome Cognome">
           </div>
           <div class="form-field">
-            <label>Email</label>
-            <input type="email" id="ana-email" placeholder="info@azienda.it">
+            <label>Email referente</label>
+            <input type="email" id="ana-email" placeholder="referente@azienda.it">
           </div>
           <div class="form-field">
-            <label>Telefono</label>
+            <label>Telefono referente</label>
             <input type="tel" id="ana-telefono" placeholder="+39 011 123456">
           </div>
         </div>
-        <div class="form-field" style="margin-bottom:10px">
+        <div class="form-grid-2" style="margin-bottom:10px">
+          <div class="form-field">
+            <label>Cellulare referente</label>
+            <input type="tel" id="ana-cellulare-referente" placeholder="+39 333 1234567">
+          </div>
+        </div>
+        <div class="form-field" style="margin-bottom:10px" id="field-email-ordini">
           <label>Email ordini</label>
           <input type="email" id="ana-email-ordini" placeholder="ordini@azienda.it (per fornitori)">
         </div>
@@ -998,7 +1041,11 @@ async function openFormAnagrafica(data){
     'ana-provincia':data?.provincia||'','ana-paese':data?.paese||'IT',
     'ana-sdi':data?.codice_sdi||'','ana-pec-fatt':data?.pec_fatturazione||'','ana-pec':data?.pec||'',
     'ana-iban':data?.iban||'','ana-bic':data?.bic_swift||'','ana-banca':data?.banca||'','ana-intestatario':data?.intestatario_conto||'',
+    'ana-cin':data?.cin||'','ana-abi':data?.abi||'','ana-cab':data?.cab||'',
+    'ana-email-principale':data?.email_principale||'','ana-telefono-principale':data?.telefono_principale||'','ana-cellulare-principale':data?.cellulare_principale||'',
+    'ana-codice':data?.codice||'',
     'ana-referente':data?.referente||'','ana-email':data?.email||'','ana-email-ordini':data?.email_ordini||'','ana-telefono':data?.telefono||'',
+    'ana-cellulare-referente':data?.cellulare_referente||'',
     'ana-pagamento':data?.condizioni_pagamento||'','ana-fido':data?.fido_commerciale||'',
     'ana-cat-forn':data?.categoria_fornitura||'','ana-leadtime':data?.lead_time_giorni||'','ana-valutazione':data?.valutazione||'',
     'ana-note':data?.note||''
@@ -1019,58 +1066,10 @@ async function openFormAnagrafica(data){
 }
 
 function aggiornaCampiPerTipo(tipo){
-  // Sezioni che variano per tipo
-  const isCliente = tipo==='cliente'||tipo==='entrambi';
-  const isFornitore = tipo==='fornitore'||tipo==='entrambi';
-
-  // Sezione "Solo fornitori" nel tab commerciale
-  const fornSection = document.getElementById('ana-section-fornitore');
-  if(fornSection) fornSection.style.display = isFornitore ? 'block' : 'none';
-
-  // Sezione agente e sconti — solo per clienti
-  const clienteSection = document.getElementById('ana-section-cliente');
-  if(clienteSection) clienteSection.style.display = isCliente ? 'block' : 'none';
-
-  // SDI e fatturazione — sempre visibile ma etichetta cambia
-  const sdiLabel = document.getElementById('ana-sdi-label');
-  if(sdiLabel) sdiLabel.textContent = isFornitore&&!isCliente ? 'Codice SDI fornitore' : 'Codice SDI';
-}
-
-async function editAnagrafica(id){
-  const {data} = await sb.from('anagrafiche').select('*').eq('id',id).single();
-  if(data) openFormAnagrafica(data);
-}
-
-async function saveAnagrafica(){
-  let valid=true;
-  const req=['ana-tipo','ana-ragione'];
-  req.forEach(id=>{const el=document.getElementById(id);const p=el.closest('.form-field');if(!el.value.trim()){p.classList.add('invalid');valid=false;}else p.classList.remove('invalid');});
-  if(!valid){toast('Compila i campi obbligatori (contrassegnati con *)','err');anaTab('generale',document.querySelectorAll('.form-tab')[0]);return;}
-  const payload={
-    tipo:v('ana-tipo'),canale:v('ana-canale')||null,natura_giuridica:v('ana-natura')||null,
-    ragione_sociale:v('ana-ragione'),partita_iva:v('ana-piva')||null,codice_fiscale:v('ana-cf')||null,
-    regime_fiscale:v('ana-regime')||'ordinario',codice_rea:v('ana-rea')||null,
-    ritenuta_acconto:document.getElementById('ana-ritenuta').checked,
-    indirizzo:v('ana-indirizzo')||null,cap:v('ana-cap')||null,citta:v('ana-citta')||null,
-    provincia:v('ana-provincia')||null,paese:v('ana-paese')||'IT',
-    sede_op_diversa:document.getElementById('ana-sede-op').checked,
-    sede_op_indirizzo:v('ana-so-indirizzo')||null,sede_op_cap:v('ana-so-cap')||null,sede_op_citta:v('ana-so-citta')||null,
-    codice_sdi:v('ana-sdi')||null,pec_fatturazione:v('ana-pec-fatt')||null,pec:v('ana-pec')||null,
-    split_payment:document.getElementById('ana-split').checked,
-    iban:v('ana-iban')||null,bic_swift:v('ana-bic')||null,banca:v('ana-banca')||null,intestatario_conto:v('ana-intestatario')||null,
-    referente:v('ana-referente')||null,email:v('ana-email')||null,email_ordini:v('ana-email-ordini')||null,telefono:v('ana-telefono')||null,
-    condizioni_pagamento:v('ana-pagamento')||null,fido_commerciale:v('ana-fido')||null,agente_id:v('ana-agente-id')||null,
-    categoria_fornitura:v('ana-cat-forn')||null,lead_time_giorni:v('ana-leadtime')||null,
-    valutazione:v('ana-valutazione')||null,note:v('ana-note')||null,stato:'attivo'
-  };
-  const id=document.getElementById('ana-id').value;
-  let error;
-  if(id){const r=await sb.from('anagrafiche').update(payload).eq('id',id);error=r.error;}
-  else{const r=await sb.from('anagrafiche').insert([payload]);error=r.error;}
-  if(error){toast('Errore: '+error.message,'err');return;}
-  toast(id?'Anagrafica aggiornata':'Anagrafica salvata','ok');
-  closeForm('form-anagrafica');
-  renderAnagrafiche();
+  const fieldEmailOrdini = document.getElementById('field-email-ordini');
+  if(fieldEmailOrdini){
+    fieldEmailOrdini.style.display = (tipo==='fornitore'||tipo==='entrambi') ? '' : 'none';
+  }
 }
 
 function v(id){const el=document.getElementById(id);return el?el.value.trim():'';}
@@ -2871,7 +2870,10 @@ async function salvaNuovoDoc(){
       listino, sconto1:sc1, sconto2:sc2,
       indirizzo_destinazione:ind, cap_destinazione:cap,
       citta_destinazione:cit, provincia_destinazione:prv,
-      trasporto, note,
+      trasporto,
+      resa: document.getElementById('ndoc-resa')?.value || 'Franco fabbrica',
+      riferimento_cliente: document.getElementById('ndoc-rif-cliente')?.value?.trim() || null,
+      note,
       totale_imponibile:imponibile, totale_netto:netto,
       provvigione_pct:provvPct, provvigione_euro:provvEuro,
       creato_da:currentUser?.id,
@@ -4720,15 +4722,21 @@ async function esportaPDF(tipo, id) {
         paese: an.paese || 'Italia',
         partita_iva: an.partita_iva || '',
         codice_fiscale: an.codice_fiscale || '',
-        telefono: an.telefono || '',
-        cellulare: an.cellulare || '',
-        email1: an.email || '',
+        telefono: an.telefono_principale || '',
+        cellulare: an.cellulare_principale || '',
+        email1: an.email_principale || '',
         email2: an.email2 || '',
         sdi: an.codice_sdi || '',
         pec: an.pec_fatturazione || an.pec || '',
+        pec_fatturazione: an.pec_fatturazione || '',
         banca: an.banca || '',
-        cin_abi_cab: an.cin_abi_cab || '',
+        cin: an.cin || '',
+        abi: an.abi || '',
+        cab: an.cab || '',
         referente: an.referente || '',
+        telefono_referente: an.telefono || '',
+        cellulare_referente: an.cellulare_referente || '',
+        email_referente: an.email || '',
         codice_cliente: an.codice || '',
         agente: ag.nome ? \`\${ag.nome} \${ag.cognome}\` : '',
         // Destinazione
@@ -4741,7 +4749,7 @@ async function esportaPDF(tipo, id) {
         dest_riferimenti: doc.riferimenti_destinazione || '',
         // Condizioni
         trasporto: doc.trasporto || '',
-        resa: an.resa || 'Franco fabbrica',
+        resa: doc.resa || 'Franco fabbrica',
         imballo: an.tipo_imballo || 'Sì',
         condizioni_pagamento: an.condizioni_pagamento || '',
         validita_offerta: doc.validita_offerta || '30',
@@ -4891,6 +4899,20 @@ async function esportaPDF(tipo, id) {
             <option value="Cliente">A cura del cliente</option>
             <option value="Vettore">A cura del vettore</option>
           </select>
+        </div>
+        <div class="form-field">
+          <label>Resa</label>
+          <select id="ndoc-resa">
+            <option value="Franco fabbrica">Franco fabbrica</option>
+            <option value="Franco destino">Franco destino</option>
+            <option value="EXW">EXW — Ex Works</option>
+            <option value="DAP">DAP — Delivered at Place</option>
+            <option value="DDP">DDP — Delivered Duty Paid</option>
+          </select>
+        </div>
+        <div class="form-field" style="grid-column:1/-1">
+          <label>Vostro riferimento</label>
+          <input type="text" id="ndoc-rif-cliente" placeholder="Es: ordine n° 123, progetto Rossi...">
         </div>
         <div class="form-field">
           <label>Sconto 1 (%)</label>

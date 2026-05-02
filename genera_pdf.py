@@ -5,7 +5,7 @@ from openpyxl import load_workbook
 from openpyxl.cell.cell import MergedCell
 
 TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'template_preventivo.xlsx')
-VERSION = "2026-05-02-v2"  # marker deploy
+VERSION = "2026-05-02-v4"  # marker deploy
 if not os.path.exists(TEMPLATE_PATH):
     for c in ['/app/template_preventivo.xlsx', os.path.join(os.getcwd(), 'template_preventivo.xlsx')]:
         if os.path.exists(c): TEMPLATE_PATH = c; break
@@ -278,11 +278,20 @@ def xlsx_to_pdf(xlsx_path, out_dir):
         print(f"LO stdout: {r.stdout[:300]}", file=sys.stderr)
     return pdf if os.path.exists(pdf) else None
 
-def genera_foglio(sheet_name, mapping, tmp_path):
+def genera_foglio(sheet_name, mapping, tmp_path, num_pagina=1, totale_pagine=1):
     """Carica il template, compila il foglio indicato, salva come xlsx."""
     wb = load_workbook(TEMPLATE_PATH)
     ws = wb[sheet_name]
     sostituisci(ws, mapping)
+    # Sostituisci segnaposti nel footer
+    for attr in ('oddFooter', 'evenFooter', 'firstFooter'):
+        hf = getattr(ws, attr, None)
+        if hf:
+            for side in ('left', 'center', 'right'):
+                part = getattr(hf, side, None)
+                if part and part.text:
+                    part.text = part.text.replace('*NUMERO_PAGINA*', str(num_pagina))
+                    part.text = part.text.replace('*TOTALE_PAGINE*', str(totale_pagine))
     pulisci_euro_vuoti(ws, sheet_name)
     nascondi_vuote(ws, sheet_name)
     # Rimuovi gli altri fogli
@@ -364,11 +373,19 @@ def genera_preventivo(dati_json, output_path):
         '*CONDIZIONI_DI_PAGAMENTO*': doc.get('condizioni_pagamento',''),
         '*BANCA_DI_APPOGGIO*': doc.get('banca',''),
         '*CIN* *ABI* *CAB*': doc.get('cin_abi_cab',''),
+        '*CIN*': doc.get('cin',''),
+        '*ABI*': doc.get('abi',''),
+        '*CAB*': doc.get('cab',''),
         '*EMAIL_1*': doc.get('email1',''),
         '*EMAIL_2*': doc.get('email2',''),
         '*CODICE_SDI*': doc.get('sdi',''),
         '*SDI*': doc.get('sdi',''),
         '*PEC*': doc.get('pec',''),
+        '*PEC_FATTURAZIONE*': doc.get('pec_fatturazione',''),
+        '*REFERENTE*': doc.get('referente',''),
+        '*TELEFONO_REFERENTE*': doc.get('telefono_referente',''),
+        '*CELLULARE_REFERENTE*': doc.get('cellulare_referente',''),
+        '*EMAIL_REFERENTE*': doc.get('email_referente',''),
         '*GIORNI_VALIDITÀ_OFFERTA*': str(doc.get('validita_offerta','30')),
         '*BARCODE_DOCUMENTO*': '',
         '*SOMMA_TOTALI_POSIZIONI*': fmt_euro(tot_imp),
@@ -388,19 +405,20 @@ def genera_preventivo(dati_json, output_path):
     pdf_files = []
 
     # PRIMA PAGINA
+    totale_pagine = 1 + len(righe[1:]) + 1  # prima + intermedie + finale
     p = os.path.join(tmp_dir, f'{base}_p1.xlsx')
-    genera_foglio('PRIMA_PAGINA', {**md, **map_riga(righe[0], sc1)}, p)
+    genera_foglio('PRIMA_PAGINA', {**md, **map_riga(righe[0], sc1)}, p, num_pagina=1, totale_pagine=totale_pagine)
     xlsx_files.append(p)
 
     # PAGINE INTERMEDIE (pos 2..N)
     for i, riga in enumerate(righe[1:], 2):
         p = os.path.join(tmp_dir, f'{base}_p{i}.xlsx')
-        genera_foglio('PAGINE_INTERMEDIE', {**md, **map_riga(riga, sc1)}, p)
+        genera_foglio('PAGINE_INTERMEDIE', {**md, **map_riga(riga, sc1)}, p, num_pagina=i, totale_pagine=totale_pagine)
         xlsx_files.append(p)
 
     # PAGINA FINALE
     p = os.path.join(tmp_dir, f'{base}_fin.xlsx')
-    genera_foglio('PAGINA_FINALE', {**md}, p)
+    genera_foglio('PAGINA_FINALE', {**md}, p, num_pagina=totale_pagine, totale_pagine=totale_pagine)
     xlsx_files.append(p)
 
     # Converti ogni xlsx in PDF
