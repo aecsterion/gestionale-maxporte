@@ -1244,7 +1244,9 @@ async function apriModalInvioPreventivo(docId){
   ensureModalInBody('modal-invia-preventivo').classList.add('open');
 }
 async function confermaInvioPreventivo(){
+  console.log('conferma invio chiamata');
   var emailTo=document.getElementById('invia-email-to').value.trim();
+  console.log('emailTo:', emailTo);
   var oggetto=document.getElementById('invia-oggetto').value.trim();
   var testo=document.getElementById('invia-testo').value.trim();
   if(!emailTo||!oggetto||!testo){toast('Compila tutti i campi','err');return;}
@@ -5212,6 +5214,11 @@ const server = http.createServer(function(req, res) {
         });
       } catch(e) { res.writeHead(400,{'Content-Type':'text/plain'}); res.end('JSON: '+e.message); }
     });
+    return;
+  }
+  if(req.method==='GET'&&req.url==='/ping-invia'){
+    res.writeHead(200,{'Content-Type':'application/json'});
+    res.end(JSON.stringify({ok:true,msg:'route attiva'}));
     return;
   }
   if(req.method==='POST'&&req.url==='/invia-preventivo'){
