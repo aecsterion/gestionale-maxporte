@@ -5,7 +5,7 @@ const spawn = require('child_process').spawn;
 const os = require('os');
 let nodemailer;
 try{nodemailer=require('nodemailer');}catch(e){console.warn('nodemailer non disponibile');}
-const SMTP_CONFIG={host:'smtps.aruba.it',port:465,secure:true,auth:{user:'commerciale@maxporte.it',pass:process.env.SMTP_PASSWORD||''}};
+const SMTP_CONFIG={host:'smtp.aruba.it',port:587,secure:false,auth:{user:'commerciale@maxporte.it',pass:process.env.SMTP_PASSWORD||''},tls:{rejectUnauthorized:false}};
 const SMTP_FROM='"Max Porte" <commerciale@maxporte.it>';
 function creaTransporter(){
   if(!nodemailer)throw new Error('nodemailer non installato');
