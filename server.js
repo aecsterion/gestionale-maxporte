@@ -3172,6 +3172,7 @@ async function salvaNuovoDoc(){
     };
 
     let docId, docNumero;
+    const RIGHE_FIELDS = ['codice_serie','nome_serie','codice_modello','nome_modello','codice_finitura','nome_finitura','pannello_bugna','codice_colore_alu','nome_colore_alu','codice_colore_pietra','nome_colore_pietra','codice_tipo_vetro','nome_tipo_vetro','codice_apertura','nome_apertura','senso_apertura','larghezza_mm','altezza_mm','misura_custom','spessore_muro_cm','spessore_muro_mm','codice_spalla','tipo_accessorio_telaio','codice_ferramenta','nome_ferramenta','codice_maniglia','nome_maniglia','codice_colore_maniglia','nome_colore_maniglia','prezzo_base','prezzo_vetro','prezzo_finitura','prezzo_bugna','prezzo_inserto','prezzo_apertura','prezzo_telaio','prezzo_accessorio_telaio','prezzo_ferramenta','prezzo_maniglia','prezzo_extra_incisioni','prezzo_unitario','quantita','sconto_riga','prezzo_totale_riga','note_riga','stanza'];
 
     if(editId){
       // MODIFICA — update del documento esistente (senza toccare numero/creato_da)
@@ -3185,7 +3186,6 @@ async function salvaNuovoDoc(){
       const tabRighe = mode==='preventivo'?'righe_preventivo':'righe_ordine';
       const fk = mode==='preventivo'?'preventivo_id':'ordine_id';
       await sb.from(tabRighe).delete().eq(fk, editId);
-      const RIGHE_FIELDS = ['codice_serie','nome_serie','codice_modello','nome_modello','codice_finitura','nome_finitura','pannello_bugna','codice_colore_alu','nome_colore_alu','codice_colore_pietra','nome_colore_pietra','codice_tipo_vetro','nome_tipo_vetro','codice_apertura','nome_apertura','senso_apertura','larghezza_mm','altezza_mm','misura_custom','spessore_muro_cm','spessore_muro_mm','codice_spalla','tipo_accessorio_telaio','codice_ferramenta','nome_ferramenta','codice_maniglia','nome_maniglia','codice_colore_maniglia','nome_colore_maniglia','prezzo_base','prezzo_vetro','prezzo_finitura','prezzo_bugna','prezzo_inserto','prezzo_apertura','prezzo_telaio','prezzo_accessorio_telaio','prezzo_ferramenta','prezzo_maniglia','prezzo_extra_incisioni','prezzo_unitario','quantita','sconto_riga','prezzo_totale_riga','note_riga','stanza'];
       const righe = CFG_RIGHE.map((r,i)=>{const o={[fk]:editId,riga_numero:i+1};RIGHE_FIELDS.forEach(k=>{if(r[k]!==undefined)o[k]=r[k];});return o;});
       const {error:errRighe} = await sb.from(tabRighe).insert(righe);
       if(errRighe){ toast('Errore salvataggio righe: '+errRighe.message,'err'); return; }
