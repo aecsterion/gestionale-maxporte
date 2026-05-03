@@ -4762,9 +4762,7 @@ function aggiungiRegolaBtn(btn){
 async function aggiungiRegola(aTipo, aCodice, aNome, bTipo, bCodice, bNome){
   const {error}=await sb.from('regole_compatibilita').insert([{
     entita_a_tipo:aTipo, entita_a_codice:aCodice, entita_a_nome:aNome,
-    entita_b_tipo:bTipo, entita_b_codice:bCodice, entita_b_nome:bNome,
-    creato_da:currentUser?.id,
-    nome_compilatore:currentNomeUtente||currentUser?.email||'—'
+    entita_b_tipo:bTipo, entita_b_codice:bCodice, entita_b_nome:bNome
   }]);
   if(error){toast('Già esiste o errore: '+error.message,'err');return;}
   toast('Regola aggiunta','ok');
