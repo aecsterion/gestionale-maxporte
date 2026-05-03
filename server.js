@@ -2391,7 +2391,7 @@ async function cfgSpessore(){
   <div style="margin-bottom:14px">
     <div style="font-size:12px;font-weight:500;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.4px;color:var(--mid)">Spessore muro (mm)</div>
     <div style="display:flex;align-items:center;gap:10px">
-      <input type="number" id="cfg-spessore" value="\${CFG.spessore||''}" placeholder="es. 12.5" step="0.5" min="5" max="60"
+      <input type="number" id="cfg-spessore" value="\${CFG.spessore||''}" placeholder="es. 125" step="0.5" min="5" max="60"
         style="width:120px;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px;font-family:inherit"
         oninput="calcolaTelaio(this.value,'\${fam}')">
       <span style="font-size:13px;color:var(--mid)">mm</span>
