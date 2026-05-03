@@ -2620,7 +2620,8 @@ async function cfgManiglia(){
   const manCompatibili = (tutteMan||[]).filter(m=>{
     if(!m.aperture_escluse || m.codice==='NESSUNA') return true;
     const escluse = m.aperture_escluse.split(',').map(s=>s.trim().toUpperCase()).filter(Boolean);
-    return !escluse.includes(aperturaCorrente);
+    // Confronto per famiglia: "LIBRO" esclude "LIBRO", "LIBRO/S", "LIBRO Q", ecc.
+    return !escluse.some(e => aperturaCorrente === e || aperturaCorrente.startsWith(e+'/') || aperturaCorrente.startsWith(e+' '));
   });
   const manAll=await filtraPerCompatibilita(manCompatibili,'maniglia','codice');
 
