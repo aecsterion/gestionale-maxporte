@@ -1235,10 +1235,10 @@ async function apriModalInvioPreventivo(docId){
   var numero=doc.numero||'preventivo';
   var nome=an.ragione_sociale||'';
   var email=an.email_principale||an.email||'';
-  var testo='Gentile '+nome+',\\n\\n'+
-    'in allegato trova il nostro preventivo n. '+numero+' relativo alla fornitura di porte interne.\\n\\n'+
-    'Restiamo a Sua disposizione per qualsiasi chiarimento.\\n\\n'+
-    'Cordiali saluti,\\nMax Porte di Rimasti Massimilian\nTel. 011 9084622\ninfo@maxporte.it';
+  var testo='Gentile '+nome+',\\\\n\\\\n'+
+    'in allegato trova il nostro preventivo n. '+numero+' relativo alla fornitura di porte interne.\\\\n\\\\n'+
+    'Restiamo a Sua disposizione per qualsiasi chiarimento.\\\\n\\\\nCordiali saluti,'+
+    '\\\\nMax Porte di Rimasti Massimilian\\\\nTel. 011 9084622\\\\ninfo@maxporte.it';
   document.getElementById('invia-email-to').value=email;
   document.getElementById('invia-email-cc').value='';
   document.getElementById('invia-oggetto').value='Preventivo n. '+numero+' - Max Porte';
