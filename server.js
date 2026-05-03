@@ -3832,20 +3832,30 @@ async function nuovaFinitura(serieFilter){
 }
 
 // MISURE STANDARD
+// Famiglie sempre presenti nel select misure (anche se vuote)
+const MISURE_FAMIGLIE_EXTRA = ['SOP','PAS','PAN-BL'];
+const MISURE_FAM_LABELS = {
+  'BAT':'Battente','CS':'CS (senza battura)','LIBRO':'A libro','SALOON':'Saloon',
+  'ROTOTRASLANTI':'Rototraslante','SCORREVOLI INTERNO MURO':'Scor. int. muro',
+  'SCORREVOLI ESTERNO MURO':'Scor. est. muro','FILO MURO':'Filo muro',
+  'COMPLANARI':'Complanare','SOP':'Sopraluce','PAS':'Passata','PAN-BL':'Pannello blindato'
+};
+
 async function adminMisure(){
   const {data:famiglie} = await sb.from('misure_standard').select('famiglia_apertura').order('famiglia_apertura');
-  const famSet = [...new Set((famiglie||[]).map(f=>f.famiglia_apertura))];
+  const famSetDb = [...new Set((famiglie||[]).map(f=>f.famiglia_apertura))];
+  const famSet = [...new Set([...famSetDb, ...MISURE_FAMIGLIE_EXTRA])].sort();
   const famFilter = window._adminMisureFam || famSet[0] || 'BAT';
   window._adminMisureFam = famFilter;
 
   const {data} = await sb.from('misure_standard').select('*').eq('famiglia_apertura',famFilter).order('larghezza_mm').order('altezza_mm');
 
-  const famOpts = famSet.map(f=>\`<option value="\${f}" \${f===famFilter?'selected':''}>\${f}</option>\`).join('');
+  const famOpts = famSet.map(f=>\`<option value="\${f}" \${f===famFilter?'selected':''}>\${MISURE_FAM_LABELS[f]||f}</option>\`).join('');
 
   const rows=(data||[]).map(m=>\`<tr>
     <td>\${inlineInput(m.larghezza_mm,\`adminSalva('misure_standard','\${m.id}','larghezza_mm',this.value)\`,'70px','number')} mm</td>
     <td>\${inlineInput(m.altezza_mm,\`adminSalva('misure_standard','\${m.id}','altezza_mm',this.value)\`,'70px','number')} mm</td>
-    <td style="font-size:12px;color:var(--mid)">\${m.famiglia_apertura}</td>
+    <td style="font-size:12px;color:var(--mid)">\${MISURE_FAM_LABELS[m.famiglia_apertura]||m.famiglia_apertura}</td>
     <td>\${inlineInput(m.sovrapprezzo_a??0,\`adminSalva('misure_standard','\${m.id}','sovrapprezzo_a',this.value)\`,'65px','number','€ A')}</td>
     <td>\${inlineInput(m.sovrapprezzo_p??0,\`adminSalva('misure_standard','\${m.id}','sovrapprezzo_p',this.value)\`,'65px','number','€ P')}</td>
     <td>\${inlineInput(m.sovrapprezzo_pct_a??0,\`adminSalva('misure_standard','\${m.id}','sovrapprezzo_pct_a',this.value)\`,'55px','number','% A')}</td>
@@ -3854,20 +3864,26 @@ async function adminMisure(){
   </tr>\`).join('');
 
   document.getElementById('admin-sub').innerHTML=\`
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
       <label style="font-size:12px;color:var(--mid)">Famiglia:</label>
       <select onchange="window._adminMisureFam=this.value;adminMisure()" style="padding:5px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit">\${famOpts}</select>
-      <button class="btn btn-red btn-sm" onclick="nuovaMisura('\${famFilter}')">+ Aggiungi misura</button>
     </div>
-    \${adminCard(\`Misure standard — \${famFilter}\`,\`
+    \${adminCard(\`Misure standard — \${MISURE_FAM_LABELS[famFilter]||famFilter}\`,\`
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;padding-bottom:12px;border-bottom:0.5px solid var(--border);flex-wrap:wrap">
+        <input type="number" id="nm-l" placeholder="Larghezza mm" style="padding:6px 8px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;width:130px">
+        <input type="number" id="nm-a" placeholder="Altezza mm (0=libera)" style="padding:6px 8px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;width:160px">
+        <button class="btn btn-red btn-sm" onclick="nuovaMisura('\${famFilter}')">+ Aggiungi</button>
+      </div>
       <table><thead><tr><th>Larghezza (mm)</th><th>Altezza (mm)</th><th>Famiglia</th><th>Sovr.€ A</th><th>Sovr.€ P</th><th>Sovr.% A</th><th>Sovr.% P</th><th></th></tr></thead>
-      <tbody>\${rows||'<tr><td colspan="4" style="text-align:center;color:var(--mid);padding:16px">Nessuna misura</td></tr>'}</tbody>
+      <tbody>\${rows||'<tr><td colspan="8" style="text-align:center;color:var(--mid);padding:16px;font-style:italic">Nessuna misura — aggiungine una qui sopra</td></tr>'}</tbody>
     </table>\`)}\`;
 }
 
 async function nuovaMisura(fam){
-  const l=prompt('Larghezza (mm):'); if(!l) return;
-  const a=prompt('Altezza (mm):'); if(!a) return;
+  const l = document.getElementById('nm-l')?.value;
+  const a = document.getElementById('nm-a')?.value;
+  if(!l){toast('Inserisci la larghezza','err');return;}
+  if(a===''||a===null||a===undefined){toast("Inserisci l'altezza (0 per libera)",'err');return;}
   const {error}=await sb.from('misure_standard').insert([{famiglia_apertura:fam,larghezza_mm:parseFloat(l),altezza_mm:parseFloat(a)}]);
   if(error){toast('Errore: '+error.message,'err');return;}
   toast('Misura aggiunta','ok'); adminMisure();
