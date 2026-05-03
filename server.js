@@ -3127,15 +3127,11 @@ async function salvaNuovoDoc(){
       } catch(e){ provvPct=0; provvEuro=0; }
     }
 
-    // Numerazione semplice: anno + timestamp ultimi 5 cifre
-    const anno = new Date().getFullYear();
-    const seq = String(Date.now()).slice(-5);
-    const prefisso = mode==='preventivo'?'PRV':'ORD';
-    const numero = \`\${prefisso}-\${anno}-\${seq}\`;
-
     const tabDoc = mode==='preventivo'?'preventivi':'ordini_vendita';
+    const editId = document.getElementById('modal-nuovo-doc').dataset.editId || null;
+
     const docData = {
-      numero, anagrafica_id:clienteId, agente_id:agenteId||null,
+      anagrafica_id:clienteId, agente_id:agenteId||null,
       listino, sconto1:sc1, sconto2:sc2,
       indirizzo_destinazione:ind, cap_destinazione:cap,
       citta_destinazione:cit, provincia_destinazione:prv,
@@ -3145,26 +3141,53 @@ async function salvaNuovoDoc(){
       note,
       totale_imponibile:imponibile, totale_netto:netto,
       provvigione_pct:provvPct, provvigione_euro:provvEuro,
-      creato_da:currentUser?.id,
-      nome_compilatore:currentNomeUtente||currentUser?.email||'—',
       ...(mode==='ordine'?{richiede_approvazione_tecnica:haCustom}:{})
     };
 
-    const {data:doc,error} = await sb.from(tabDoc).insert([docData]).select().single();
-    if(error){ toast('Errore salvataggio: '+error.message,'err'); return; }
+    let docId, docNumero;
 
-    // Salva righe
-    const tabRighe = mode==='preventivo'?'righe_preventivo':'righe_ordine';
-    const fk = mode==='preventivo'?'preventivo_id':'ordine_id';
-    const righe = CFG_RIGHE.map((r,i)=>({...r,[fk]:doc.id,riga_numero:i+1}));
-    const {error:errRighe} = await sb.from(tabRighe).insert(righe);
-    if(errRighe){ toast('Errore salvataggio righe: '+errRighe.message,'err'); return; }
+    if(editId){
+      // MODIFICA — update del documento esistente (senza toccare numero/creato_da)
+      const {data:updated, error} = await sb.from(tabDoc).update(docData).eq('id',editId).select().single();
+      if(error){ toast('Errore aggiornamento: '+error.message,'err'); return; }
+      docId = editId;
+      docNumero = updated.numero;
 
-    toast(numero+' salvato con successo','ok');
+      // Elimina le righe vecchie e reinserisce quelle aggiornate
+      const tabRighe = mode==='preventivo'?'righe_preventivo':'righe_ordine';
+      const fk = mode==='preventivo'?'preventivo_id':'ordine_id';
+      await sb.from(tabRighe).delete().eq(fk, editId);
+      const righe = CFG_RIGHE.map((r,i)=>({...r, id:undefined, [fk]:editId, riga_numero:i+1}));
+      const {error:errRighe} = await sb.from(tabRighe).insert(righe);
+      if(errRighe){ toast('Errore salvataggio righe: '+errRighe.message,'err'); return; }
+
+    } else {
+      // CREAZIONE — insert nuovo documento
+      const anno = new Date().getFullYear();
+      const seq = String(Date.now()).slice(-5);
+      const prefisso = mode==='preventivo'?'PRV':'ORD';
+      docData.numero = \`\${prefisso}-\${anno}-\${seq}\`;
+      docData.creato_da = currentUser?.id;
+      docData.nome_compilatore = currentNomeUtente||currentUser?.email||'—';
+
+      const {data:doc, error} = await sb.from(tabDoc).insert([docData]).select().single();
+      if(error){ toast('Errore salvataggio: '+error.message,'err'); return; }
+      docId = doc.id;
+      docNumero = doc.numero;
+
+      const tabRighe = mode==='preventivo'?'righe_preventivo':'righe_ordine';
+      const fk = mode==='preventivo'?'preventivo_id':'ordine_id';
+      const righe = CFG_RIGHE.map((r,i)=>({...r, id:undefined, [fk]:docId, riga_numero:i+1}));
+      const {error:errRighe} = await sb.from(tabRighe).insert(righe);
+      if(errRighe){ toast('Errore salvataggio righe: '+errRighe.message,'err'); return; }
+    }
+
+    toast(docNumero+(editId?' aggiornato':' salvato')+' con successo','ok');
     document.getElementById('modal-nuovo-doc').classList.remove('open');
+    delete document.getElementById('modal-nuovo-doc').dataset.editId;
     CFG_RIGHE=[];
-    if(mode==='preventivo') renderPreventivi();
-    else renderOrdiniDiretti();
+    if(mode==='preventivo') editId ? renderPreventivoDetail(docId) : renderPreventivi();
+    else editId ? renderOrdineDetail(docId) : renderOrdiniDiretti();
 
   } catch(e) {
     console.error('salvaNuovoDoc error:', e);
