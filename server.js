@@ -3211,6 +3211,31 @@ async function renderPreventivoDetail(id){
       \${prev.stato!=='confermato'?\`<button class="btn btn-sm" onclick="apriModificaPreventivo('\${id}')">Modifica</button>\`:''}\n      \${prev.stato==='bozza'||prev.stato==='inviato'?\`<button class="btn btn-sm" style="color:var(--red)" onclick="cambiaStatoPreventivo('\${id}','non_concluso')">Non concluso</button>\`:''}\n      \${prev.stato!=='confermato'?\`<button class="btn btn-sm" style="color:var(--red)" onclick="eliminaPreventivo('\${id}')">Elimina</button>\`:''}\n
     </div>
   </div>
+  <div class="grid-2" style="margin-bottom:14px">
+    <div class="card">
+      <div class="card-title">Intestazione preventivo</div>
+      <table style="font-size:13px">
+        <tr><td style="color:var(--mid);padding:3px 0;width:130px">N° Preventivo</td><td><strong>\${prev.numero}</strong></td></tr>
+        <tr><td style="color:var(--mid);padding:3px 0">Cliente</td><td>\${prev.anagrafiche?.ragione_sociale||'—'}</td></tr>
+        <tr><td style="color:var(--mid);padding:3px 0">Agente</td><td>\${prev.agenti?prev.agenti.nome+' '+prev.agenti.cognome:'—'}</td></tr>
+        <tr><td style="color:var(--mid);padding:3px 0">Data</td><td>\${fmtData(prev.data_creazione)}</td></tr>
+        <tr><td style="color:var(--mid);padding:3px 0">Listino</td><td><span class="tag">\${prev.listino}</span></td></tr>
+        <tr><td style="color:var(--mid);padding:3px 0">Trasporto</td><td>\${prev.trasporto||'—'}</td></tr>
+        <tr><td style="color:var(--mid);padding:3px 0;width:130px">Stato</td><td>\${badgeStato(prev.stato)}</td></tr>
+        \${prev.nome_compilatore?\`<tr><td style="color:var(--mid);padding:3px 0">Compilato da</td><td style="font-size:12px">\${prev.nome_compilatore}</td></tr>\`:''}
+      </table>
+    </div>
+    <div class="card">
+      <div class="card-title">Riepilogo economico</div>
+      <table style="font-size:13px">
+        <tr><td style="color:var(--mid);padding:3px 0;width:130px">Imponibile</td><td style="text-align:right">\${fmtEuro(prev.totale_imponibile)}</td></tr>
+        <tr><td style="color:var(--mid);padding:3px 0">Sconto 1</td><td style="text-align:right">\${sc1}%</td></tr>
+        <tr><td style="color:var(--mid);padding:3px 0">Sconto 2</td><td style="text-align:right">\${sc2||0}%</td></tr>
+        <tr style="border-top:0.5px solid var(--border)"><td style="padding:6px 0;font-weight:500">Totale netto</td><td style="text-align:right;font-size:18px;font-weight:500;color:var(--red)">\${fmtEuro(netto)}</td></tr>
+      </table>
+      \${prev.note?\`<div style="margin-top:10px;font-size:12px;color:var(--mid)">\${prev.note}</div>\`:''}
+    </div>
+  </div>
   <div class="card">
     <div class="card-header"><span class="card-title">Righe preventivo (\${righe?.length||0} porte)</span></div>
     <table>
