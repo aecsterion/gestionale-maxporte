@@ -640,7 +640,7 @@ tr.data-row:hover td{background:var(--beige);cursor:pointer}
 </div>
 
 <!-- MODAL INVIA PREVENTIVO -->
-<div id="modal-invia-preventivo" class="form-modal-overlay">
+<div id="modal-invia-preventivo" class="form-overlay" style="justify-content:center;align-items:flex-start;padding:20px">
   <div class="form-modal" style="max-width:600px">
     <div class="form-modal-head">
       <span class="form-modal-title">Invia preventivo</span>
