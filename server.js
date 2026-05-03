@@ -4681,7 +4681,11 @@ async function adminCompatibilita(){
       \${aCodice
         ? escluso
           ? \`<button onclick="rimuoviRegola('\${regola?.id}')" style="padding:3px 12px;border-radius:4px;border:0.5px solid var(--green-tx);font-size:11px;cursor:pointer;background:var(--green-bg);color:var(--green-tx);font-family:inherit">↺ Riabilita</button>\`
-          : \`<button onclick="aggiungiRegola('\${aTipo}','\${aCodice}','\${aNome.replace(/'/g,"\\'")}','\${bTipo}','\${cod}','\${nome.replace(/'/g,"\\'")}');" style="padding:3px 12px;border-radius:4px;border:0.5px solid var(--border);font-size:11px;cursor:pointer;background:none;color:var(--mid);font-family:inherit">🚫 Escludi</button>\`
+          : \`<button
+              data-a-tipo="\${aTipo}" data-a-codice="\${aCodice}" data-a-nome="\${aNome.replace(/"/g,'&quot;')}"
+              data-b-tipo="\${bTipo}" data-b-codice="\${cod}" data-b-nome="\${nome.replace(/"/g,'&quot;')}"
+              onclick="aggiungiRegolaBtn(this)"
+              style="padding:3px 12px;border-radius:4px;border:0.5px solid var(--border);font-size:11px;cursor:pointer;background:none;color:var(--mid);font-family:inherit">🚫 Escludi</button>\`
         : '<span style="font-size:11px;color:var(--mid)">Seleziona un valore A</span>'
       }
     </div>\`;
@@ -4747,6 +4751,12 @@ async function adminCompatibilita(){
       \`)}
     </div>
   </div>\`;
+}
+
+function aggiungiRegolaBtn(btn){
+  const at=btn.dataset.aTipo, ac=btn.dataset.aCodice, an=btn.dataset.aNome;
+  const bt=btn.dataset.bTipo, bc=btn.dataset.bCodice, bn=btn.dataset.bNome;
+  aggiungiRegola(at,ac,an,bt,bc,bn);
 }
 
 async function aggiungiRegola(aTipo, aCodice, aNome, bTipo, bCodice, bNome){
