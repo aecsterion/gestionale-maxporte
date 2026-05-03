@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const spawn = require('child_process').spawn;
 const os = require('os');
-const nodemailer = require('nodemailer');
+const https = require('https');
 const PORT = process.env.PORT || 3000;
 const HTML = `<!DOCTYPE html>
 <html lang="it">
@@ -3258,12 +3258,9 @@ async function renderPreventivoDetail(id){
     <div style="display:flex;gap:8px">
       <button class="btn btn-sm" onclick="openConfiguratore('preventivo','\${id}','\${prev.listino}')">+ Aggiungi porta</button>
       <button class="btn btn-sm" onclick="esportaPDF('preventivo','\${id}')">📄 Esporta PDF</button>
-      \${prev.stato==='bozza'?\`<button class="btn btn-sm" onclick="apriModalInvioPreventivo('\${id}')" style="display:inline-flex;align-items:center;gap:5px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>Invia</button>\`:''}
+      \${prev.stato==='bozza'?\`<button class="btn btn-sm" onclick="apriModalInvioPreventivo('\${id}')">Invia</button>\`:''}
       \${prev.stato==='inviato'?\`<button class="btn btn-red btn-sm" onclick="firmaPreventivo('\${id}')">Firma e converti in ordine</button>\`:''}
-      \${prev.stato!=='confermato'?\`<button class="btn btn-sm" onclick="apriModificaPreventivo('\${id}')" style="display:inline-flex;align-items:center;gap:5px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Modifica</button>\`:''}
-      \${prev.stato==='bozza'||prev.stato==='inviato'?\`<button class="btn btn-sm" style="color:var(--red);display:inline-flex;align-items:center;gap:5px" onclick="cambiaStatoPreventivo('\${id}','non_concluso')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>Non concluso</button>\`:''}
-      \${prev.stato!=='confermato'?\`<button class="btn btn-sm" style="color:var(--red);display:inline-flex;align-items:center;gap:5px" onclick="eliminaPreventivo('\${id}')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>Elimina</button>\`:''}
-
+      \${prev.stato!=='confermato'?\`<button class="btn btn-sm" onclick="apriModificaPreventivo('\${id}')">Modifica</button>\`:''}\n      \${prev.stato==='bozza'||prev.stato==='inviato'?\`<button class="btn btn-sm" style="color:var(--red)" onclick="cambiaStatoPreventivo('\${id}','non_concluso')">Non concluso</button>\`:''}\n      \${prev.stato!=='confermato'?\`<button class="btn btn-sm" style="color:var(--red)" onclick="eliminaPreventivo('\${id}')">Elimina</button>\`:''}\n
     </div>
   </div>
   <div class="grid-2" style="margin-bottom:14px">
@@ -5376,10 +5373,49 @@ function generaPDF(payload, callback) {
     } else { callback(new Error('Python exit ' + code + ': ' + stderr.slice(-500))); }
   });
 }
-// SMTP
-const SMTP_CONFIG={host:'smtps.aruba.it',port:465,secure:true,auth:{user:'commerciale@maxporte.it',pass:process.env.SMTP_PASSWORD||''}};
-const SMTP_FROM='"Max Porte" <commerciale@maxporte.it>';
-function creaTransporter(){return nodemailer.createTransport(SMTP_CONFIG);}
+// RESEND
+const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
+const MAIL_FROM = '"Max Porte" <commerciale@maxporte.it>';
+
+function inviaConResend({to, cc, subject, text, attachmentName, attachmentData}, callback) {
+  const body = JSON.stringify({
+    from: MAIL_FROM,
+    to: Array.isArray(to) ? to : [to],
+    ...(cc ? {cc: Array.isArray(cc) ? cc : [cc]} : {}),
+    subject,
+    text,
+    attachments: [{
+      filename: attachmentName,
+      content: attachmentData.toString('base64'),
+    }]
+  });
+
+  const options = {
+    hostname: 'api.resend.com',
+    path: '/emails',
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer ' + RESEND_API_KEY,
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(body),
+    }
+  };
+
+  const req = https.request(options, function(r) {
+    let data = '';
+    r.on('data', function(c) { data += c; });
+    r.on('end', function() {
+      if (r.statusCode >= 200 && r.statusCode < 300) {
+        callback(null);
+      } else {
+        callback(new Error('Resend error ' + r.statusCode + ': ' + data));
+      }
+    });
+  });
+  req.on('error', callback);
+  req.write(body);
+  req.end();
+}
 
 const server = http.createServer(function(req, res) {
   if (req.method === 'GET' && req.url === '/logo-maxporte.png') {
@@ -5414,10 +5450,10 @@ const server = http.createServer(function(req, res) {
         const d=JSON.parse(body);
         generaPDF(d.payload,function(err,pdf){
           if(err){res.writeHead(500,{'Content-Type':'application/json'});res.end(JSON.stringify({ok:false,error:err.message}));return;}
-          creaTransporter().sendMail({
-            from:SMTP_FROM,to:d.email_to,cc:d.email_cc||'',
-            subject:d.oggetto,text:d.testo,
-            attachments:[{filename:d.numero_preventivo+'.pdf',content:pdf,contentType:'application/pdf'}]
+          inviaConResend({
+            to:d.email_to, cc:d.email_cc||'',
+            subject:d.oggetto, text:d.testo,
+            attachmentName:d.numero_preventivo+'.pdf', attachmentData:pdf
           },function(e2){
             if(e2){res.writeHead(500,{'Content-Type':'application/json'});res.end(JSON.stringify({ok:false,error:e2.message}));}
             else{res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({ok:true}));}
