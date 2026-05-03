@@ -2864,8 +2864,6 @@ async function ricalcolaTotale(docId, mode){
 // ══════════════════════════════════════════════════════
 // PREVENTIVI
 // ══════════════════════════════════════════════════════
-var _prevFiltro="";
-function filtraPrev(v){_prevFiltro=v;if(window._prevData)renderPreventiviTabella(v);}
 
 async function renderPreventivi(){
   try {
