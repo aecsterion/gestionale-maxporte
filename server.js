@@ -926,11 +926,13 @@ function toast(msg,type='ok'){
 // ── HELPERS ───────────────────────────────────────────
 function badgeStato(s){
   const map={attivo:'bg',dormiente:'ba',prospect:'bb',nuovo:'bb',
+    bozza:'ba',inviato:'bb',firmato:'bg',rifiutato:'bgr',non_concluso:'bgr',
     confermato:'bb',in_produzione:'ba',spedito:'bg',ritardo:'br',annullato:'bgr',
     emessa:'bb',pagata:'bg',scaduta:'br','in_scadenza':'ba',
     presente:'bg',ferie:'ba',malattia:'br',
     pianificato:'bb','in_corso':'ba',completato:'bg'};
   const labels={attivo:'Attivo',dormiente:'Dormiente',prospect:'Prospect',nuovo:'Nuovo',
+    bozza:'Bozza',inviato:'Inviato',firmato:'Firmato',rifiutato:'Rifiutato',non_concluso:'Non concluso',
     confermato:'Confermato',in_produzione:'In produzione',spedito:'Spedito',ritardo:'In ritardo',annullato:'Annullato',
     emessa:'Emessa',pagata:'Pagata',scaduta:'Scaduta',in_scadenza:'In scadenza',
     presente:'Presente',ferie:'Ferie',malattia:'Malattia',
@@ -1235,10 +1237,10 @@ async function apriModalInvioPreventivo(docId){
   var numero=doc.numero||'preventivo';
   var nome=an.ragione_sociale||'';
   var email=an.email_principale||an.email||'';
-  var testo='Gentile '+nome+',\\\\n\\\\n'+
-    'in allegato trova il nostro preventivo n. '+numero+' relativo alla fornitura di porte interne.\\\\n\\\\n'+
-    'Restiamo a Sua disposizione per qualsiasi chiarimento.\\\\n\\\\nCordiali saluti,'+
-    '\\\\nMax Porte di Rimasti Massimilian\\\\nTel. 011 9084622\\\\ninfo@maxporte.it';
+  var testo='Gentile '+nome+',\n\n'+
+    'in allegato trova il nostro preventivo n. '+numero+' relativo alla fornitura di porte interne.\n\n'+
+    'Restiamo a Sua disposizione per qualsiasi chiarimento.\n\n'+
+    'Cordiali saluti,\nMax Porte di Rimasti Massimilian\nTel. 011 9084622\ninfo@maxporte.it';
   document.getElementById('invia-email-to').value=email;
   document.getElementById('invia-email-cc').value='';
   document.getElementById('invia-oggetto').value='Preventivo n. '+numero+' - Max Porte';
@@ -2394,7 +2396,7 @@ async function cfgSpessore(){
       <input type="number" id="cfg-spessore" value="\${CFG.spessore||''}" placeholder="es. 125" step="0.5" min="5" max="60"
         style="width:120px;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px;font-family:inherit"
         oninput="calcolaTelaio(this.value,'\${fam}')">
-      <span style="font-size:13px;color:var(--mid)">mm</span>
+      <span style="font-size:13px;color:var(--mid)">cm</span>
     </div>
   </div>
   <div id="cfg-telaio-result" style="margin-bottom:14px"></div>
@@ -2864,7 +2866,6 @@ async function ricalcolaTotale(docId, mode){
 // ══════════════════════════════════════════════════════
 // PREVENTIVI
 // ══════════════════════════════════════════════════════
-
 async function renderPreventivi(){
   try {
     const {data,error} = await sb.from('preventivi')
@@ -2872,7 +2873,7 @@ async function renderPreventivi(){
       .order('created_at',{ascending:false});
     if(error) throw error;
     window._prevData = data||[];
-    const stats={bozza:0,inviato:0,firmato:0,rifiutato:0,confermato:0};
+    const stats={bozza:0,inviato:0,firmato:0,rifiutato:0,confermato:0,non_concluso:0};
     window._prevData.forEach(function(p){ if(stats[p.stato]!==undefined) stats[p.stato]++; });
     document.getElementById('main-content').innerHTML=
       '<div class="grid-4" style="margin-bottom:16px">'+
@@ -2892,7 +2893,7 @@ async function renderPreventivi(){
           '</div>'+
         '</div>'+
         '<table>'+
-          '<thead><tr><th>N\u00b0</th><th>Cliente</th><th>Rif. cliente</th><th>Agente</th><th>Data</th><th>Scadenza</th><th>Listino</th><th>Totale netto</th><th>Stato</th></tr></thead>'+
+          '<thead><tr><th>N°</th><th>Cliente</th><th>Rif. cliente</th><th>Agente</th><th>Data</th><th>Scadenza</th><th>Listino</th><th>Totale netto</th><th>Stato</th></tr></thead>'+
           '<tbody id="prev-tbody"></tbody>'+
         '</table>'+
       '</div>';
@@ -3146,39 +3147,18 @@ async function salvaNuovoDoc(){
       ...(mode==='ordine'?{richiede_approvazione_tecnica:haCustom}:{})
     };
 
-    const editId = document.getElementById('modal-nuovo-doc').dataset.editId;
+    const {data:doc,error} = await sb.from(tabDoc).insert([docData]).select().single();
+    if(error){ toast('Errore salvataggio: '+error.message,'err'); return; }
+
+    // Salva righe
     const tabRighe = mode==='preventivo'?'righe_preventivo':'righe_ordine';
     const fk = mode==='preventivo'?'preventivo_id':'ordine_id';
-    let docId;
+    const righe = CFG_RIGHE.map((r,i)=>({...r,[fk]:doc.id,riga_numero:i+1}));
+    const {error:errRighe} = await sb.from(tabRighe).insert(righe);
+    if(errRighe){ toast('Errore salvataggio righe: '+errRighe.message,'err'); return; }
 
-    if(editId){
-      // MODIFICA preventivo esistente
-      delete docData.numero; // non cambia il numero
-      const {error} = await sb.from(tabDoc).update(docData).eq('id',editId);
-      if(error){ toast('Errore aggiornamento: '+error.message,'err'); return; }
-      docId = editId;
-      // Elimina righe esistenti e reinserisce
-      await sb.from(tabRighe).delete().eq(fk, editId);
-      const righe = CFG_RIGHE.map((r,i)=>{
-        const rr={...r};delete rr.id;delete rr.created_at;delete rr.updated_at;
-        rr[fk]=editId;rr.riga_numero=i+1;return rr;
-      });
-      const {error:errRighe} = await sb.from(tabRighe).insert(righe);
-      if(errRighe){ toast('Errore salvataggio righe: '+errRighe.message,'err'); return; }
-      toast('Preventivo aggiornato','ok');
-    } else {
-      // NUOVO documento
-      const {data:doc,error} = await sb.from(tabDoc).insert([docData]).select().single();
-      if(error){ toast('Errore salvataggio: '+error.message,'err'); return; }
-      docId = doc.id;
-      const righe = CFG_RIGHE.map((r,i)=>({...r,[fk]:doc.id,riga_numero:i+1}));
-      const {error:errRighe} = await sb.from(tabRighe).insert(righe);
-      if(errRighe){ toast('Errore salvataggio righe: '+errRighe.message,'err'); return; }
-      toast(docData.numero+' salvato','ok');
-    }
-
+    toast(numero+' salvato con successo','ok');
     document.getElementById('modal-nuovo-doc').classList.remove('open');
-    delete document.getElementById('modal-nuovo-doc').dataset.editId;
     CFG_RIGHE=[];
     if(mode==='preventivo') renderPreventivi();
     else renderOrdiniDiretti();
@@ -3221,36 +3201,11 @@ async function renderPreventivoDetail(id){
       <button class="btn btn-sm" onclick="renderPreventivi()">← Tutti i preventivi</button>
     </div>
     <div style="display:flex;gap:8px">
-      <button class="btn btn-sm" onclick="apriModificaPreventivo('\${id}')">Modifica</button>
       <button class="btn btn-sm" onclick="openConfiguratore('preventivo','\${id}','\${prev.listino}')">+ Aggiungi porta</button>
       <button class="btn btn-sm" onclick="esportaPDF('preventivo','\${id}')">📄 Esporta PDF</button>
       \${prev.stato==='bozza'?\`<button class="btn btn-sm" onclick="apriModalInvioPreventivo('\${id}')">Invia</button>\`:''}
       \${prev.stato==='inviato'?\`<button class="btn btn-red btn-sm" onclick="firmaPreventivo('\${id}')">Firma e converti in ordine</button>\`:''}
-    </div>
-  </div>
-  <div class="grid-2" style="margin-bottom:14px">
-    <div class="card">
-      <div class="card-title">Intestazione preventivo</div>
-      <table style="font-size:13px">
-        <tr><td style="color:var(--mid);padding:3px 0;width:130px">N° Preventivo</td><td><strong>\${prev.numero}</strong></td></tr>
-        <tr><td style="color:var(--mid);padding:3px 0">Cliente</td><td>\${prev.anagrafiche?.ragione_sociale||'—'}</td></tr>
-        <tr><td style="color:var(--mid);padding:3px 0">Agente</td><td>\${prev.agenti?prev.agenti.nome+' '+prev.agenti.cognome:'—'}</td></tr>
-        <tr><td style="color:var(--mid);padding:3px 0">Data</td><td>\${fmtData(prev.data_creazione)}</td></tr>
-        <tr><td style="color:var(--mid);padding:3px 0">Listino</td><td><span class="tag">\${prev.listino}</span></td></tr>
-        <tr><td style="color:var(--mid);padding:3px 0">Trasporto</td><td>\${prev.trasporto||'—'}</td></tr>
-        <tr><td style="color:var(--mid);padding:3px 0;width:130px">Stato</td><td>\${badgeStato(prev.stato)}</td></tr>
-        \${prev.nome_compilatore?\`<tr><td style="color:var(--mid);padding:3px 0">Compilato da</td><td style="font-size:12px">\${prev.nome_compilatore}</td></tr>\`:''}
-      </table>
-    </div>
-    <div class="card">
-      <div class="card-title">Riepilogo economico</div>
-      <table style="font-size:13px">
-        <tr><td style="color:var(--mid);padding:3px 0;width:130px">Imponibile</td><td style="text-align:right">\${fmtEuro(prev.totale_imponibile)}</td></tr>
-        <tr><td style="color:var(--mid);padding:3px 0">Sconto 1</td><td style="text-align:right">\${sc1}%</td></tr>
-        <tr><td style="color:var(--mid);padding:3px 0">Sconto 2</td><td style="text-align:right">\${sc2||0}%</td></tr>
-        <tr style="border-top:0.5px solid var(--border)"><td style="padding:6px 0;font-weight:500">Totale netto</td><td style="text-align:right;font-size:18px;font-weight:500;color:var(--red)">\${fmtEuro(netto)}</td></tr>
-      </table>
-      \${prev.note?\`<div style="margin-top:10px;font-size:12px;color:var(--mid)">\${prev.note}</div>\`:''}
+      \${prev.stato!=='confermato'?\`<button class="btn btn-sm" onclick="apriModificaPreventivo('\${id}')">Modifica</button>\`:''}\n      \${prev.stato==='bozza'||prev.stato==='inviato'?\`<button class="btn btn-sm" style="color:var(--red)" onclick="cambiaStatoPreventivo('\${id}','non_concluso')">Non concluso</button>\`:''}\n      \${prev.stato!=='confermato'?\`<button class="btn btn-sm" style="color:var(--red)" onclick="eliminaPreventivo('\${id}')">Elimina</button>\`:''}\n
     </div>
   </div>
   <div class="card">
@@ -3286,6 +3241,21 @@ async function cambiaStato(tabella, id, stato, callback){
   toast('Stato aggiornato: '+stato,'ok');
   if(callback==='renderPreventivoDetail') renderPreventivoDetail(id);
   else if(callback==='renderOrdineDetail') renderOrdineDetail(id);
+}
+
+async function cambiaStatoPreventivo(id,nuovoStato){
+  if(!confirm("Segnare come "+nuovoStato.replace("_"," ")+"?"))return;
+  const {error}=await sb.from("preventivi").update({stato:nuovoStato}).eq("id",id);
+  if(error){toast("Errore: "+error.message,"err");return;}
+  toast("Stato aggiornato","ok");renderPreventivoDetail(id);
+}
+
+async function eliminaPreventivo(id){
+  if(!confirm("Eliminare definitivamente questo preventivo?"))return;
+  await sb.from("righe_preventivo").delete().eq("preventivo_id",id);
+  const {error}=await sb.from("preventivi").delete().eq("id",id);
+  if(error){toast("Errore: "+error.message,"err");return;}
+  toast("Preventivo eliminato","ok");renderPreventivi();
 }
 
 async function firmaPreventivo(prevId){
@@ -5209,7 +5179,7 @@ async function esportaPDF(tipo, id) {
           </select>
         </div>
         <div class="form-field" style="grid-column:1/-1">
-          <label>Riferimento cliente</label>
+          <label>Vostro riferimento</label>
           <input type="text" id="ndoc-rif-cliente" placeholder="Es: ordine n° 123, progetto Rossi...">
         </div>
         <div class="form-field">
@@ -5336,4 +5306,8 @@ const server = http.createServer(function(req, res) {
   res.writeHead(200,{'Content-Type':'text/html;charset=utf-8','Cache-Control':'no-store'});
   res.end(HTML);
 });
-server.listen(PORT, function() { console.log('MPX Gestionale avviato su porta ' + PORT); });
+server.listen(PORT, function() { console.log('MPX Gestionale avviato su porta ' + PORT); });var testo='Gentile '+nome+',\\\\n\\\\n'+
+    'in allegato trova il nostro preventivo n. '+numero+'.\\\\n\\\\n'+
+    'Restiamo a Sua disposizione.\\\\n\\\\nCordiali saluti,'+
+    '\\\\nMax Porte di Rimasti Massimilian\\\\nTel. 011 9084622\\\\ninfo@maxporte.it';
+
