@@ -5306,8 +5306,4 @@ const server = http.createServer(function(req, res) {
   res.writeHead(200,{'Content-Type':'text/html;charset=utf-8','Cache-Control':'no-store'});
   res.end(HTML);
 });
-server.listen(PORT, function() { console.log('MPX Gestionale avviato su porta ' + PORT); });var testo='Gentile '+nome+',\\\\n\\\\n'+
-    'in allegato trova il nostro preventivo n. '+numero+'.\\\\n\\\\n'+
-    'Restiamo a Sua disposizione.\\\\n\\\\nCordiali saluti,'+
-    '\\\\nMax Porte di Rimasti Massimilian\\\\nTel. 011 9084622\\\\ninfo@maxporte.it';
-
+server.listen(PORT, function() { console.log('MPX Gestionale avviato su porta ' + PORT); });
