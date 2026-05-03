@@ -3148,6 +3148,7 @@ async function salvaNuovoDoc(){
 
     if(editId){
       // MODIFICA — update del documento esistente (senza toccare numero/creato_da)
+      docData.data_ultima_modifica = new Date().toISOString();
       const {data:updated, error} = await sb.from(tabDoc).update(docData).eq('id',editId).select().single();
       if(error){ toast('Errore aggiornamento: '+error.message,'err'); return; }
       docId = editId;
@@ -3243,6 +3244,7 @@ async function renderPreventivoDetail(id){
         <tr><td style="color:var(--mid);padding:3px 0">Cliente</td><td>\${prev.anagrafiche?.ragione_sociale||'—'}</td></tr>
         <tr><td style="color:var(--mid);padding:3px 0">Agente</td><td>\${prev.agenti?prev.agenti.nome+' '+prev.agenti.cognome:'—'}</td></tr>
         <tr><td style="color:var(--mid);padding:3px 0">Data</td><td>\${fmtData(prev.data_creazione)}</td></tr>
+        \${prev.data_ultima_modifica?\`<tr><td style="color:var(--mid);padding:3px 0">Ultima modifica</td><td>\${fmtData(prev.data_ultima_modifica)}</td></tr>\`:''}
         <tr><td style="color:var(--mid);padding:3px 0">Listino</td><td><span class="tag">\${prev.listino}</span></td></tr>
         <tr><td style="color:var(--mid);padding:3px 0">Trasporto</td><td>\${prev.trasporto||'—'}</td></tr>
         <tr><td style="color:var(--mid);padding:3px 0;width:130px">Stato</td><td>\${badgeStato(prev.stato)}</td></tr>
@@ -5027,8 +5029,8 @@ async function esportaPDF(tipo, id) {
       tipo,
       documento: {
         numero: doc.numero,
-        data: new Date(doc.created_at).toLocaleDateString('it-IT'),
-        data_modifica: new Date(doc.updated_at||doc.created_at).toLocaleDateString('it-IT'),
+        data: new Date(doc.data_creazione||doc.created_at).toLocaleDateString('it-IT'),
+        data_ultima_modifica: doc.data_ultima_modifica ? new Date(doc.data_ultima_modifica).toLocaleDateString('it-IT') : '',
         compilatore: doc.nome_compilatore || '',
         tipo_documento: tipo==='preventivo' ? 'PREVENTIVO' : 'CONFERMA D\\'ORDINE',
         // Cliente
