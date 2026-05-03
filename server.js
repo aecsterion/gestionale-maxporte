@@ -3,17 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const spawn = require('child_process').spawn;
 const os = require('os');
-let nodemailer;
-try{nodemailer=require('nodemailer');}catch(e){console.warn('nodemailer non disponibile:',e.message);}
-const SMTP_CONFIG={host:'smtps.aruba.it',port:465,secure:true,
-  auth:{user:'commerciale@maxporte.it',pass:process.env.SMTP_PASSWORD||''},
-  connectionTimeout:10000,greetingTimeout:10000,socketTimeout:10000,
-  tls:{rejectUnauthorized:false}};
-const SMTP_FROM='"Max Porte" <commerciale@maxporte.it>';
-function creaTransporter(){
-  if(!nodemailer)throw new Error('nodemailer non installato');
-  return nodemailer.createTransport(SMTP_CONFIG);
-}
+const nodemailer = require('nodemailer');
 const PORT = process.env.PORT || 3000;
 const HTML = `<!DOCTYPE html>
 <html lang="it">
@@ -654,14 +644,18 @@ tr.data-row:hover td{background:var(--beige);cursor:pointer}
   <div class="form-modal" style="max-width:600px">
     <div class="form-modal-head">
       <span class="form-modal-title">Invia preventivo</span>
-      <button class="form-close" onclick="closeForm('modal-invia-preventivo')">x</button>
+      <button class="form-close" onclick="closeForm('modal-invia-preventivo')">&times;</button>
     </div>
     <div class="form-modal-body">
-      <div class="form-field"><label>A *</label><input type="email" id="invia-email-to"></div>
-      <div class="form-field"><label>CC</label><input type="email" id="invia-email-cc"></div>
-      <div class="form-field"><label>Oggetto *</label><input type="text" id="invia-oggetto"></div>
-      <div class="form-field"><label>Testo *</label><textarea id="invia-testo" rows="8" style="font-size:13px"></textarea></div>
-      <p style="font-size:12px;color:var(--mid)">Il PDF sara allegato automaticamente</p>
+      <div class="form-field"><label>A <span class="req">*</span></label>
+        <input type="email" id="invia-email-to" placeholder="email@cliente.it"></div>
+      <div class="form-field"><label>CC</label>
+        <input type="email" id="invia-email-cc" placeholder="opzionale"></div>
+      <div class="form-field"><label>Oggetto <span class="req">*</span></label>
+        <input type="text" id="invia-oggetto"></div>
+      <div class="form-field"><label>Testo <span class="req">*</span></label>
+        <textarea id="invia-testo" rows="10" style="font-size:13px;line-height:1.5"></textarea></div>
+      <div style="font-size:12px;color:var(--mid);margin-top:4px">Il PDF sara allegato automaticamente</div>
     </div>
     <div class="form-modal-foot">
       <button class="btn" onclick="closeForm('modal-invia-preventivo')">Annulla</button>
@@ -1186,11 +1180,11 @@ async function buildPreventivoPayload(id){
   var doc=r1.data;if(!doc)return null;
   var r2=await sb.from('righe_preventivo').select('*').eq('preventivo_id',id).order('riga_numero',{ascending:true});
   var righe=r2.data||[];var an=doc.anagrafiche||{};var ag=doc.agenti||{};var sc1=doc.sconto1||0;
-  return {documento:{tipo:'PREVENTIVO',numero:doc.numero||'',
-    data:(doc.data_documento||'').slice(0,10),data_modifica:(doc.updated_at||'').slice(0,10),
-    compilato_da:doc.compilato_da||'',validita_giorni:doc.validita_giorni||30,
-    riferimento_cliente:doc.riferimento_cliente||'',condizioni_pagamento:doc.condizioni_pagamento||'',
-    trasporto:doc.trasporto||'',resa:doc.resa||'Franco fabbrica',note:doc.note||'',
+  return {documento:{tipo:'PREVENTIVO',numero:doc.numero||'',data:(doc.data_documento||'').slice(0,10),
+    data_modifica:(doc.updated_at||'').slice(0,10),compilato_da:doc.compilato_da||'',
+    validita_giorni:doc.validita_giorni||30,riferimento_cliente:doc.riferimento_cliente||'',
+    condizioni_pagamento:doc.condizioni_pagamento||'',trasporto:doc.trasporto||'',
+    resa:doc.resa||'Franco fabbrica',note:doc.note||'',
     sconto1:sc1,totale_imponibile:doc.totale_imponibile||0,totale_netto:doc.totale_netto||0},
   cliente:{ragione_sociale:an.ragione_sociale||'',indirizzo:an.indirizzo||'',
     cap:an.cap||'',citta:an.citta||'',provincia:an.provincia||'',paese:an.paese||'Italia',
@@ -1202,31 +1196,34 @@ async function buildPreventivoPayload(id){
     cin:an.cin||'',abi:an.abi||'',cab:an.cab||'',
     referente:an.referente||'',telefono_referente:an.telefono||'',
     cellulare_referente:an.cellulare_referente||'',email_referente:an.email||'',
-    codice_cliente:an.codice||'',agente:ag.nome?(ag.nome+' '+ag.cognome):'',
+    codice_cliente:an.codice||'',
+    agente:ag.nome?(ag.nome+' '+ag.cognome):'',
     dest_nome:doc.indirizzo_destinazione?an.ragione_sociale:'',
     dest_indirizzo:doc.indirizzo_destinazione||'',dest_cap:doc.cap_destinazione||'',
     dest_citta:doc.citta_destinazione||'',dest_provincia:doc.provincia_destinazione||'',
     dest_paese:doc.paese_destinazione||''},
   righe:righe.map(function(r,i){
     var tot=r.prezzo_totale_riga||r.prezzo_unitario||r.prezzo_base||0;
-    return {posizione:String(i+1).padStart(3,'0'),larghezza:r.larghezza_mm||'',altezza:r.altezza_mm||'',
-      spessore:r.spessore_muro_cm?r.spessore_muro_cm*10:'',senso_apertura:r.senso_apertura||'',
-      apertura:r.nome_apertura||'',quantita:r.quantita||1,nome_serie:r.nome_serie||'',
-      nome_modello:r.nome_modello||'',modello:r.nome_modello||'',finitura:r.nome_finitura||'',
-      tipologia:r.nome_apertura||'',
+    return {posizione:String(i+1).padStart(3,'0'),
+      larghezza:r.larghezza_mm||'',altezza:r.altezza_mm||'',
+      spessore:r.spessore_muro_cm?r.spessore_muro_cm*10:'',
+      senso_apertura:r.senso_apertura||'',apertura:r.nome_apertura||'',
+      quantita:r.quantita||1,nome_serie:r.nome_serie||'',nome_modello:r.nome_modello||'',
+      modello:r.nome_modello||'',finitura:r.nome_finitura||'',tipologia:r.nome_apertura||'',
       spalla:r.codice_spalla||(r.spessore_muro_cm?r.spessore_muro_cm+'cm':''),
       ferramenta:r.nome_ferramenta||'',serratura:r.nome_serratura||'',
-      maniglia:r.nome_maniglia||'',versione_maniglia:'',colore_maniglia:r.nome_colore_maniglia||'',
-      vetro:r.nome_tipo_vetro||'',bugna:r.pannello_bugna||'',
-      colore_inserto:r.nome_colore_alu||r.nome_colore_pietra||'',note_riga:r.note_riga||'',
+      maniglia:r.nome_maniglia||'',versione_maniglia:'',
+      colore_maniglia:r.nome_colore_maniglia||'',vetro:r.nome_tipo_vetro||'',
+      bugna:r.pannello_bugna||'',colore_inserto:r.nome_colore_alu||r.nome_colore_pietra||'',
+      note_riga:r.note_riga||'',
       prezzo_base:r.prezzo_base||0,prezzo_finitura:r.prezzo_finitura||0,
       prezzo_apertura:r.prezzo_apertura||0,prezzo_telaio:r.prezzo_telaio||0,
       prezzo_ferramenta:r.prezzo_ferramenta||0,prezzo_maniglia:r.prezzo_maniglia||0,
       prezzo_serratura:r.prezzo_serratura||0,prezzo_vetro:r.prezzo_vetro||0,
       prezzo_bugna:r.prezzo_bugna||0,prezzo_extra:r.prezzo_extra_incisioni||0,
       prezzo_unitario:r.prezzo_unitario||0,prezzo_totale:r.prezzo_totale_riga||0,
-      totale_riga_netto:tot?Math.round(tot*(1-sc1/100)*100)/100:0,sconto:sc1,
-      kit_varsavia:r.kit_varsavia||'',kit_rim16:r.kit_rim16||'',
+      totale_riga_netto:tot?Math.round(tot*(1-sc1/100)*100)/100:0,
+      sconto:sc1,kit_varsavia:r.kit_varsavia||'',kit_rim16:r.kit_rim16||'',
       fuori_misura_l:r.fuori_misura_l?'Si':'',fuori_misura_h:r.fuori_misura_h?'Si':'',
       immagine_url:r.immagine_url||''};
   })};
@@ -1234,37 +1231,43 @@ async function buildPreventivoPayload(id){
 async function apriModalInvioPreventivo(docId){
   var r=await sb.from('preventivi').select('*,anagrafiche(*)').eq('id',docId).single();
   var doc=r.data;if(!doc){toast('Preventivo non trovato','err');return;}
-  var an=doc.anagrafiche||{};var numero=doc.numero||'preventivo';
-  var nome=an.ragione_sociale||'';var email=an.email_principale||an.email||'';
-  var testo='Gentile '+nome+',\\n\\nin allegato trova il preventivo n. '+numero+'.\\n\\n'+
-    'Restiamo a Sua disposizione.\\n\\nCordiali saluti,\\nMax Porte\\nTel. 011 9084622';
+  var an=doc.anagrafiche||{};
+  var numero=doc.numero||'preventivo';
+  var nome=an.ragione_sociale||'';
+  var email=an.email_principale||an.email||'';
+  var testo='Gentile '+nome+',\\n\\n'+
+    'in allegato trova il nostro preventivo n. '+numero+' relativo alla fornitura di porte interne.\\n\\n'+
+    'Restiamo a Sua disposizione per qualsiasi chiarimento.\\n\\n'+
+    'Cordiali saluti,\\nMax Porte di Rimasti Massimilian\nTel. 011 9084622\ninfo@maxporte.it';
   document.getElementById('invia-email-to').value=email;
   document.getElementById('invia-email-cc').value='';
   document.getElementById('invia-oggetto').value='Preventivo n. '+numero+' - Max Porte';
   document.getElementById('invia-testo').value=testo;
   _invioDocId=docId;_invioNumero=numero;
   _invioPayload=await buildPreventivoPayload(docId);
-  ensureModalInBody('modal-invia-preventivo').classList.add('open');
+  var modal=ensureModalInBody('modal-invia-preventivo');
+  modal.classList.add('open');
 }
 async function confermaInvioPreventivo(){
-  console.log('conferma invio chiamata');
   var emailTo=document.getElementById('invia-email-to').value.trim();
-  console.log('emailTo:', emailTo);
   var oggetto=document.getElementById('invia-oggetto').value.trim();
   var testo=document.getElementById('invia-testo').value.trim();
-  if(!emailTo||!oggetto||!testo){toast('Compila tutti i campi','err');return;}
-  if(!_invioPayload){toast('Errore payload','err');return;}
+  if(!emailTo||!oggetto||!testo){toast('Compila tutti i campi obbligatori','err');return;}
+  if(!_invioPayload){toast('Errore: payload mancante','err');return;}
   var btn=document.getElementById('btn-invia-conferma');
-  btn.disabled=true;btn.textContent='Invio...';
+  btn.disabled=true;btn.textContent='Invio in corso...';
   try{
-    var resp=await fetch('/invia-preventivo',{method:'POST',headers:{'Content-Type':'application/json'},
+    var resp=await fetch('/invia-preventivo',{method:'POST',
+      headers:{'Content-Type':'application/json'},
       body:JSON.stringify({payload:_invioPayload,email_to:emailTo,
         email_cc:document.getElementById('invia-email-cc').value.trim(),
         oggetto:oggetto,testo:testo,numero_preventivo:_invioNumero})});
     var result=await resp.json();
     if(result.ok){
       await sb.from('preventivi').update({stato:'inviato',data_invio:new Date().toISOString()}).eq('id',_invioDocId);
-      toast('Inviato a '+emailTo,'ok');closeForm('modal-invia-preventivo');renderPreventivoDetail(_invioDocId);
+      toast('Preventivo inviato a '+emailTo,'ok');
+      closeForm('modal-invia-preventivo');
+      renderPreventivoDetail(_invioDocId);
     }else{toast('Errore: '+result.error,'err');}
   }catch(e){toast('Errore: '+e.message,'err');}
   finally{btn.disabled=false;btn.textContent='Invia';}
@@ -2391,7 +2394,7 @@ async function cfgSpessore(){
       <input type="number" id="cfg-spessore" value="\${CFG.spessore||''}" placeholder="es. 12.5" step="0.5" min="5" max="60"
         style="width:120px;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px;font-family:inherit"
         oninput="calcolaTelaio(this.value,'\${fam}')">
-      <span style="font-size:13px;color:var(--mid)">cm</span>
+      <span style="font-size:13px;color:var(--mid)">mm</span>
     </div>
   </div>
   <div id="cfg-telaio-result" style="margin-bottom:14px"></div>
@@ -2468,7 +2471,7 @@ async function calcolaTelaio(spessore, fam){
       <div style="font-size:12px;font-weight:500;margin-bottom:6px;color:var(--mid);text-transform:uppercase;letter-spacing:0.4px">Telaio abbinato automaticamente</div>
       <div style="display:flex;justify-content:space-between;align-items:center">
         <div>
-          <div style="font-size:14px;font-weight:500">Spalla \${regola.codice_spalla} — \${spalla?.spalla_cm||'?'} cm</div>
+          <div style="font-size:14px;font-weight:500">Spalla \${regola.codice_spalla} — \${spalla?.spalla_cm||'?'} mm</div>
           \${note}
         </div>
         <div style="font-size:14px;font-weight:500;color:var(--red)">\${prezzoSpalla?'€ '+prezzoSpalla:'Prezzo da definire'}</div>
@@ -2861,54 +2864,120 @@ async function ricalcolaTotale(docId, mode){
 // ══════════════════════════════════════════════════════
 // PREVENTIVI
 // ══════════════════════════════════════════════════════
+var _prevFiltro="";
+function filtraPrev(v){_prevFiltro=v;if(window._prevData)renderPreventiviTabella(v);}
+
 async function renderPreventivi(){
   try {
     const {data,error} = await sb.from('preventivi')
       .select('*,anagrafiche(ragione_sociale),agenti(nome,cognome)')
       .order('created_at',{ascending:false});
     if(error) throw error;
-
-  const stats={bozza:0,inviato:0,firmato:0,rifiutato:0};
-  (data||[]).forEach(p=>{ if(stats[p.stato]!==undefined) stats[p.stato]++; });
-
-  const rows=(data||[]).map(p=>\`<tr class="data-row" onclick="renderPreventivoDetail('\${p.id}')">
-    <td><strong>\${p.numero}</strong></td>
-    <td>\${p.anagrafiche?.ragione_sociale||'—'}</td>
-    <td>\${p.agenti?p.agenti.nome+' '+p.agenti.cognome:'—'}</td>
-    <td>\${fmtData(p.data_creazione)}</td>
-    <td>\${fmtData(p.data_scadenza)}</td>
-    <td><span class="tag">\${p.listino}</span></td>
-    <td>\${fmtEuro(p.totale_netto||p.totale_imponibile)}</td>
-    <td>\${badgeStato(p.stato)}</td>
-  </tr>\`).join('');
-
-  document.getElementById('main-content').innerHTML=\`
-  <div class="grid-4" style="margin-bottom:16px">
-    <div class="metric"><div class="metric-label">Bozze</div><div class="metric-value">\${stats.bozza}</div></div>
-    <div class="metric"><div class="metric-label">Inviati</div><div class="metric-value">\${stats.inviato}</div></div>
-    <div class="metric"><div class="metric-label">Firmati</div><div class="metric-value" style="color:var(--green-tx)">\${stats.firmato}</div></div>
-    <div class="metric"><div class="metric-label">Rifiutati</div><div class="metric-value" style="color:var(--red)">\${stats.rifiutato}</div></div>
-  </div>
-  <div class="card">
-    <div class="card-header">
-      <span class="card-title">Preventivi</span>
-      <button class="btn btn-red btn-sm" onclick="nuovoPreventivo()">+ Nuovo preventivo</button>
-    </div>
-    <table>
-      <thead><tr><th>N°</th><th>Cliente</th><th>Agente</th><th>Data</th><th>Scadenza</th><th>Listino</th><th>Totale netto</th><th>Stato</th></tr></thead>
-      <tbody>\${rows||'<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--mid);font-style:italic">Nessun preventivo ancora — clicca "+ Nuovo preventivo"</td></tr>'}</tbody>
-    </table>
-  </div>\`;
+    window._prevData = data||[];
+    const stats={bozza:0,inviato:0,firmato:0,rifiutato:0,confermato:0};
+    window._prevData.forEach(function(p){ if(stats[p.stato]!==undefined) stats[p.stato]++; });
+    document.getElementById('main-content').innerHTML=
+      '<div class="grid-4" style="margin-bottom:16px">'+
+      '<div class="metric"><div class="metric-label">Bozze</div><div class="metric-value">'+stats.bozza+'</div></div>'+
+      '<div class="metric"><div class="metric-label">Inviati</div><div class="metric-value">'+stats.inviato+'</div></div>'+
+      '<div class="metric"><div class="metric-label">Firmati</div><div class="metric-value" style="color:var(--green-tx)">'+stats.firmato+'</div></div>'+
+      '<div class="metric"><div class="metric-label">Confermati</div><div class="metric-value" style="color:var(--red)">'+stats.confermato+'</div></div>'+
+      '</div>'+
+      '<div class="card">'+
+        '<div class="card-header">'+
+          '<span class="card-title">Preventivi</span>'+
+          '<div style="display:flex;gap:8px;align-items:center">'+
+            '<input type="text" id="prev-cerca" placeholder="Cerca numero, cliente, riferimento... (piu parole = AND)" '+
+              'style="padding:6px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;width:340px" '+
+              'oninput="filtraPrev(this.value)">'+
+            '<button class="btn btn-red btn-sm" onclick="nuovoPreventivo()">+ Nuovo preventivo</button>'+
+          '</div>'+
+        '</div>'+
+        '<table>'+
+          '<thead><tr><th>N\u00b0</th><th>Cliente</th><th>Rif. cliente</th><th>Agente</th><th>Data</th><th>Scadenza</th><th>Listino</th><th>Totale netto</th><th>Stato</th></tr></thead>'+
+          '<tbody id="prev-tbody"></tbody>'+
+        '</table>'+
+      '</div>';
+    filtraPrev('');
   } catch(e) {
     console.error('renderPreventivi error:',e);
-    document.getElementById('main-content').innerHTML=\`<div class="card">
-      <div style="padding:20px">
-        <p style="color:var(--red);margin-bottom:12px">Errore caricamento preventivi: \${e.message}</p>
-        <button class="btn btn-red btn-sm" onclick="nuovoPreventivo()">+ Nuovo preventivo</button>
-      </div>
-    </div>\`;
+    document.getElementById('main-content').innerHTML='<div class="card"><div style="padding:20px">'+
+      '<p style="color:var(--red);margin-bottom:12px">Errore: '+e.message+'</p>'+
+      '<button class="btn btn-red btn-sm" onclick="nuovoPreventivo()">+ Nuovo preventivo</button>'+
+      '</div></div>';
   }
 }
+
+function filtraPrev(filtro){
+  var termini=(filtro||'').toLowerCase().split(/[\s,;]+/).filter(Boolean);
+  var data=window._prevData||[];
+  var filtered=termini.length?data.filter(function(p){
+    var h=[p.numero||'',p.anagrafiche&&p.anagrafiche.ragione_sociale||'',
+           p.riferimento_cliente||'',p.agenti?p.agenti.nome+' '+p.agenti.cognome:''].join(' ').toLowerCase();
+    return termini.every(function(t){return h.includes(t);});
+  }):data;
+  var tbody=document.getElementById('prev-tbody');
+  if(!tbody)return;
+  if(!filtered.length){
+    tbody.innerHTML='<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--mid);font-style:italic">'+(termini.length?'Nessun risultato':'Nessun preventivo')+'</td></tr>';
+    return;
+  }
+  tbody.innerHTML=filtered.map(function(p){
+    return '<tr class="data-row" onclick="renderPreventivoDetail(\''+p.id+'\')">'+
+      '<td><strong>'+(p.numero||'')+'</strong></td>'+
+      '<td>'+(p.anagrafiche&&p.anagrafiche.ragione_sociale||'&#8212;')+'</td>'+
+      '<td>'+(p.riferimento_cliente||'&#8212;')+'</td>'+
+      '<td>'+(p.agenti?p.agenti.nome+' '+p.agenti.cognome:'&#8212;')+'</td>'+
+      '<td>'+fmtData(p.data_creazione)+'</td>'+
+      '<td>'+fmtData(p.data_scadenza)+'</td>'+
+      '<td><span class="tag">'+(p.listino||'')+'</span></td>'+
+      '<td>'+fmtEuro(p.totale_netto||p.totale_imponibile)+'</td>'+
+      '<td>'+badgeStato(p.stato)+'</td>'+
+      '</tr>';
+  }).join('');
+}
+
+async function apriModificaPreventivo(id){
+  const {data:prev}=await sb.from('preventivi').select('*').eq('id',id).single();
+  if(!prev){toast('Preventivo non trovato','err');return;}
+  if(prev.stato==='confermato'){toast('Preventivo confermato: non modificabile','err');return;}
+  const [{data:clienti},{data:agenti}]=await Promise.all([
+    sb.from('anagrafiche').select('*').order('ragione_sociale'),
+    sb.from('agenti').select('*').eq('attivo',true).order('cognome'),
+  ]);
+  CFG_RIGHE=[];
+  const modal=ensureModalInBody('modal-nuovo-doc');
+  modal.dataset.mode='preventivo';
+  modal.dataset.editId=id;
+  document.getElementById('ndoc-title').textContent='Modifica preventivo';
+  document.getElementById('ndoc-clienti').innerHTML='<option value="">Seleziona...</option>'+(clienti||[]).map(function(c){
+    return '<option value="'+c.id+'"'+(c.id===prev.anagrafica_id?' selected':'')+
+      ' data-listino="'+(c.listino||'A')+'" data-sa="'+(c.sconto_dedicato_A||0)+
+      '" data-sp="'+(c.sconto_dedicato_P||0)+'" data-ind="'+(c.indirizzo||'')+
+      '" data-cap="'+(c.cap||'')+'" data-cit="'+(c.citta||'')+'" data-prv="'+(c.provincia||'')+'">'+
+      c.ragione_sociale+'</option>';
+  }).join('');
+  document.getElementById('ndoc-agenti').innerHTML='<option value="">Nessun agente</option>'+(agenti||[]).map(function(a){
+    return '<option value="'+a.id+'"'+(a.id===prev.agente_id?' selected':'')+'>'+a.cognome+' '+a.nome+'</option>';
+  }).join('');
+  document.getElementById('ndoc-listino').value=prev.listino||'A';
+  document.getElementById('ndoc-sconto1').value=prev.sconto1||0;
+  var s2=document.getElementById('ndoc-sconto2');if(s2)s2.value=prev.sconto2||0;
+  var tr=document.getElementById('ndoc-trasporto');if(tr)tr.value=prev.trasporto||'Max Porte';
+  var re=document.getElementById('ndoc-resa');if(re)re.value=prev.resa||'Franco fabbrica';
+  var rif=document.getElementById('ndoc-rif-cliente');if(rif)rif.value=prev.riferimento_cliente||'';
+  document.getElementById('ndoc-ind').value=prev.indirizzo_destinazione||'';
+  document.getElementById('ndoc-cap').value=prev.cap_destinazione||'';
+  document.getElementById('ndoc-cit').value=prev.citta_destinazione||'';
+  document.getElementById('ndoc-prv').value=prev.provincia_destinazione||'';
+  var no=document.getElementById('ndoc-note');if(no)no.value=prev.note||'';
+  const {data:righe}=await sb.from('righe_preventivo').select('*').eq('preventivo_id',id).order('riga_numero',{ascending:true});
+  CFG_RIGHE=(righe||[]).map(function(r){return Object.assign({},r);});
+  renderRigheNdoc();
+  ndocRicalcola();
+  modal.classList.add('open');
+}
+
 
 async function nuovoPreventivo(){
   try {
@@ -3134,6 +3203,7 @@ async function renderPreventivoDetail(id){
       <button class="btn btn-sm" onclick="renderPreventivi()">← Tutti i preventivi</button>
     </div>
     <div style="display:flex;gap:8px">
+      <button class="btn btn-sm" onclick="apriModificaPreventivo('\${id}')">Modifica</button>
       <button class="btn btn-sm" onclick="openConfiguratore('preventivo','\${id}','\${prev.listino}')">+ Aggiungi porta</button>
       <button class="btn btn-sm" onclick="esportaPDF('preventivo','\${id}')">📄 Esporta PDF</button>
       \${prev.stato==='bozza'?\`<button class="btn btn-sm" onclick="apriModalInvioPreventivo('\${id}')">Invia</button>\`:''}
@@ -5121,7 +5191,7 @@ async function esportaPDF(tipo, id) {
           </select>
         </div>
         <div class="form-field" style="grid-column:1/-1">
-          <label>Vostro riferimento</label>
+          <label>Riferimento cliente</label>
           <input type="text" id="ndoc-rif-cliente" placeholder="Es: ordine n° 123, progetto Rossi...">
         </div>
         <div class="form-field">
@@ -5194,6 +5264,11 @@ function generaPDF(payload, callback) {
     } else { callback(new Error('Python exit ' + code + ': ' + stderr.slice(-500))); }
   });
 }
+// SMTP
+const SMTP_CONFIG={host:'smtps.aruba.it',port:465,secure:true,auth:{user:'commerciale@maxporte.it',pass:process.env.SMTP_PASSWORD||''}};
+const SMTP_FROM='"Max Porte" <commerciale@maxporte.it>';
+function creaTransporter(){return nodemailer.createTransport(SMTP_CONFIG);}
+
 const server = http.createServer(function(req, res) {
   if (req.method === 'GET' && req.url === '/logo-maxporte.png') {
     const p = path.join(__dirname, 'logo-maxporte.png');
@@ -5219,39 +5294,22 @@ const server = http.createServer(function(req, res) {
     });
     return;
   }
-  if(req.method==='GET'&&req.url==='/ping-invia'){
-    res.writeHead(200,{'Content-Type':'application/json'});
-    res.end(JSON.stringify({ok:true,msg:'route attiva'}));
-    return;
-  }
   if(req.method==='POST'&&req.url==='/invia-preventivo'){
     let body='';
     req.on('data',function(c){body+=c.toString();});
     req.on('end',function(){
       try{
         const d=JSON.parse(body);
-        console.log('[invia-preventivo] avvio generaPDF');
         generaPDF(d.payload,function(err,pdf){
-          console.log('[invia-preventivo] generaPDF callback, err:', err&&err.message);
           if(err){res.writeHead(500,{'Content-Type':'application/json'});res.end(JSON.stringify({ok:false,error:err.message}));return;}
-          console.log('[invia-preventivo] PDF generato, invio SMTP a:', d.email_to);
-          try{
-            const transporter = creaTransporter();
-            transporter.verify(function(verErr){
-              console.log('[invia-preventivo] SMTP verify:', verErr ? verErr.message : 'OK');
-              transporter.sendMail({
-                from:SMTP_FROM,to:d.email_to,cc:d.email_cc||'',subject:d.oggetto,text:d.testo,
-                attachments:[{filename:d.numero_preventivo+'.pdf',content:pdf,contentType:'application/pdf'}]
-              },function(e2,info){
-                console.log('[invia-preventivo] sendMail callback, err:', e2&&e2.message, 'info:', info&&info.messageId);
-                if(e2){res.writeHead(500,{'Content-Type':'application/json'});res.end(JSON.stringify({ok:false,error:e2.message}));}
-                else{res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({ok:true}));}
-              });
-            });
-          }catch(smtpErr){
-            console.error('[invia-preventivo] SMTP error:',smtpErr.message);
-            res.writeHead(500,{'Content-Type':'application/json'});res.end(JSON.stringify({ok:false,error:smtpErr.message}));
-          }
+          creaTransporter().sendMail({
+            from:SMTP_FROM,to:d.email_to,cc:d.email_cc||'',
+            subject:d.oggetto,text:d.testo,
+            attachments:[{filename:d.numero_preventivo+'.pdf',content:pdf,contentType:'application/pdf'}]
+          },function(e2){
+            if(e2){res.writeHead(500,{'Content-Type':'application/json'});res.end(JSON.stringify({ok:false,error:e2.message}));}
+            else{res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({ok:true}));}
+          });
         });
       }catch(e){res.writeHead(400,{'Content-Type':'application/json'});res.end(JSON.stringify({ok:false,error:e.message}));}
     });
