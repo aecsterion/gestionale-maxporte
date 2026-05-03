@@ -2971,8 +2971,7 @@ async function apriModificaPreventivo(id){
   var no=document.getElementById('ndoc-note');if(no)no.value=prev.note||'';
   const {data:righe}=await sb.from('righe_preventivo').select('*').eq('preventivo_id',id).order('riga_numero',{ascending:true});
   CFG_RIGHE=(righe||[]).map(function(r){return Object.assign({},r);});
-  renderRigheNdoc();
-  ndocRicalcola();
+  aggiornaTotaleNdoc();
   modal.classList.add('open');
 }
 
