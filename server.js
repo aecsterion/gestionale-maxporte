@@ -2079,9 +2079,12 @@ async function cfgApertura(){
     sensiMap[s.codice_apertura].push(s);
   });
 
+  // Filtra aperture per compatibilità (es. modello GC non compatibile con LIBRO)
+  const apFiltrate = await filtraPerCompatibilita(ap||[], 'apertura', 'codice');
+
   // Group aperture by famiglia from sensi_apertura (more accurate than tipologie_apertura.famiglia)
   const gruppi = {};
-  (ap||[]).forEach(a=>{
+  apFiltrate.forEach(a=>{
     const s = sensiMap[a.codice];
     const fam = s?.[0]?.famiglia || a.famiglia || 'ALTRO';
     if(!gruppi[fam]) gruppi[fam]=[];
@@ -2395,7 +2398,7 @@ async function cfgSpessore(){
       <input type="number" id="cfg-spessore" value="\${CFG.spessore||''}" placeholder="es. 125" step="0.5" min="5" max="60"
         style="width:120px;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px;font-family:inherit"
         oninput="calcolaTelaio(this.value,'\${fam}')">
-      <span style="font-size:13px;color:var(--mid)">cm</span>
+      <span style="font-size:13px;color:var(--mid)">mm</span>
     </div>
   </div>
   <div id="cfg-telaio-result" style="margin-bottom:14px"></div>
@@ -2497,19 +2500,32 @@ async function cfgSerratura(){
   const {data:defaults} = await sb.from('apertura_serrature').select('codice_serratura,is_default').eq('codice_apertura',fam);
   const defaultSerr = (defaults||[]).find(d=>d.is_default)?.codice_serratura;
   const {data:tutte} = await sb.from('tipi_serratura').select('*').eq('attiva',true).eq('is_automatica',false);
-  const tutteFiltrateCompat = await filtraPerCompatibilita(tutte||[], 'serratura', 'codice');
-  const isScorrevole = fam==='SI'||fam==='SE'||fam.startsWith('SI')||fam.startsWith('SE')||fam.startsWith('S/');
-  const famUpper = fam.toUpperCase();
-  const serrature = tutteFiltrateCompat.filter(s=>{
-    // Se non ha famiglie_apertura configurate → visibile per tutte le aperture
+  const famUpper = fam.toUpperCase().trim();
+  // Mappa l'apertura alla sua famiglia generica
+  const getFamiglia = (a) => {
+    if(!a) return 'BAT';
+    if(a==='SI'||a.startsWith('SI/')||a.startsWith('SI ')||a==='SE'||a.startsWith('SE/')||a.startsWith('SE ')||a.startsWith('S/')) return 'SCORREVOLE';
+    if(a==='LIBRO'||a.startsWith('LIBRO/')||a.startsWith('LIBRO ')) return 'LIBRO';
+    if(a.startsWith('CS')) return 'CS';
+    if(a.startsWith('COM')) return 'COM';
+    if(a.startsWith('FM')) return 'FM';
+    if(a.startsWith('ROTO')) return 'ROTO';
+    return 'BAT';
+  };
+  const famigliaCorrente = getFamiglia(famUpper);
+  // Filtro famiglie_apertura: se vuoto → visibile per tutti; se compilato → matcha codice esatto, prefisso o famiglia
+  const serratureFam = (tutte||[]).filter(s=>{
     if(!s.famiglie_apertura) return true;
     const fams = s.famiglie_apertura.split(',').map(x=>x.trim().toUpperCase()).filter(Boolean);
-    // Match esatto sul codice apertura
-    if(fams.includes(famUpper)) return true;
-    // Match per famiglia (prefisso): "LIBRO" matcha "LIBRO/S", "LIBRO Q", ecc.
-    if(fams.some(f => famUpper === f || famUpper.startsWith(f+'/') || famUpper.startsWith(f+' '))) return true;
-    return false;
+    return fams.some(f =>
+      famUpper === f ||                          // codice esatto: "LIBRO Q" === "LIBRO Q"
+      famUpper.startsWith(f+'/') ||             // variante slash: "LIBRO/S"
+      famUpper.startsWith(f+' ') ||             // variante spazio: "LIBRO Q"
+      famigliaCorrente === f                    // famiglia generica: "LIBRO" per tutte le varianti libro
+    );
   });
+  // Poi applica le regole della tab compatibilità (esclusioni specifiche)
+  const serrature = await filtraPerCompatibilita(serratureFam, 'serratura', 'codice');
   if(!CFG.serratura&&defaultSerr){
     const def=serrature.find(s=>s.codice===defaultSerr);
     if(def){CFG.serratura=def.codice;CFG.nome_serratura=def.nome;}
@@ -2798,6 +2814,10 @@ async function cfgRiepilogo(){
         <input type="text" id="cfg-note-riga" value="\${CFG.note_riga||''}" placeholder="Note specifiche su questa porta..." style="width:100%;padding:7px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit" oninput="CFG.note_riga=this.value">
       </div>
     </div>
+    <div style="margin-bottom:12px">
+      <div style="font-size:11px;color:var(--mid);margin-bottom:4px">Stanza <span style="font-weight:400;color:var(--mid)">(opzionale)</span></div>
+      <input type="text" id="cfg-stanza" value="\${CFG.stanza||''}" placeholder="es. Ingresso, Camera da letto..." style="width:100%;padding:7px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit" oninput="CFG.stanza=this.value">
+    </div>
     <div style="display:flex;justify-content:space-between;align-items:center">
       <div>
         <div style="font-size:11px;color:var(--mid)">Totale riga</div>
@@ -2811,6 +2831,7 @@ async function cfgRiepilogo(){
 async function aggiungiRigaAlDocumento(){
   CFG.quantita = parseInt(document.getElementById('cfg-qty')?.value||1)||1;
   CFG.note_riga = document.getElementById('cfg-note-riga')?.value||'';
+  CFG.stanza = document.getElementById('cfg-stanza')?.value||'';
   const tot = cfgTotale();
   const riga = {
     codice_serie:CFG.serie, codice_modello:CFG.modello, nome_modello:CFG.nome_modello,
@@ -2836,7 +2857,8 @@ async function aggiungiRigaAlDocumento(){
     prezzo_extra_incisioni:CFG.p_extra_incisioni,
     prezzo_unitario:tot, quantita:CFG.quantita,
     prezzo_totale_riga:tot*CFG.quantita,
-    note_riga:CFG.note_riga
+    note_riga:CFG.note_riga,
+    stanza:CFG.stanza||null
   };
 
   if(CFG_TARGET_ID){
@@ -3163,7 +3185,7 @@ async function salvaNuovoDoc(){
       const tabRighe = mode==='preventivo'?'righe_preventivo':'righe_ordine';
       const fk = mode==='preventivo'?'preventivo_id':'ordine_id';
       await sb.from(tabRighe).delete().eq(fk, editId);
-      const RIGHE_FIELDS = ['codice_serie','nome_serie','codice_modello','nome_modello','codice_finitura','nome_finitura','pannello_bugna','codice_colore_alu','nome_colore_alu','codice_colore_pietra','nome_colore_pietra','codice_tipo_vetro','nome_tipo_vetro','codice_apertura','nome_apertura','senso_apertura','larghezza_mm','altezza_mm','misura_custom','spessore_muro_cm','spessore_muro_mm','codice_spalla','tipo_accessorio_telaio','codice_ferramenta','nome_ferramenta','codice_maniglia','nome_maniglia','codice_colore_maniglia','nome_colore_maniglia','prezzo_base','prezzo_vetro','prezzo_finitura','prezzo_bugna','prezzo_inserto','prezzo_apertura','prezzo_telaio','prezzo_accessorio_telaio','prezzo_ferramenta','prezzo_maniglia','prezzo_extra_incisioni','prezzo_unitario','quantita','sconto_riga','prezzo_totale_riga','note_riga'];
+      const RIGHE_FIELDS = ['codice_serie','nome_serie','codice_modello','nome_modello','codice_finitura','nome_finitura','pannello_bugna','codice_colore_alu','nome_colore_alu','codice_colore_pietra','nome_colore_pietra','codice_tipo_vetro','nome_tipo_vetro','codice_apertura','nome_apertura','senso_apertura','larghezza_mm','altezza_mm','misura_custom','spessore_muro_cm','spessore_muro_mm','codice_spalla','tipo_accessorio_telaio','codice_ferramenta','nome_ferramenta','codice_maniglia','nome_maniglia','codice_colore_maniglia','nome_colore_maniglia','prezzo_base','prezzo_vetro','prezzo_finitura','prezzo_bugna','prezzo_inserto','prezzo_apertura','prezzo_telaio','prezzo_accessorio_telaio','prezzo_ferramenta','prezzo_maniglia','prezzo_extra_incisioni','prezzo_unitario','quantita','sconto_riga','prezzo_totale_riga','note_riga','stanza'];
       const righe = CFG_RIGHE.map((r,i)=>{const o={[fk]:editId,riga_numero:i+1};RIGHE_FIELDS.forEach(k=>{if(r[k]!==undefined)o[k]=r[k];});return o;});
       const {error:errRighe} = await sb.from(tabRighe).insert(righe);
       if(errRighe){ toast('Errore salvataggio righe: '+errRighe.message,'err'); return; }
@@ -4234,6 +4256,7 @@ async function adminColoriExtra(){
     <td>\${inlineInput(v.sovrapprezzo_a??0,\`adminSalva('tipi_vetro','\${v.id}','sovrapprezzo_a',this.value)\`,'65px')}</td>
     <td>\${inlineInput(v.sovrapprezzo_p??0,\`adminSalva('tipi_vetro','\${v.id}','sovrapprezzo_p',this.value)\`,'65px')}</td>
     <td>\${adminToggle(v.attivo,\`toggleCampo('tipi_vetro','\${v.id}','attivo',\${v.attivo})\`)}</td>
+    <td><button onclick="eliminaRigaAdmin('tipi_vetro','\${v.id}','adminColoriExtra')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
   </tr>\`).join('');
   const rowsA=(alu||[]).map(a=>\`<tr>
     <td>\${inlineInput(a.codice,\`adminSalva('colori_inserto_alluminio','\${a.id}','codice',this.value)\`,'70px','text')}</td>
@@ -4241,24 +4264,26 @@ async function adminColoriExtra(){
     <td><span class="badge \${a.incluso?'bg':'ba'}" style="cursor:pointer;font-size:10px" onclick="toggleCampo('colori_inserto_alluminio','\${a.id}','incluso',\${a.incluso})">\${a.incluso?'Incluso':'A pagamento'}</span></td>
     <td>\${inlineInput(a.sovrapprezzo_a??'',\`adminSalva('colori_inserto_alluminio','\${a.id}','sovrapprezzo_a',this.value)\`,'65px','number','0')}</td>
     <td>\${inlineInput(a.sovrapprezzo_p??'',\`adminSalva('colori_inserto_alluminio','\${a.id}','sovrapprezzo_p',this.value)\`,'65px','number','0')}</td>
+    <td><button onclick="eliminaRigaAdmin('colori_inserto_alluminio','\${a.id}','adminColoriExtra')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
   </tr>\`).join('');
   const rowsP=(pietra||[]).map(p=>\`<tr>
     <td>\${inlineInput(p.codice,\`adminSalva('colori_pietra','\${p.id}','codice',this.value)\`,'70px','text')}</td>
     <td>\${inlineInput(p.nome,\`adminSalva('colori_pietra','\${p.id}','nome',this.value)\`,'150px','text')}</td>
     <td>\${inlineInput(p.sovrapprezzo_a??0,\`adminSalva('colori_pietra','\${p.id}','sovrapprezzo_a',this.value)\`,'65px')}</td>
     <td>\${inlineInput(p.sovrapprezzo_p??0,\`adminSalva('colori_pietra','\${p.id}','sovrapprezzo_p',this.value)\`,'65px')}</td>
+    <td><button onclick="eliminaRigaAdmin('colori_pietra','\${p.id}','adminColoriExtra')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
   </tr>\`).join('');
   document.getElementById('admin-sub').innerHTML=\`
   <div class="card" style="margin-bottom:12px">
-    <div class="card-header"><span class="card-title">Tipi vetro</span><button class="btn btn-red btn-sm" onclick="nuovaRiga('tipi_vetro',{codice:'VET',nome:'Nuovo vetro',sovrapprezzo_a:0,sovrapprezzo_p:0,attivo:true},'adminColoriExtra')">+</button></div>
-    <table><thead><tr><th>Codice</th><th>Nome</th><th>Sovr.A</th><th>Sovr.P</th><th>Stato</th></tr></thead><tbody>\${rowsV||'<tr><td colspan="5" style="text-align:center;color:var(--mid);padding:12px">Nessuno</td></tr>'}</tbody></table>
+    <div class="card-header"><span class="card-title">Tipi vetro</span><button class="btn btn-red btn-sm" onclick="nuovaRigaUpsert('tipi_vetro',{codice:'VET'+Date.now().toString().slice(-3),nome:'Nuovo vetro',sovrapprezzo_a:0,sovrapprezzo_p:0,attivo:true},'adminColoriExtra')">+</button></div>
+    <table><thead><tr><th>Codice</th><th>Nome</th><th>Sovr.A</th><th>Sovr.P</th><th>Stato</th><th></th></tr></thead><tbody>\${rowsV||'<tr><td colspan="5" style="text-align:center;color:var(--mid);padding:12px">Nessuno</td></tr>'}</tbody></table>
   </div>
   <div class="card" style="margin-bottom:12px">
-    <div class="card-header"><span class="card-title">Colori inserto alluminio</span><button class="btn btn-red btn-sm" onclick="nuovaRiga('colori_inserto_alluminio',{codice:'ALU',nome:'Nuovo colore',incluso:false},'adminColoriExtra')">+</button></div>
-    <table><thead><tr><th>Codice</th><th>Nome</th><th>Incluso</th><th>Sovr.A</th><th>Sovr.P</th></tr></thead><tbody>\${rowsA||'<tr><td colspan="5" style="text-align:center;color:var(--mid);padding:12px">Nessuno</td></tr>'}</tbody></table>
+    <div class="card-header"><span class="card-title">Colori inserto alluminio</span><button class="btn btn-red btn-sm" onclick="nuovaRiga('colori_inserto_alluminio',{codice:'ALU'+Date.now().toString().slice(-4),nome:'Nuovo colore',incluso:false},'adminColoriExtra')">+</button></div>
+    <table><thead><tr><th>Codice</th><th>Nome</th><th>Incluso</th><th>Sovr.A</th><th>Sovr.P</th><th></th></tr></thead><tbody>\${rowsA||'<tr><td colspan="5" style="text-align:center;color:var(--mid);padding:12px">Nessuno</td></tr>'}</tbody></table>
   </div>
   <div class="card">
-    <div class="card-header"><span class="card-title">Colori pietra</span><button class="btn btn-red btn-sm" onclick="nuovaRiga('colori_pietra',{codice:'PIE',nome:'Nuovo colore',sovrapprezzo_a:0,sovrapprezzo_p:0},'adminColoriExtra')">+</button></div>
+    <div class="card-header"><span class="card-title">Colori pietra</span><button class="btn btn-red btn-sm" onclick="nuovaRiga('colori_pietra',{codice:'PIE'+Date.now().toString().slice(-4),nome:'Nuovo colore',sovrapprezzo_a:0,sovrapprezzo_p:0},'adminColoriExtra')">+</button></div>
     <table><thead><tr><th>Codice</th><th>Nome</th><th>Sovr.A</th><th>Sovr.P</th></tr></thead><tbody>\${rowsP||'<tr><td colspan="4" style="text-align:center;color:var(--mid);padding:12px">Nessun colore pietra — aggiungilo qui</td></tr>'}</tbody></table>
   </div>\`;
 }
@@ -4954,6 +4979,16 @@ async function toggleCampo(tabella, id, campo, attualeStr){
 async function nuovaRiga(tabella, defaultData, callback){
   const {error} = await sb.from(tabella).insert([defaultData]);
   if(error){toast(msgErrore(error, defaultData.codice||defaultData.nome||''),'err');return;}
+  toast('Riga aggiunta','ok');
+  if(callback && window[callback]) window[callback]();
+}
+
+async function nuovaRigaUpsert(tabella, defaultData, callback){
+  // Genera un codice univoco aggiungendo un suffisso random se necessario
+  let data = {...defaultData};
+  if(data.codice) data.codice = data.codice + Math.random().toString(36).slice(2,5).toUpperCase();
+  const {error} = await sb.from(tabella).insert([data]);
+  if(error){toast(msgErrore(error, data.codice||data.nome||''),'err');return;}
   toast('Riga aggiunta','ok');
   if(callback && window[callback]) window[callback]();
 }
