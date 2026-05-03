@@ -3146,18 +3146,39 @@ async function salvaNuovoDoc(){
       ...(mode==='ordine'?{richiede_approvazione_tecnica:haCustom}:{})
     };
 
-    const {data:doc,error} = await sb.from(tabDoc).insert([docData]).select().single();
-    if(error){ toast('Errore salvataggio: '+error.message,'err'); return; }
-
-    // Salva righe
+    const editId = document.getElementById('modal-nuovo-doc').dataset.editId;
     const tabRighe = mode==='preventivo'?'righe_preventivo':'righe_ordine';
     const fk = mode==='preventivo'?'preventivo_id':'ordine_id';
-    const righe = CFG_RIGHE.map((r,i)=>({...r,[fk]:doc.id,riga_numero:i+1}));
-    const {error:errRighe} = await sb.from(tabRighe).insert(righe);
-    if(errRighe){ toast('Errore salvataggio righe: '+errRighe.message,'err'); return; }
+    let docId;
 
-    toast(numero+' salvato con successo','ok');
+    if(editId){
+      // MODIFICA preventivo esistente
+      delete docData.numero; // non cambia il numero
+      const {error} = await sb.from(tabDoc).update(docData).eq('id',editId);
+      if(error){ toast('Errore aggiornamento: '+error.message,'err'); return; }
+      docId = editId;
+      // Elimina righe esistenti e reinserisce
+      await sb.from(tabRighe).delete().eq(fk, editId);
+      const righe = CFG_RIGHE.map((r,i)=>{
+        const rr={...r};delete rr.id;delete rr.created_at;delete rr.updated_at;
+        rr[fk]=editId;rr.riga_numero=i+1;return rr;
+      });
+      const {error:errRighe} = await sb.from(tabRighe).insert(righe);
+      if(errRighe){ toast('Errore salvataggio righe: '+errRighe.message,'err'); return; }
+      toast('Preventivo aggiornato','ok');
+    } else {
+      // NUOVO documento
+      const {data:doc,error} = await sb.from(tabDoc).insert([docData]).select().single();
+      if(error){ toast('Errore salvataggio: '+error.message,'err'); return; }
+      docId = doc.id;
+      const righe = CFG_RIGHE.map((r,i)=>({...r,[fk]:doc.id,riga_numero:i+1}));
+      const {error:errRighe} = await sb.from(tabRighe).insert(righe);
+      if(errRighe){ toast('Errore salvataggio righe: '+errRighe.message,'err'); return; }
+      toast(docData.numero+' salvato','ok');
+    }
+
     document.getElementById('modal-nuovo-doc').classList.remove('open');
+    delete document.getElementById('modal-nuovo-doc').dataset.editId;
     CFG_RIGHE=[];
     if(mode==='preventivo') renderPreventivi();
     else renderOrdiniDiretti();
