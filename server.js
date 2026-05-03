@@ -2497,16 +2497,17 @@ async function cfgSerratura(){
   const {data:defaults} = await sb.from('apertura_serrature').select('codice_serratura,is_default').eq('codice_apertura',fam);
   const defaultSerr = (defaults||[]).find(d=>d.is_default)?.codice_serratura;
   const {data:tutte} = await sb.from('tipi_serratura').select('*').eq('attiva',true).eq('is_automatica',false);
+  const tutteFiltrateCompat = await filtraPerCompatibilita(tutte||[], 'serratura', 'codice');
   const isScorrevole = fam==='SI'||fam==='SE'||fam.startsWith('SI')||fam.startsWith('SE')||fam.startsWith('S/');
-  const isBattente = !isScorrevole;
-  const serrature = (tutte||[]).filter(s=>{
+  const famUpper = fam.toUpperCase();
+  const serrature = tutteFiltrateCompat.filter(s=>{
+    // Se non ha famiglie_apertura configurate → visibile per tutte le aperture
     if(!s.famiglie_apertura) return true;
-    const fams=s.famiglie_apertura.split(',').map(x=>x.trim().toUpperCase());
-    if(fams.includes(fam.toUpperCase())) return true;
-    const famBase=fam.replace(/[0-9]/g,'').replace(/[QAS]$/,'').trim().toUpperCase();
-    if(fams.includes(famBase)) return true;
-    if(isScorrevole&&(fams.includes('SI')||fams.includes('SE'))) return true;
-    if(isBattente&&fams.some(f=>['BAT','CS','COM','FM','ROTO','LIBRO','SPECIALI'].includes(f))) return true;
+    const fams = s.famiglie_apertura.split(',').map(x=>x.trim().toUpperCase()).filter(Boolean);
+    // Match esatto sul codice apertura
+    if(fams.includes(famUpper)) return true;
+    // Match per famiglia (prefisso): "LIBRO" matcha "LIBRO/S", "LIBRO Q", ecc.
+    if(fams.some(f => famUpper === f || famUpper.startsWith(f+'/') || famUpper.startsWith(f+' '))) return true;
     return false;
   });
   if(!CFG.serratura&&defaultSerr){
