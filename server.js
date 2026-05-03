@@ -1748,36 +1748,32 @@ async function selModello(cod, nome, prezzo, vetroIncluso, haExtraIncisioni){
 let _compatCache = null; // cache per evitare query ripetute nello stesso step
 
 async function caricaEsclusioni(){
-  // Costruisce lista di tutte le entità già scelte
   const scelte = [];
-  if(CFG.serie)    scelte.push({tipo:'serie',    codice:CFG.serie});
-  if(CFG.modello)  scelte.push({tipo:'modello',  codice:CFG.modello});
-  if(CFG.finitura) scelte.push({tipo:'finitura', codice:CFG.finitura});
-  if(CFG.apertura) scelte.push({tipo:'apertura', codice:CFG.apertura});
-  if(CFG.ferramenta) scelte.push({tipo:'ferramenta', codice:CFG.ferramenta});
-  if(CFG.colore_alu) scelte.push({tipo:'inserto_alu', codice:CFG.colore_alu});
-  if(CFG.colore_pietra) scelte.push({tipo:'inserto_pietra', codice:CFG.colore_pietra});
-  if(CFG.tipo_vetro) scelte.push({tipo:'vetro', codice:CFG.tipo_vetro});
+  if(CFG.serie)         scelte.push({tipo:'serie',         codice:CFG.serie});
+  if(CFG.modello)       scelte.push({tipo:'modello',       codice:CFG.modello});
+  if(CFG.finitura)      scelte.push({tipo:'finitura',      codice:CFG.finitura});
+  if(CFG.apertura)      scelte.push({tipo:'apertura',      codice:CFG.apertura});
+  if(CFG.ferramenta)    scelte.push({tipo:'ferramenta',    codice:CFG.ferramenta});
+  if(CFG.colore_alu)    scelte.push({tipo:'inserto_alu',   codice:CFG.colore_alu});
+  if(CFG.colore_pietra) scelte.push({tipo:'inserto_pietra',codice:CFG.colore_pietra});
+  if(CFG.tipo_vetro)    scelte.push({tipo:'vetro',         codice:CFG.tipo_vetro});
   if(scelte.length===0) return new Set();
 
-  // Query: trova tutte le regole dove entita_a è una delle scelte correnti
-  const {data:regole} = await sb.from('regole_compatibilita')
-    .select('entita_b_tipo,entita_b_codice')
-    .in('entita_a_tipo', scelte.map(s=>s.tipo))
-    .filter('entita_a_codice','in',\`(\${scelte.map(s=>"'"+s.codice.replace(/'/g,"''")+"'").join(',')})\`);
+  // Query separata per ogni scelta attiva — unico modo sicuro per filtrare su entrambe le colonne
+  const promises = scelte.map(s =>
+    sb.from('regole_compatibilita')
+      .select('entita_b_tipo,entita_b_codice')
+      .eq('entita_a_tipo', s.tipo)
+      .eq('entita_a_codice', s.codice)
+  );
+  const risultati = await Promise.all(promises);
 
-  // Filtra solo le regole dove entita_a_codice corrisponde alle scelte effettive
-  const scelteMap = {};
-  scelte.forEach(s=>{ if(!scelteMap[s.tipo]) scelteMap[s.tipo]=new Set(); scelteMap[s.tipo].add(s.codice); });
-  
-  // Costruisce set di esclusi: "tipo:codice"
   const esclusi = new Set();
-  (regole||[]).forEach(r=>{
-    esclusi.add(r.entita_b_tipo+':'+r.entita_b_codice);
+  risultati.forEach(({data}) => {
+    (data||[]).forEach(r => esclusi.add(r.entita_b_tipo+':'+r.entita_b_codice));
   });
   return esclusi;
 }
-
 async function filtraPerCompatibilita(opzioni, categoria, codiceChiave){
   const esclusi = await caricaEsclusioni();
   if(esclusi.size===0) return opzioni;
