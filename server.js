@@ -2921,7 +2921,7 @@ function filtraPrev(filtro){
     return;
   }
   tbody.innerHTML=filtered.map(function(p){
-    return '<tr class="data-row" onclick="renderPreventivoDetail(\''+p.id+'\')">'+
+    return '<tr class="data-row" onclick="renderPreventivoDetail('+JSON.stringify(p.id)+')" style="cursor:pointer">'+
       '<td><strong>'+(p.numero||'')+'</strong></td>'+
       '<td>'+(p.anagrafiche&&p.anagrafiche.ragione_sociale||'&#8212;')+'</td>'+
       '<td>'+(p.riferimento_cliente||'&#8212;')+'</td>'+
