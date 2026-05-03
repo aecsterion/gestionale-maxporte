@@ -3834,12 +3834,7 @@ async function nuovaFinitura(serieFilter){
 // MISURE STANDARD
 // Famiglie sempre presenti nel select misure (anche se vuote)
 const MISURE_FAMIGLIE_EXTRA = ['SOP','PAS','PAN-BL'];
-const MISURE_FAM_LABELS = {
-  'BAT':'Battente','CS':'CS (senza battura)','LIBRO':'A libro','SALOON':'Saloon',
-  'ROTOTRASLANTI':'Rototraslante','SCORREVOLI INTERNO MURO':'Scor. int. muro',
-  'SCORREVOLI ESTERNO MURO':'Scor. est. muro','FILO MURO':'Filo muro',
-  'COMPLANARI':'Complanare','SOP':'Sopraluce','PAS':'Passata','PAN-BL':'Pannello blindato'
-};
+const MISURE_FAM_LABELS = {}; // codici mostrati as-is nel select e nella tabella
 
 async function adminMisure(){
   const {data:famiglie} = await sb.from('misure_standard').select('famiglia_apertura').order('famiglia_apertura');
@@ -3855,7 +3850,7 @@ async function adminMisure(){
   const rows=(data||[]).map(m=>\`<tr>
     <td>\${inlineInput(m.larghezza_mm,\`adminSalva('misure_standard','\${m.id}','larghezza_mm',this.value)\`,'70px','number')} mm</td>
     <td>\${inlineInput(m.altezza_mm,\`adminSalva('misure_standard','\${m.id}','altezza_mm',this.value)\`,'70px','number')} mm</td>
-    <td style="font-size:12px;color:var(--mid)">\${MISURE_FAM_LABELS[m.famiglia_apertura]||m.famiglia_apertura}</td>
+    <td style="font-size:12px;color:var(--mid)">\${m.famiglia_apertura}</td>
     <td>\${inlineInput(m.sovrapprezzo_a??0,\`adminSalva('misure_standard','\${m.id}','sovrapprezzo_a',this.value)\`,'65px','number','€ A')}</td>
     <td>\${inlineInput(m.sovrapprezzo_p??0,\`adminSalva('misure_standard','\${m.id}','sovrapprezzo_p',this.value)\`,'65px','number','€ P')}</td>
     <td>\${inlineInput(m.sovrapprezzo_pct_a??0,\`adminSalva('misure_standard','\${m.id}','sovrapprezzo_pct_a',this.value)\`,'55px','number','% A')}</td>
@@ -3868,7 +3863,7 @@ async function adminMisure(){
       <label style="font-size:12px;color:var(--mid)">Famiglia:</label>
       <select onchange="window._adminMisureFam=this.value;adminMisure()" style="padding:5px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit">\${famOpts}</select>
     </div>
-    \${adminCard(\`Misure standard — \${MISURE_FAM_LABELS[famFilter]||famFilter}\`,\`
+    \${adminCard(\`Misure standard — \${famFilter}\`,\`
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;padding-bottom:12px;border-bottom:0.5px solid var(--border);flex-wrap:wrap">
         <input type="number" id="nm-l" placeholder="Larghezza mm" style="padding:6px 8px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;width:130px">
         <input type="number" id="nm-a" placeholder="Altezza mm (0=libera)" style="padding:6px 8px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;width:160px">
