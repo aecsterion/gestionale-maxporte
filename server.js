@@ -3177,6 +3177,8 @@ async function salvaNuovoDoc(){
     if(editId){
       // MODIFICA — update del documento esistente (senza toccare numero/creato_da)
       docData.data_ultima_modifica = new Date().toISOString();
+      // Se il preventivo era già stato inviato, torna a bozza — va reinviato
+      if(mode==='preventivo') docData.stato = 'bozza';
       const {data:updated, error} = await sb.from(tabDoc).update(docData).eq('id',editId).select().single();
       if(error){ toast('Errore aggiornamento: '+error.message,'err'); return; }
       docId = editId;
