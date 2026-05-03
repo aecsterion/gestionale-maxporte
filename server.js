@@ -2615,7 +2615,14 @@ async function cfgManiglia(){
 
   // Carica maniglie
   const {data:tutteMan}=await sb.from('maniglie').select('*').eq('attivo',true).order('nome');
-  const manAll=await filtraPerCompatibilita(tutteMan||[],'maniglia','codice');
+  // Filtra per aperture_escluse: scarta maniglie che escludono esplicitamente l'apertura corrente
+  const aperturaCorrente = (CFG.apertura||'').toUpperCase().trim();
+  const manCompatibili = (tutteMan||[]).filter(m=>{
+    if(!m.aperture_escluse || m.codice==='NESSUNA') return true;
+    const escluse = m.aperture_escluse.split(',').map(s=>s.trim().toUpperCase()).filter(Boolean);
+    return !escluse.includes(aperturaCorrente);
+  });
+  const manAll=await filtraPerCompatibilita(manCompatibili,'maniglia','codice');
 
   // Versioni ammesse per tipo apertura
   // SCORREVOLE → versione=SCORREVOLE (+ NESSUNA)
@@ -3997,6 +4004,10 @@ async function adminManiglie(){
     <td>\${inlineInput(m.codice,\`adminSalva('maniglie','\${m.id}','codice',this.value)\`,'70px','text')}</td>
     <td>\${inlineInput(m.nome,\`adminSalva('maniglie','\${m.id}','nome',this.value)\`,'160px','text')}</td>
     <td>\${inlineInput(m.serie_compatibili||'',\`adminSalva('maniglie','\${m.id}','serie_compatibili',this.value)\`,'100px','text','Tutte')}</td>
+    <td style="max-width:180px">
+      <div style="font-size:10px;color:var(--mid);margin-bottom:2px">Escludi aperture (cod. separati da virgola)</div>
+      \${inlineInput(m.aperture_escluse||'',\`adminSalva('maniglie','\${m.id}','aperture_escluse',this.value)\`,'160px','text','es. LIBRO,SI')}
+    </td>
     <td>\${inlineInput(m.descrizione||'',\`adminSalva('maniglie','\${m.id}','descrizione',this.value)\`,'150px','text','Descrizione')}</td>
     <td>\${inlineInput(m.prezzo_a??0,\`adminSalva('maniglie','\${m.id}','prezzo_a',this.value)\`,'65px')}</td>
     <td>\${inlineInput(m.prezzo_p??0,\`adminSalva('maniglie','\${m.id}','prezzo_p',this.value)\`,'65px')}</td>
@@ -4009,7 +4020,7 @@ async function adminManiglie(){
   </tr>\`).join('');
   document.getElementById('admin-sub').innerHTML=adminCard('Maniglie',\`
     <div style="overflow-x:auto"><table>
-      <thead><tr><th>Codice</th><th>Nome</th><th>Serie compatibili</th><th>Descrizione</th><th>Prezzo A</th><th>Prezzo P</th><th>Immagine</th><th>Stato</th><th></th></tr></thead>
+      <thead><tr><th>Codice</th><th>Nome</th><th>Serie compatibili</th><th>Aperture escluse</th><th>Descrizione</th><th>Prezzo A</th><th>Prezzo P</th><th>Immagine</th><th>Stato</th><th></th></tr></thead>
       <tbody>\${rows}</tbody></table></div>\`,
     \`<button class="btn btn-red btn-sm" onclick="nuovaConCodiceNome('maniglie','Codice maniglia (es. ASC-CH):','Nome maniglia:',{attivo:true,prezzo_a:0,prezzo_p:0},'adminManiglie')">+ Aggiungi maniglia</button>\`);
 }
@@ -4621,7 +4632,7 @@ async function adminCompatibilita(){
     sb.from('colori_pietra').select('codice,nome').order('nome'),
     sb.from('tipi_serratura').select('codice,nome').eq('attiva',true).eq('is_automatica',false).order('nome'),
     sb.from('maniglie').select('codice,nome').eq('attivo',true).order('nome'),
-    sb.from('regole_compatibilita').select('*').order('entita_a_tipo').order('entita_a_codice').limit(200),
+    sb.from('regole_compatibilita').select('*').order('entita_a_tipo').order('entita_a_codice'),
   ]);
 
   const ENTITA = {
@@ -4657,8 +4668,15 @@ async function adminCompatibilita(){
 
   const aCodsOpts = aItems.map(i=>\`<option value="\${i.codice||i[ENTITA[aTipo].codKey]}" \${(i.codice||i[ENTITA[aTipo].codKey])===aCodice?'selected':''}>\${i.codice||i[ENTITA[aTipo].codKey]} — \${i.nome||i[ENTITA[aTipo].nameKey]}</option>\`).join('');
 
-  // Filtra regole per A selezionato
-  const regoleFiltrate = (regole||[]).filter(r=> (!aCodice || (r.entita_a_tipo===aTipo && r.entita_a_codice===aCodice)));
+  // Carica regole precise per A selezionato (query diretta, non filtraggio lato client)
+  let regoleFiltrate = [];
+  if(aCodice){
+    const {data:rf} = await sb.from('regole_compatibilita')
+      .select('*')
+      .eq('entita_a_tipo', aTipo)
+      .eq('entita_a_codice', aCodice);
+    regoleFiltrate = rf||[];
+  }
   const esclusiB = new Set(regoleFiltrate.filter(r=>r.entita_b_tipo===bTipo).map(r=>r.entita_b_codice));
 
   // Lista opzioni B con stato
@@ -4760,7 +4778,15 @@ async function aggiungiRegola(aTipo, aCodice, aNome, bTipo, bCodice, bNome){
     entita_a_tipo:aTipo, entita_a_codice:aCodice, entita_a_nome:aNome,
     entita_b_tipo:bTipo, entita_b_codice:bCodice, entita_b_nome:bNome
   }]);
-  if(error){toast('Già esiste o errore: '+error.message,'err');return;}
+  if(error){
+    if(error.code==='23505'||error.message?.includes('duplicate')||error.message?.includes('unique')){
+      toast('Questa regola esiste già','err');
+    } else {
+      toast('Errore: '+error.message,'err');
+    }
+    adminCompatibilita();
+    return;
+  }
   toast('Regola aggiunta','ok');
   adminCompatibilita();
 }
