@@ -2790,26 +2790,26 @@ async function cfgAccMisure(){
   const l = CFG.larghezza||'';
   const a = CFG.altezza||'';
   const sp = CFG.spessore||'';
-  document.getElementById('cfg-body').innerHTML=`
+  document.getElementById('cfg-body').innerHTML=\`
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-      <div style="font-size:13px;font-weight:500">Misure passata <span style="color:var(--mid);font-weight:400">— ${CFG.nome_modello}</span></div>
+      <div style="font-size:13px;font-weight:500">Misure passata <span style="color:var(--mid);font-weight:400">— \${CFG.nome_modello}</span></div>
       <button class="btn btn-sm" onclick="renderCfgStep('finitura')">← Indietro</button>
     </div>
     <div style="display:grid;gap:14px;max-width:360px">
       <div>
         <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Larghezza luce (mm)</label>
-        <input type="number" id="acc-l" value="${l}" placeholder="es. 900" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px">
+        <input type="number" id="acc-l" value="\${l}" placeholder="es. 900" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px">
       </div>
       <div>
         <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Altezza luce (mm)</label>
-        <input type="number" id="acc-a" value="${a}" placeholder="es. 2100" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px">
+        <input type="number" id="acc-a" value="\${a}" placeholder="es. 2100" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px">
       </div>
       <div>
         <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Spessore muro (mm)</label>
-        <input type="number" id="acc-sp" value="${sp}" placeholder="es. 200" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px">
+        <input type="number" id="acc-sp" value="\${sp}" placeholder="es. 200" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px">
       </div>
       <button class="btn btn-red" onclick="selAccMisure()">Avanti →</button>
-    </div>`;
+    </div>\`;
 }
 
 function selAccMisure(){
@@ -2827,18 +2827,18 @@ async function cfgAccSopraluce(){
   const {data:misure} = await sb.from('misure_standard').select('*').eq('famiglia_apertura','SOP').order('larghezza_mm');
   const larghezze = [...new Set((misure||[]).map(m=>m.larghezza_mm))];
   const lSel = CFG.larghezza||'';
-  const opts = larghezze.map(l=>`<option value="${l}" ${l==lSel?'selected':''}>${l} mm</option>`).join('');
+  const opts = larghezze.map(l=>\`<option value="\${l}" \${l==lSel?'selected':''}>\${l} mm</option>\`).join('');
 
-  document.getElementById('cfg-body').innerHTML=`
+  document.getElementById('cfg-body').innerHTML=\`
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-      <div style="font-size:13px;font-weight:500">Misure sopraluce <span style="color:var(--mid);font-weight:400">— ${CFG.nome_modello}</span></div>
+      <div style="font-size:13px;font-weight:500">Misure sopraluce <span style="color:var(--mid);font-weight:400">— \${CFG.nome_modello}</span></div>
       <button class="btn btn-sm" onclick="renderCfgStep('finitura')">← Indietro</button>
     </div>
     <div style="display:grid;gap:14px;max-width:400px">
       <div>
         <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Larghezza standard</label>
         <select id="sop-l" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px;font-family:inherit">
-          <option value="">— Seleziona —</option>${opts}
+          <option value="">— Seleziona —</option>\${opts}
         </select>
       </div>
       <div style="background:var(--beige2);border-radius:var(--radius);padding:12px;font-size:12px;color:var(--mid)">
@@ -2847,22 +2847,22 @@ async function cfgAccSopraluce(){
       </div>
       <div>
         <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Altezza foro muro (mm)</label>
-        <input type="number" id="sop-foro" value="${CFG._sopForo||''}" placeholder="es. 2400" oninput="calcAltezzaSopraluce()" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px">
+        <input type="number" id="sop-foro" value="\${CFG._sopForo||''}" placeholder="es. 2400" oninput="calcAltezzaSopraluce()" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px">
       </div>
       <div>
         <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Altezza luce porta (mm)</label>
-        <input type="number" id="sop-porta" value="${CFG._sopPorta||''}" placeholder="es. 2100" oninput="calcAltezzaSopraluce()" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px">
+        <input type="number" id="sop-porta" value="\${CFG._sopPorta||''}" placeholder="es. 2100" oninput="calcAltezzaSopraluce()" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px">
       </div>
       <div style="background:var(--white);border:0.5px solid var(--border);border-radius:var(--radius);padding:10px 12px">
         <div style="font-size:11px;color:var(--mid);margin-bottom:2px">Altezza luce sopraluce calcolata</div>
-        <div id="sop-result" style="font-size:20px;font-weight:600;color:var(--red)">${CFG.altezza?CFG.altezza+' mm':'—'}</div>
+        <div id="sop-result" style="font-size:20px;font-weight:600;color:var(--red)">\${CFG.altezza?CFG.altezza+' mm':'—'}</div>
       </div>
       <div>
         <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Spessore muro (mm)</label>
-        <input type="number" id="sop-sp" value="${CFG.spessore||''}" placeholder="es. 200" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px">
+        <input type="number" id="sop-sp" value="\${CFG.spessore||''}" placeholder="es. 200" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px">
       </div>
       <button class="btn btn-red" onclick="selAccSopraluce()">Avanti →</button>
-    </div>`;
+    </div>\`;
 }
 
 function calcAltezzaSopraluce(){
@@ -2901,26 +2901,26 @@ function selAccSopraluce(){
 async function cfgAccQta(){
   const qMin = CFG._qtaMin||1;
   const qta = CFG.quantita||qMin;
-  document.getElementById('cfg-body').innerHTML=`
+  document.getElementById('cfg-body').innerHTML=\`
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-      <div style="font-size:13px;font-weight:500">Quantità <span style="color:var(--mid);font-weight:400">— ${CFG.nome_modello}</span></div>
+      <div style="font-size:13px;font-weight:500">Quantità <span style="color:var(--mid);font-weight:400">— \${CFG.nome_modello}</span></div>
       <button class="btn btn-sm" onclick="renderCfgStep('finitura')">← Indietro</button>
     </div>
     <div style="display:grid;gap:14px;max-width:280px">
-      ${qMin>1?`<div style="background:var(--beige2);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--mid)">Quantità minima: <strong style="color:var(--dark)">${qMin} pz</strong></div>`:''}
+      \${qMin>1?\`<div style="background:var(--beige2);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--mid)">Quantità minima: <strong style="color:var(--dark)">\${qMin} pz</strong></div>\`:''}
       <div>
-        <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Quantità (minimo ${qMin} pz)</label>
-        <input type="number" id="acc-qta" value="${qta}" min="${qMin}" step="1"
+        <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Quantità (minimo \${qMin} pz)</label>
+        <input type="number" id="acc-qta" value="\${qta}" min="\${qMin}" step="1"
           style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:18px;font-weight:600;text-align:center">
       </div>
       <button class="btn btn-red" onclick="selAccQta()">Avanti →</button>
-    </div>`;
+    </div>\`;
 }
 
 function selAccQta(){
   const q = parseInt(document.getElementById('acc-qta')?.value||0);
   const qMin = CFG._qtaMin||1;
-  if(!q||q<qMin){toast(`Quantità minima: ${qMin} pz`,'err');return;}
+  if(!q||q<qMin){toast(\`Quantità minima: \${qMin} pz\`,'err');return;}
   if(q!==Math.floor(q)||isNaN(q)){toast('Inserisci un numero intero','err');return;}
   CFG.quantita=q;
   cfgUpdatePrice(); cfgRiepilogo();
@@ -2936,50 +2936,50 @@ async function cfgAccPannello(){
   const sensoSel = CFG.senso||'';
   const tipoSel = CFG._pannelloTipo||'intero';
 
-  document.getElementById('cfg-body').innerHTML=`
+  document.getElementById('cfg-body').innerHTML=\`
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-      <div style="font-size:13px;font-weight:500">Configurazione pannello <span style="color:var(--mid);font-weight:400">— ${CFG.nome_modello}</span></div>
+      <div style="font-size:13px;font-weight:500">Configurazione pannello <span style="color:var(--mid);font-weight:400">— \${CFG.nome_modello}</span></div>
       <button class="btn btn-sm" onclick="renderCfgStep('finitura')">← Indietro</button>
     </div>
     <div style="display:grid;gap:16px;max-width:440px">
       <div>
         <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:6px">Senso apertura</label>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">
-          ${sensi.map(s=>`<div onclick="this.parentElement.querySelectorAll('div').forEach(d=>d.classList.remove('sel-acc'));this.classList.add('sel-acc');document.getElementById('pannello-senso').value='${s}'"
-            class="${s===sensoSel?'sel-acc':''}"
-            style="padding:8px;border-radius:var(--radius);border:${s===sensoSel?'2px solid var(--red)':'0.5px solid var(--border)'};cursor:pointer;text-align:center;font-size:12px;background:${s===sensoSel?'var(--red-bg)':'var(--white)'}">
-            ${s}
-          </div>`).join('')}
+          \${sensi.map(s=>\`<div onclick="this.parentElement.querySelectorAll('div').forEach(d=>d.classList.remove('sel-acc'));this.classList.add('sel-acc');document.getElementById('pannello-senso').value='\${s}'"
+            class="\${s===sensoSel?'sel-acc':''}"
+            style="padding:8px;border-radius:var(--radius);border:\${s===sensoSel?'2px solid var(--red)':'0.5px solid var(--border)'};cursor:pointer;text-align:center;font-size:12px;background:\${s===sensoSel?'var(--red-bg)':'var(--white)'}">
+            \${s}
+          </div>\`).join('')}
         </div>
-        <input type="hidden" id="pannello-senso" value="${sensoSel}">
+        <input type="hidden" id="pannello-senso" value="\${sensoSel}">
       </div>
       <div>
         <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:6px">Tipo fornitura</label>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
           <div id="tipo-intero" onclick="selTipoPannello('intero')"
-            style="padding:12px;border-radius:var(--radius);border:${tipoSel==='intero'?'2px solid var(--red)':'0.5px solid var(--border)'};cursor:pointer;background:${tipoSel==='intero'?'var(--red-bg)':'var(--white)'}">
-            <div style="font-size:13px;font-weight:500;color:${tipoSel==='intero'?'var(--red)':'var(--dark)'}">Pannello intero</div>
+            style="padding:12px;border-radius:var(--radius);border:\${tipoSel==='intero'?'2px solid var(--red)':'0.5px solid var(--border)'};cursor:pointer;background:\${tipoSel==='intero'?'var(--red-bg)':'var(--white)'}">
+            <div style="font-size:13px;font-weight:500;color:\${tipoSel==='intero'?'var(--red)':'var(--dark)'}">Pannello intero</div>
             <div style="font-size:11px;color:var(--mid);margin-top:2px">Misura standard</div>
           </div>
           <div id="tipo-taglio" onclick="selTipoPannello('taglio')"
-            style="padding:12px;border-radius:var(--radius);border:${tipoSel==='taglio'?'2px solid var(--red)':'0.5px solid var(--border)'};cursor:pointer;background:${tipoSel==='taglio'?'var(--red-bg)':'var(--white)'}">
-            <div style="font-size:13px;font-weight:500;color:${tipoSel==='taglio'?'var(--red)':'var(--dark)'}">Taglio a misura</div>
-            <div style="font-size:11px;color:var(--mid);margin-top:2px">+€ ${suppTaglio.toFixed(2)}</div>
+            style="padding:12px;border-radius:var(--radius);border:\${tipoSel==='taglio'?'2px solid var(--red)':'0.5px solid var(--border)'};cursor:pointer;background:\${tipoSel==='taglio'?'var(--red-bg)':'var(--white)'}">
+            <div style="font-size:13px;font-weight:500;color:\${tipoSel==='taglio'?'var(--red)':'var(--dark)'}">Taglio a misura</div>
+            <div style="font-size:11px;color:var(--mid);margin-top:2px">+€ \${suppTaglio.toFixed(2)}</div>
           </div>
         </div>
       </div>
-      <div id="pannello-misure-box" style="${tipoSel==='taglio'?'':'display:none'};display:${tipoSel==='taglio'?'grid':'none'};gap:10px">
+      <div id="pannello-misure-box" style="display:\${tipoSel==='taglio'?'grid':'none'};gap:10px">
         <div>
           <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Larghezza (mm)</label>
-          <input type="number" id="pan-l" value="${CFG.larghezza||''}" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px">
+          <input type="number" id="pan-l" value="\${CFG.larghezza||''}" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px">
         </div>
         <div>
           <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Altezza (mm)</label>
-          <input type="number" id="pan-a" value="${CFG.altezza||''}" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px">
+          <input type="number" id="pan-a" value="\${CFG.altezza||''}" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px">
         </div>
       </div>
       <button class="btn btn-red" onclick="selAccPannello()">Avanti →</button>
-    </div>`;
+    </div>\`;
 }
 
 function selTipoPannello(tipo){
