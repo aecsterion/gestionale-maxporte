@@ -2943,6 +2943,18 @@ async function cfgAccSopraluce(){
       <strong style="color:var(--dark);display:block;margin-bottom:6px">Calcolo altezza sopraluce</strong>
       L'altezza viene calcolata sottraendo l'altezza della porta dall'altezza del foro muro.
     </div>
+    <div style="margin-bottom:14px">
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--mid);margin-bottom:8px">TIPOLOGIA PORTA SOTTO</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        \${[['BAT','Battente'],['CS','Senza battura'],['PAS','Passata']].map(([cod,label])=>\`
+          <div onclick="selFamTelaioSop('\${cod}')" id="sop-fam-\${cod}"
+            style="padding:6px 14px;border-radius:20px;border:\${(CFG._sopFamTelaio||'BAT')===cod?'2px solid var(--red)':'0.5px solid var(--border)'};
+            cursor:pointer;font-size:13px;font-weight:\${(CFG._sopFamTelaio||'BAT')===cod?'600':'400'};
+            background:\${(CFG._sopFamTelaio||'BAT')===cod?'var(--red-bg)':'var(--white)'};
+            color:\${(CFG._sopFamTelaio||'BAT')===cod?'var(--red)':'var(--dark)'}">\${label}</div>
+        \`).join('')}
+      </div>
+    </div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;align-items:end;margin-bottom:8px">
       <div>
         <label style="font-size:11px;color:var(--mid);display:block;margin-bottom:3px">Altezza foro muro (mm)</label>
@@ -2966,6 +2978,19 @@ async function cfgAccSopraluce(){
     <div style="display:flex;justify-content:flex-end">
       <button class="btn btn-red" onclick="selAccSopraluce()">Avanti →</button>
     </div>\`;
+}
+
+function selFamTelaioSop(cod){
+  CFG._sopFamTelaio = cod;
+  ['BAT','CS','PAS'].forEach(c=>{
+    const el = document.getElementById('sop-fam-'+c);
+    if(!el) return;
+    const attivo = c===cod;
+    el.style.border = attivo?'2px solid var(--red)':'0.5px solid var(--border)';
+    el.style.background = attivo?'var(--red-bg)':'var(--white)';
+    el.style.color = attivo?'var(--red)':'var(--dark)';
+    el.style.fontWeight = attivo?'600':'400';
+  });
 }
 
 function selPillSop(val){
@@ -3013,6 +3038,7 @@ function selAccSopraluce(){
   if(!foro||!porta){toast('Inserisci altezza foro e altezza porta','err');return;}
   if(foro<=porta+120){toast('Il foro muro deve essere almeno 120mm più alto della porta','err');return;}
   const h = foro - porta - 120;
+  if(!CFG._sopFamTelaio) CFG._sopFamTelaio='BAT';
   CFG.larghezza=l; CFG.altezza=h;
   CFG._sopForo=foro; CFG._sopPorta=porta;
   CFG.misura_custom=!!lCustom;
@@ -3048,15 +3074,20 @@ async function calcolaTelaioAcc(spessore){
   const sp = parseFloat(spessore);
   if(!sp||sp<1){ document.getElementById('acc-telaio-result').innerHTML=''; return; }
   CFG.spessore=sp;
+
+  // Per le passate usa famiglia PAS, per i sopraluce dipende dalla porta sotto (gestito dopo)
+  const fam = CFG._tipoAccessorio==='sopraluce' ? (CFG._sopFamTelaio||'BAT') : 'PAS';
+
   const {data:regole} = await sb.from('regole_telaio')
-    .select('*').eq('famiglia_apertura','BAT')
-    .lte('spessore_da_cm',sp/10).gte('spessore_a_cm',sp/10);
+    .select('*').eq('famiglia_apertura', fam)
+    .lte('spessore_da_cm', sp/10).gte('spessore_a_cm', sp/10);
+
   if(!regole||regole.length===0){
     document.getElementById('acc-telaio-result').innerHTML=\`<div style="background:var(--amber-bg);border-radius:var(--radius);padding:10px;font-size:12px;color:var(--amber-tx)">Spessore fuori range — verrà registrato senza spalla.</div>\`;
     return;
   }
   const regola = regole[0];
-  const {data:spalla} = await sb.from('telai_spalle').select('*').eq('codice',regola.codice_spalla).maybeSingle();
+  const {data:spalla} = await sb.from('telai_spalle').select('*').eq('codice',regola.codice_spalla).eq('famiglia_apertura',fam).maybeSingle();
   const prezzoSpalla = spalla?.[\`prezzo_\${listino().toLowerCase()}\`]||0;
   CFG.spalla=regola.codice_spalla;
   CFG.p_telaio=prezzoSpalla;
