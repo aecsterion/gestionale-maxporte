@@ -1664,6 +1664,10 @@ async function renderCfgStep(step){
   else if(step==='maniglia') await cfgManiglia();
   else if(step==='colore_maniglia') await cfgColoreManiglia();
   else if(step==='pomolino') await cfgPomolino();
+  else if(step==='acc_misure') await cfgAccMisure();
+  else if(step==='acc_sopraluce') await cfgAccSopraluce();
+  else if(step==='acc_qta') await cfgAccQta();
+  else if(step==='acc_pannello') await cfgAccPannello();
   else if(step==='riepilogo') await cfgRiepilogo();
 }
 
@@ -1739,6 +1743,25 @@ async function selModello(cod, nome, prezzo, vetroIncluso, haExtraIncisioni){
   // Carica dati modello per flags
   const {data:m} = await sb.from('modelli').select('*').eq('codice',cod).single();
   CFG._flags = m;
+
+  // Rileva se è un accessorio o pannello blindato
+  CFG._isAccessorio = CFG.serie === 'ACC';
+  CFG._isPannelloBlindato = CFG.serie === 'PAN-BL';
+
+  // Tipo accessorio in base al codice modello
+  const ACC_TIPO = {
+    'PAS':'passata','SOP':'sopraluce',
+    'COP':'coprifilo','COP3M':'coprifilo',
+    'COP65':'coprifilo','COP90':'coprifilo','COP3M65':'coprifilo','COP3M90':'coprifilo',
+    'FPAN':'semplice','IMB':'semplice','RIN':'semplice',
+    'BSC':'semplice','AL100':'semplice','AL230':'semplice','ZOC':'semplice'
+  };
+  CFG._tipoAccessorio = ACC_TIPO[cod] || (CFG._isPannelloBlindato ? 'pannello' : null);
+
+  // Quantità minima per certi accessori
+  const QTA_MIN = {'FPAN':3,'IMB':3,'AL100':3,'AL230':3};
+  CFG._qtaMin = QTA_MIN[cod] || 1;
+
   await renderCfgStep('finitura');
 }
 
@@ -1856,11 +1879,22 @@ async function cfgFinitura(){
 async function selFinitura(cod, nome, sovrVal, sovrTipo, consenteBugna){
   CFG._finitura_pct = sovrTipo==='pct' ? sovrVal : 0;
   CFG._finitura_fisso = sovrTipo==='fisso' ? sovrVal : 0;
-  CFG.p_finitura = sovrTipo==='pct' ? 0 : (sovrVal||0); // pct calcolata in cfgUpdatePrice
+  CFG.p_finitura = sovrTipo==='pct' ? 0 : (sovrVal||0);
   CFG.finitura=cod; CFG.nome_finitura=nome;
   CFG._consenteBugna=consenteBugna;
   CFG.colore_speciale=null;
   cfgUpdatePrice();
+
+  // Flusso accessori
+  if(CFG._isAccessorio){
+    const t = CFG._tipoAccessorio;
+    if(t==='passata') return await renderCfgStep('acc_misure');
+    if(t==='sopraluce') return await renderCfgStep('acc_sopraluce');
+    if(t==='semplice'||t==='coprifilo') return await renderCfgStep('acc_qta');
+  }
+  if(CFG._isPannelloBlindato) return await renderCfgStep('acc_pannello');
+
+  // Flusso porte normale
   const f = CFG._flags||{};
   const haOpzioni = f.ha_vetro||f.ha_pannello_o_bugna||f.ha_inserto_alluminio||f.ha_inserto_pietra||f.ha_pantografatura;
   await renderCfgStep(haOpzioni?'opzioni':'apertura');
@@ -2747,6 +2781,238 @@ async function cfgPomolino(){
 function selPomolino(cod,nome,prezzo){
   CFG.pomolino=cod;CFG.nome_pomolino=nome;CFG.p_pomolino=prezzo;
   cfgUpdatePrice();cfgRiepilogo();
+}
+
+// ── CONFIGURATORE ACCESSORI ───────────────────────────
+
+// Passata: larghezza + altezza libere + spessore muro
+async function cfgAccMisure(){
+  const l = CFG.larghezza||'';
+  const a = CFG.altezza||'';
+  const sp = CFG.spessore||'';
+  document.getElementById('cfg-body').innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:500">Misure passata <span style="color:var(--mid);font-weight:400">— ${CFG.nome_modello}</span></div>
+      <button class="btn btn-sm" onclick="renderCfgStep('finitura')">← Indietro</button>
+    </div>
+    <div style="display:grid;gap:14px;max-width:360px">
+      <div>
+        <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Larghezza luce (mm)</label>
+        <input type="number" id="acc-l" value="${l}" placeholder="es. 900" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px">
+      </div>
+      <div>
+        <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Altezza luce (mm)</label>
+        <input type="number" id="acc-a" value="${a}" placeholder="es. 2100" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px">
+      </div>
+      <div>
+        <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Spessore muro (mm)</label>
+        <input type="number" id="acc-sp" value="${sp}" placeholder="es. 200" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px">
+      </div>
+      <button class="btn btn-red" onclick="selAccMisure()">Avanti →</button>
+    </div>`;
+}
+
+function selAccMisure(){
+  const l = parseInt(document.getElementById('acc-l')?.value||0);
+  const a = parseInt(document.getElementById('acc-a')?.value||0);
+  const sp = parseInt(document.getElementById('acc-sp')?.value||0);
+  if(!l||!a){toast('Inserisci larghezza e altezza','err');return;}
+  CFG.larghezza=l; CFG.altezza=a; CFG.spessore=sp||null;
+  CFG.misura_custom=true;
+  cfgUpdatePrice(); cfgRiepilogo();
+}
+
+// Sopraluce: larghezza da select + calcolo altezza automatico
+async function cfgAccSopraluce(){
+  const {data:misure} = await sb.from('misure_standard').select('*').eq('famiglia_apertura','SOP').order('larghezza_mm');
+  const larghezze = [...new Set((misure||[]).map(m=>m.larghezza_mm))];
+  const lSel = CFG.larghezza||'';
+  const opts = larghezze.map(l=>`<option value="${l}" ${l==lSel?'selected':''}>${l} mm</option>`).join('');
+
+  document.getElementById('cfg-body').innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:500">Misure sopraluce <span style="color:var(--mid);font-weight:400">— ${CFG.nome_modello}</span></div>
+      <button class="btn btn-sm" onclick="renderCfgStep('finitura')">← Indietro</button>
+    </div>
+    <div style="display:grid;gap:14px;max-width:400px">
+      <div>
+        <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Larghezza standard</label>
+        <select id="sop-l" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px;font-family:inherit">
+          <option value="">— Seleziona —</option>${opts}
+        </select>
+      </div>
+      <div style="background:var(--beige2);border-radius:var(--radius);padding:12px;font-size:12px;color:var(--mid)">
+        <strong style="color:var(--dark);display:block;margin-bottom:8px">Calcolo altezza sopraluce</strong>
+        Inserisci le misure del foro muro e della porta da inserire nel foro:
+      </div>
+      <div>
+        <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Altezza foro muro (mm)</label>
+        <input type="number" id="sop-foro" value="${CFG._sopForo||''}" placeholder="es. 2400" oninput="calcAltezzaSopraluce()" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px">
+      </div>
+      <div>
+        <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Altezza luce porta (mm)</label>
+        <input type="number" id="sop-porta" value="${CFG._sopPorta||''}" placeholder="es. 2100" oninput="calcAltezzaSopraluce()" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px">
+      </div>
+      <div style="background:var(--white);border:0.5px solid var(--border);border-radius:var(--radius);padding:10px 12px">
+        <div style="font-size:11px;color:var(--mid);margin-bottom:2px">Altezza luce sopraluce calcolata</div>
+        <div id="sop-result" style="font-size:20px;font-weight:600;color:var(--red)">${CFG.altezza?CFG.altezza+' mm':'—'}</div>
+      </div>
+      <div>
+        <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Spessore muro (mm)</label>
+        <input type="number" id="sop-sp" value="${CFG.spessore||''}" placeholder="es. 200" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px">
+      </div>
+      <button class="btn btn-red" onclick="selAccSopraluce()">Avanti →</button>
+    </div>`;
+}
+
+function calcAltezzaSopraluce(){
+  const foro = parseInt(document.getElementById('sop-foro')?.value||0);
+  const porta = parseInt(document.getElementById('sop-porta')?.value||0);
+  const el = document.getElementById('sop-result');
+  if(foro && porta && foro>porta){
+    const h = foro - porta;
+    el.textContent = h+' mm';
+    el.style.color='var(--red)';
+    CFG._sopCalcH = h;
+  } else {
+    el.textContent='—';
+    el.style.color='var(--mid)';
+    CFG._sopCalcH = null;
+  }
+}
+
+function selAccSopraluce(){
+  const l = parseInt(document.getElementById('sop-l')?.value||0);
+  const foro = parseInt(document.getElementById('sop-foro')?.value||0);
+  const porta = parseInt(document.getElementById('sop-porta')?.value||0);
+  const sp = parseInt(document.getElementById('sop-sp')?.value||0);
+  if(!l){toast('Seleziona la larghezza','err');return;}
+  if(!foro||!porta){toast('Inserisci altezza foro e altezza porta','err');return;}
+  if(foro<=porta){toast('Il foro muro deve essere più alto della porta','err');return;}
+  const h = foro - porta;
+  CFG.larghezza=l; CFG.altezza=h;
+  CFG._sopForo=foro; CFG._sopPorta=porta;
+  CFG.spessore=sp||null;
+  CFG.misura_custom=true;
+  cfgUpdatePrice(); cfgRiepilogo();
+}
+
+// Accessori semplici / coprifili: solo quantità
+async function cfgAccQta(){
+  const qMin = CFG._qtaMin||1;
+  const qta = CFG.quantita||qMin;
+  document.getElementById('cfg-body').innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:500">Quantità <span style="color:var(--mid);font-weight:400">— ${CFG.nome_modello}</span></div>
+      <button class="btn btn-sm" onclick="renderCfgStep('finitura')">← Indietro</button>
+    </div>
+    <div style="display:grid;gap:14px;max-width:280px">
+      ${qMin>1?`<div style="background:var(--beige2);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--mid)">Quantità minima: <strong style="color:var(--dark)">${qMin} pz</strong></div>`:''}
+      <div>
+        <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Quantità (minimo ${qMin} pz)</label>
+        <input type="number" id="acc-qta" value="${qta}" min="${qMin}" step="1"
+          style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:18px;font-weight:600;text-align:center">
+      </div>
+      <button class="btn btn-red" onclick="selAccQta()">Avanti →</button>
+    </div>`;
+}
+
+function selAccQta(){
+  const q = parseInt(document.getElementById('acc-qta')?.value||0);
+  const qMin = CFG._qtaMin||1;
+  if(!q||q<qMin){toast(`Quantità minima: ${qMin} pz`,'err');return;}
+  if(q!==Math.floor(q)||isNaN(q)){toast('Inserisci un numero intero','err');return;}
+  CFG.quantita=q;
+  cfgUpdatePrice(); cfgRiepilogo();
+}
+
+// Pannello blindato: senso apertura + misure + intero/taglio a misura
+async function cfgAccPannello(){
+  const {data:imp} = await sb.from('impostazioni').select('valore').eq('chiave','supplemento_taglio_pannello').single();
+  const suppTaglio = parseFloat(imp?.valore||0);
+  CFG._suppTaglioPannello = suppTaglio;
+
+  const sensi = ['Interno DX','Esterno DX','Interno SX','Esterno SX','Nessuno'];
+  const sensoSel = CFG.senso||'';
+  const tipoSel = CFG._pannelloTipo||'intero';
+
+  document.getElementById('cfg-body').innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:500">Configurazione pannello <span style="color:var(--mid);font-weight:400">— ${CFG.nome_modello}</span></div>
+      <button class="btn btn-sm" onclick="renderCfgStep('finitura')">← Indietro</button>
+    </div>
+    <div style="display:grid;gap:16px;max-width:440px">
+      <div>
+        <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:6px">Senso apertura</label>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">
+          ${sensi.map(s=>`<div onclick="this.parentElement.querySelectorAll('div').forEach(d=>d.classList.remove('sel-acc'));this.classList.add('sel-acc');document.getElementById('pannello-senso').value='${s}'"
+            class="${s===sensoSel?'sel-acc':''}"
+            style="padding:8px;border-radius:var(--radius);border:${s===sensoSel?'2px solid var(--red)':'0.5px solid var(--border)'};cursor:pointer;text-align:center;font-size:12px;background:${s===sensoSel?'var(--red-bg)':'var(--white)'}">
+            ${s}
+          </div>`).join('')}
+        </div>
+        <input type="hidden" id="pannello-senso" value="${sensoSel}">
+      </div>
+      <div>
+        <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:6px">Tipo fornitura</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div id="tipo-intero" onclick="selTipoPannello('intero')"
+            style="padding:12px;border-radius:var(--radius);border:${tipoSel==='intero'?'2px solid var(--red)':'0.5px solid var(--border)'};cursor:pointer;background:${tipoSel==='intero'?'var(--red-bg)':'var(--white)'}">
+            <div style="font-size:13px;font-weight:500;color:${tipoSel==='intero'?'var(--red)':'var(--dark)'}">Pannello intero</div>
+            <div style="font-size:11px;color:var(--mid);margin-top:2px">Misura standard</div>
+          </div>
+          <div id="tipo-taglio" onclick="selTipoPannello('taglio')"
+            style="padding:12px;border-radius:var(--radius);border:${tipoSel==='taglio'?'2px solid var(--red)':'0.5px solid var(--border)'};cursor:pointer;background:${tipoSel==='taglio'?'var(--red-bg)':'var(--white)'}">
+            <div style="font-size:13px;font-weight:500;color:${tipoSel==='taglio'?'var(--red)':'var(--dark)'}">Taglio a misura</div>
+            <div style="font-size:11px;color:var(--mid);margin-top:2px">+€ ${suppTaglio.toFixed(2)}</div>
+          </div>
+        </div>
+      </div>
+      <div id="pannello-misure-box" style="${tipoSel==='taglio'?'':'display:none'};display:${tipoSel==='taglio'?'grid':'none'};gap:10px">
+        <div>
+          <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Larghezza (mm)</label>
+          <input type="number" id="pan-l" value="${CFG.larghezza||''}" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px">
+        </div>
+        <div>
+          <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Altezza (mm)</label>
+          <input type="number" id="pan-a" value="${CFG.altezza||''}" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px">
+        </div>
+      </div>
+      <button class="btn btn-red" onclick="selAccPannello()">Avanti →</button>
+    </div>`;
+}
+
+function selTipoPannello(tipo){
+  CFG._pannelloTipo = tipo;
+  const interoEl = document.getElementById('tipo-intero');
+  const taglioEl = document.getElementById('tipo-taglio');
+  const misureBox = document.getElementById('pannello-misure-box');
+  [interoEl,taglioEl].forEach(el=>{
+    const isTaglio = el.id==='tipo-taglio';
+    const sel = (tipo==='taglio'&&isTaglio)||(tipo==='intero'&&!isTaglio);
+    el.style.border = sel?'2px solid var(--red)':'0.5px solid var(--border)';
+    el.style.background = sel?'var(--red-bg)':'var(--white)';
+    el.querySelector('div').style.color = sel?'var(--red)':'var(--dark)';
+  });
+  misureBox.style.display = tipo==='taglio'?'grid':'none';
+}
+
+function selAccPannello(){
+  const senso = document.getElementById('pannello-senso')?.value;
+  const tipo = CFG._pannelloTipo||'intero';
+  if(!senso){toast('Seleziona il senso di apertura','err');return;}
+  CFG.senso=senso;
+  if(tipo==='taglio'){
+    const l = parseInt(document.getElementById('pan-l')?.value||0);
+    const a = parseInt(document.getElementById('pan-a')?.value||0);
+    if(!l||!a){toast('Inserisci larghezza e altezza per il taglio a misura','err');return;}
+    CFG.larghezza=l; CFG.altezza=a; CFG.misura_custom=true;
+    CFG.p_extra = CFG._suppTaglioPannello||0;
+  } else {
+    CFG.larghezza=null; CFG.altezza=null; CFG.misura_custom=false;
+    CFG.p_extra=0;
+  }
+  cfgUpdatePrice(); cfgRiepilogo();
 }
 
 async function cfgRiepilogo(){
@@ -4848,15 +5114,31 @@ async function rimuoviCompat(t,id){ await rimuoviRegola(id); }
 // IMPOSTAZIONI
 // ══════════════════════════════════════════════════════
 function adminImpostazioni(){
-  document.getElementById('admin-main').innerHTML=\`
-  <div class="grid-2">
-    <div class="card">
-      <div class="card-title">Numerazione documenti</div>
-      <div style="font-size:13px;color:var(--mid);margin-bottom:12px">Le sequenze numeriche vengono gestite automaticamente da Supabase. I prefissi sono configurati nel codice.</div>
-      <table style="font-size:13px">
-        <tr><td style="color:var(--mid);padding:4px 0">Formato preventivi</td><td><strong>PRV-YYYY-NNNN</strong></td></tr>
-        <tr><td style="color:var(--mid);padding:4px 0">Formato ordini</td><td><strong>ORD-YYYY-NNNN</strong></td></tr>
-      </table>
+  sb.from('impostazioni').select('*').then(({data})=>{
+    const imp={};(data||[]).forEach(r=>{imp[r.chiave]=r.valore;});
+    document.getElementById('admin-main').innerHTML=\`
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">Numerazione documenti</div>
+        <div style="font-size:13px;color:var(--mid);margin-bottom:12px">Le sequenze numeriche vengono gestite automaticamente da Supabase. I prefissi sono configurati nel codice.</div>
+        <table style="font-size:13px">
+          <tr><td style="color:var(--mid);padding:4px 0">Formato preventivi</td><td><strong>PRV-YYYY-NNNN</strong></td></tr>
+          <tr><td style="color:var(--mid);padding:4px 0">Formato ordini</td><td><strong>ORD-YYYY-NNNN</strong></td></tr>
+        </table>
+      </div>
+      <div class="card">
+        <div class="card-title">Supplementi configuratore</div>
+        <div style="display:grid;gap:12px">
+          <div>
+            <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Supplemento taglio a misura pannelli blindati (€)</label>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input type="number" id="imp-taglio" value="\${imp['supplemento_taglio_pannello']||0}" min="0" step="0.01"
+                style="padding:6px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px;font-weight:600;width:120px">
+              <button class="btn btn-sm" onclick="salvaImpostazione('supplemento_taglio_pannello','imp-taglio')">Salva</button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
     <div class="card">
       <div class="card-title">Supabase Storage</div>
@@ -4865,12 +5147,20 @@ function adminImpostazioni(){
         Bucket <strong>catalogo_immagini</strong> configurato e attivo
       </div>
     </div>
-  </div>
-  <div class="card">
-    <div class="card-title">Gestione utenti e ruoli</div>
-    <div id="utenti-content"><div class="loading"><div class="spinner"></div></div></div>
-  </div>\`;
-  renderUtentiInline();
+    <div class="card">
+      <div class="card-title">Gestione utenti e ruoli</div>
+      <div id="utenti-content"><div class="loading"><div class="spinner"></div></div></div>
+    </div>\`;
+    renderUtentiInline();
+  });
+}
+
+async function salvaImpostazione(chiave,inputId){
+  const val=document.getElementById(inputId)?.value;
+  if(val===null||val===undefined) return;
+  const {error}=await sb.from('impostazioni').upsert({chiave,valore:val},{onConflict:'chiave'});
+  if(error){toast('Errore: '+error.message,'err');}
+  else{toast('Salvato','ok');}
 }
 
 async function renderUtentiInline(){
