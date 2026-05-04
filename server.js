@@ -2811,49 +2811,83 @@ function selPomolino(cod,nome,prezzo){
 
 // ── CONFIGURATORE ACCESSORI ───────────────────────────
 
-// Passata: misure standard + input libero per custom
+// Passata: layout identico a misure porte
 async function cfgAccMisure(){
   const {data:misure} = await sb.from('misure_standard').select('*').eq('famiglia_apertura','PAS').order('larghezza_mm').order('altezza_mm');
   const lSel = CFG.larghezza||'';
   const aSel = CFG.altezza||'';
-  const sp = CFG.spessore||'';
 
-  const stdCards = (misure||[]).map(m=>{
-    const sel = m.larghezza_mm==lSel && m.altezza_mm==aSel;
-    return \`<div onclick="selAccMisuraStd(\${m.larghezza_mm},\${m.altezza_mm})"
-      style="padding:8px 10px;border-radius:var(--radius);border:\${sel?'2px solid var(--red)':'0.5px solid var(--border)'};cursor:pointer;background:\${sel?'var(--red-bg)':'var(--white)'};font-size:13px;text-align:center">
-      <div style="font-weight:500;color:\${sel?'var(--red)':'var(--dark)'}">\${m.larghezza_mm}×\${m.altezza_mm}</div>
-      <div style="font-size:10px;color:var(--mid)">mm</div>
-    </div>\`;
-  }).join('');
+  const larghezze = [...new Set((misure||[]).map(m=>m.larghezza_mm))];
+  const altezze   = [...new Set((misure||[]).map(m=>m.altezza_mm).filter(a=>a>0))];
+
+  const pillL = larghezze.map(l=>\`<div onclick="selPillPas('l',\${l})" id="pas-l-\${l}"
+    style="padding:6px 14px;border-radius:20px;border:\${l==lSel?'2px solid var(--red)':'0.5px solid var(--border)'};
+    cursor:pointer;font-size:13px;font-weight:\${l==lSel?'600':'400'};
+    background:\${l==lSel?'var(--red-bg)':'var(--white)'};color:\${l==lSel?'var(--red)':'var(--dark)'}">
+    \${l}
+  </div>\`).join('');
+
+  const pillA = altezze.map(a=>\`<div onclick="selPillPas('a',\${a})" id="pas-a-\${a}"
+    style="padding:6px 14px;border-radius:20px;border:\${a==aSel?'2px solid var(--red)':'0.5px solid var(--border)'};
+    cursor:pointer;font-size:13px;font-weight:\${a==aSel?'600':'400'};
+    background:\${a==aSel?'var(--red-bg)':'var(--white)'};color:\${a==aSel?'var(--red)':'var(--dark)'}">
+    \${a}
+  </div>\`).join('');
 
   document.getElementById('cfg-body').innerHTML=\`
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
       <div style="font-size:13px;font-weight:500">Misure passata <span style="color:var(--mid);font-weight:400">— \${CFG.nome_modello}</span></div>
       <button class="btn btn-sm" onclick="renderCfgStep('finitura')">← Indietro</button>
     </div>
-    \${stdCards?\`<div style="margin-bottom:12px">
-      <div style="font-size:12px;color:var(--mid);margin-bottom:6px">Misure standard</div>
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">\${stdCards}</div>
+    \${larghezze.length?\`
+    <div style="margin-bottom:16px">
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--mid);margin-bottom:8px">LARGHEZZA (MM)</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">\${pillL}</div>
     </div>\`:''}
-    <div style="border-top:0.5px solid var(--border);padding-top:12px">
-      <div style="font-size:12px;color:var(--mid);margin-bottom:8px">Oppure inserisci misura personalizzata</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;align-items:end">
-        <div>
-          <label style="font-size:11px;color:var(--mid);display:block;margin-bottom:3px">Larghezza (mm)</label>
-          <input type="number" id="acc-l" value="\${lSel}" placeholder="es. 900" style="width:100%;padding:7px 8px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px">
-        </div>
-        <div>
-          <label style="font-size:11px;color:var(--mid);display:block;margin-bottom:3px">Altezza (mm)</label>
-          <input type="number" id="acc-a" value="\${aSel}" placeholder="es. 2100" style="width:100%;padding:7px 8px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px">
-        </div>
-        <div>
-          <label style="font-size:11px;color:var(--mid);display:block;margin-bottom:3px">Spessore muro (mm)</label>
-          <input type="number" id="acc-sp" value="\${sp}" placeholder="es. 200" style="width:100%;padding:7px 8px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px">
-        </div>
-        <button class="btn btn-red" onclick="selAccMisure()">Avanti →</button>
+    \${altezze.length?\`
+    <div style="margin-bottom:16px">
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--mid);margin-bottom:8px">ALTEZZA (MM)</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">\${pillA}</div>
+    </div>\`:''}
+    <div style="background:var(--amber-bg);border-radius:var(--radius);padding:10px 14px;font-size:12px;color:var(--amber-tx);margin-bottom:12px">
+      Misura non presente nell'elenco? Inseriscila manualmente — verrà marcata come <strong>misura custom</strong>.
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px">
+      <div>
+        <label style="font-size:11px;color:var(--mid);display:block;margin-bottom:3px">Larghezza custom (mm)</label>
+        <input type="number" id="acc-l" placeholder="es. 870" style="width:100%;padding:7px 8px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px">
       </div>
+      <div>
+        <label style="font-size:11px;color:var(--mid);display:block;margin-bottom:3px">Altezza custom (mm)</label>
+        <input type="number" id="acc-a" placeholder="es. 2100" style="width:100%;padding:7px 8px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px">
+      </div>
+      <div></div>
+    </div>
+    <div style="display:flex;justify-content:flex-end">
+      <button class="btn btn-red" onclick="selAccMisure()">Avanti →</button>
     </div>\`;
+}
+
+function selPillPas(dim, val){
+  if(dim==='l'){
+    CFG._pasL=val;
+    document.querySelectorAll('[id^="pas-l-"]').forEach(el=>{
+      const attivo = el.id==='pas-l-'+val;
+      el.style.border=attivo?'2px solid var(--red)':'0.5px solid var(--border)';
+      el.style.background=attivo?'var(--red-bg)':'var(--white)';
+      el.style.color=attivo?'var(--red)':'var(--dark)';
+      el.style.fontWeight=attivo?'600':'400';
+    });
+  } else {
+    CFG._pasA=val;
+    document.querySelectorAll('[id^="pas-a-"]').forEach(el=>{
+      const attivo = el.id==='pas-a-'+val;
+      el.style.border=attivo?'2px solid var(--red)':'0.5px solid var(--border)';
+      el.style.background=attivo?'var(--red-bg)':'var(--white)';
+      el.style.color=attivo?'var(--red)':'var(--dark)';
+      el.style.fontWeight=attivo?'600':'400';
+    });
+  }
 }
 
 function selAccMisuraStd(l,a){
@@ -2862,59 +2896,104 @@ function selAccMisuraStd(l,a){
 }
 
 function selAccMisure(){
-  const l = parseInt(document.getElementById('acc-l')?.value||0);
-  const a = parseInt(document.getElementById('acc-a')?.value||0);
-  if(!l||!a){toast('Inserisci larghezza e altezza','err');return;}
+  // Priorità: input custom > pill selezionate
+  const lCustom = parseInt(document.getElementById('acc-l')?.value||0);
+  const aCustom = parseInt(document.getElementById('acc-a')?.value||0);
+  const l = lCustom || CFG._pasL || 0;
+  const a = aCustom || CFG._pasA || 0;
+  if(!l||!a){toast('Seleziona o inserisci larghezza e altezza','err');return;}
   CFG.larghezza=l; CFG.altezza=a;
-  CFG.misura_custom=true;
+  CFG.misura_custom = !!(lCustom||aCustom);
   cfgUpdatePrice(); renderCfgStep('acc_spessore');
 }
 
-// Sopraluce: larghezza da select + calcolo altezza automatico
+// Sopraluce: pill larghezza + input libero + calcolo altezza
 async function cfgAccSopraluce(){
   const {data:misure} = await sb.from('misure_standard').select('*').eq('famiglia_apertura','SOP').order('larghezza_mm');
   const larghezze = [...new Set((misure||[]).map(m=>m.larghezza_mm))];
   const lSel = CFG.larghezza||'';
-  const opts = larghezze.map(l=>\`<option value="\${l}" \${l==lSel?'selected':''}>\${l} mm</option>\`).join('');
+
+  const pillL = larghezze.map(l=>\`<div onclick="selPillSop(\${l})" id="sop-l-\${l}"
+    style="padding:6px 14px;border-radius:20px;border:\${l==lSel?'2px solid var(--red)':'0.5px solid var(--border)'};
+    cursor:pointer;font-size:13px;font-weight:\${l==lSel?'600':'400'};
+    background:\${l==lSel?'var(--red-bg)':'var(--white)'};color:\${l==lSel?'var(--red)':'var(--dark)'}">
+    \${l}
+  </div>\`).join('');
 
   document.getElementById('cfg-body').innerHTML=\`
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
       <div style="font-size:13px;font-weight:500">Misure sopraluce <span style="color:var(--mid);font-weight:400">— \${CFG.nome_modello}</span></div>
       <button class="btn btn-sm" onclick="renderCfgStep('finitura')">← Indietro</button>
     </div>
-    <div style="display:grid;gap:14px;max-width:400px">
+    \${larghezze.length?\`
+    <div style="margin-bottom:16px">
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--mid);margin-bottom:8px">LARGHEZZA (MM)</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">\${pillL}</div>
+    </div>\`:''}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
       <div>
-        <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Larghezza standard</label>
-        <select id="sop-l" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px;font-family:inherit">
-          <option value="">— Seleziona —</option>\${opts}
-        </select>
+        <label style="font-size:11px;color:var(--mid);display:block;margin-bottom:3px">Larghezza custom (mm)</label>
+        <input type="number" id="sop-l-custom" value="\${!larghezze.includes(lSel)?lSel:''}" placeholder="es. 870"
+          style="width:100%;padding:7px 8px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px"
+          oninput="selPillSop(null)">
       </div>
-      <div style="background:var(--beige2);border-radius:var(--radius);padding:12px;font-size:12px;color:var(--mid)">
-        <strong style="color:var(--dark);display:block;margin-bottom:8px">Calcolo altezza sopraluce</strong>
-        Inserisci le misure del foro muro e della porta da inserire nel foro:
+      <div></div>
+    </div>
+    <div style="background:var(--beige2);border-radius:var(--radius);padding:12px;font-size:12px;color:var(--mid);margin-bottom:12px">
+      <strong style="color:var(--dark);display:block;margin-bottom:6px">Calcolo altezza sopraluce</strong>
+      L'altezza viene calcolata sottraendo l'altezza della porta dall'altezza del foro muro.
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;align-items:end;margin-bottom:8px">
+      <div>
+        <label style="font-size:11px;color:var(--mid);display:block;margin-bottom:3px">Altezza foro muro (mm)</label>
+        <input type="number" id="sop-foro" value="\${CFG._sopForo||''}" placeholder="es. 2400"
+          oninput="calcAltezzaSopraluce()"
+          style="width:100%;padding:7px 8px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px">
       </div>
       <div>
-        <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Altezza foro muro (mm)</label>
-        <input type="number" id="sop-foro" value="\${CFG._sopForo||''}" placeholder="es. 2400" oninput="calcAltezzaSopraluce()" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px">
+        <label style="font-size:11px;color:var(--mid);display:block;margin-bottom:3px">Altezza luce porta (mm)</label>
+        <input type="number" id="sop-porta" value="\${CFG._sopPorta||''}" placeholder="es. 2100"
+          oninput="calcAltezzaSopraluce()"
+          style="width:100%;padding:7px 8px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px">
       </div>
       <div>
-        <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Altezza luce porta (mm)</label>
-        <input type="number" id="sop-porta" value="\${CFG._sopPorta||''}" placeholder="es. 2100" oninput="calcAltezzaSopraluce()" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px">
+        <label style="font-size:11px;color:var(--mid);display:block;margin-bottom:3px">Altezza sopraluce calcolata</label>
+        <div id="sop-result" style="padding:7px 8px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:15px;font-weight:600;color:var(--red);background:var(--beige2)">
+          \${CFG.altezza?CFG.altezza+' mm':'—'}
+        </div>
       </div>
-      <div style="background:var(--white);border:0.5px solid var(--border);border-radius:var(--radius);padding:10px 12px">
-        <div style="font-size:11px;color:var(--mid);margin-bottom:2px">Altezza luce sopraluce calcolata</div>
-        <div id="sop-result" style="font-size:20px;font-weight:600;color:var(--red)">\${CFG.altezza?CFG.altezza+' mm':'—'}</div>
-      </div>
+    </div>
+    <div style="display:flex;justify-content:flex-end">
       <button class="btn btn-red" onclick="selAccSopraluce()">Avanti →</button>
     </div>\`;
+}
+
+function selPillSop(val){
+  if(val!==null){
+    CFG._sopL=val;
+    // Deseleziona input custom
+    const inp = document.getElementById('sop-l-custom');
+    if(inp) inp.value='';
+  } else {
+    CFG._sopL=null;
+  }
+  document.querySelectorAll('[id^="sop-l-"]').forEach(el=>{
+    if(!el.id.includes('custom')){
+      const attivo = val!==null && el.id==='sop-l-'+val;
+      el.style.border=attivo?'2px solid var(--red)':'0.5px solid var(--border)';
+      el.style.background=attivo?'var(--red-bg)':'var(--white)';
+      el.style.color=attivo?'var(--red)':'var(--dark)';
+      el.style.fontWeight=attivo?'600':'400';
+    }
+  });
 }
 
 function calcAltezzaSopraluce(){
   const foro = parseInt(document.getElementById('sop-foro')?.value||0);
   const porta = parseInt(document.getElementById('sop-porta')?.value||0);
   const el = document.getElementById('sop-result');
-  if(foro && porta && foro>porta){
-    const h = foro - porta;
+  if(foro && porta && foro>porta+120){
+    const h = foro - porta - 120;
     el.textContent = h+' mm';
     el.style.color='var(--red)';
     CFG._sopCalcH = h;
@@ -2926,16 +3005,17 @@ function calcAltezzaSopraluce(){
 }
 
 function selAccSopraluce(){
-  const l = parseInt(document.getElementById('sop-l')?.value||0);
+  const lCustom = parseInt(document.getElementById('sop-l-custom')?.value||0);
+  const l = lCustom || CFG._sopL || 0;
   const foro = parseInt(document.getElementById('sop-foro')?.value||0);
   const porta = parseInt(document.getElementById('sop-porta')?.value||0);
-  if(!l){toast('Seleziona la larghezza','err');return;}
+  if(!l){toast('Seleziona o inserisci la larghezza','err');return;}
   if(!foro||!porta){toast('Inserisci altezza foro e altezza porta','err');return;}
-  if(foro<=porta){toast('Il foro muro deve essere più alto della porta','err');return;}
-  const h = foro - porta;
+  if(foro<=porta+120){toast('Il foro muro deve essere almeno 120mm più alto della porta','err');return;}
+  const h = foro - porta - 120;
   CFG.larghezza=l; CFG.altezza=h;
   CFG._sopForo=foro; CFG._sopPorta=porta;
-  CFG.misura_custom=true;
+  CFG.misura_custom=!!lCustom;
   cfgUpdatePrice(); renderCfgStep('acc_spessore');
 }
 
