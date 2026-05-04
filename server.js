@@ -1674,20 +1674,38 @@ async function renderCfgStep(step){
 const CFG_STEPS = ['serie','modello','finitura','opzioni','apertura','serratura','misure','spessore','ferramenta','maniglia','riepilogo'];
 const CFG_LABELS = {serie:'Serie',modello:'Modello',finitura:'Finitura',opzioni:'Opzioni',apertura:'Apertura',misure:'Misure',spessore:'Spessore muro',ferramenta:'Ferramenta',riepilogo:'Riepilogo'};
 
+// Step accessori
+const CFG_ACC_STEPS = {
+  passata:    ['serie','modello','finitura','acc_misure','riepilogo'],
+  sopraluce:  ['serie','modello','finitura','acc_sopraluce','riepilogo'],
+  semplice:   ['serie','modello','finitura','acc_qta','riepilogo'],
+  coprifilo:  ['serie','modello','finitura','acc_qta','riepilogo'],
+  pannello:   ['serie','modello','finitura','acc_pannello','riepilogo'],
+};
+const CFG_ACC_LABELS = {
+  acc_misure:'Misure', acc_sopraluce:'Misure', acc_qta:'Quantità', acc_pannello:'Configurazione'
+};
+
 function updateCfgStepper(current){
-  const idx = CFG_STEPS.indexOf(current);
   const el = document.getElementById('cfg-stepper');
   if(!el) return;
-  el.innerHTML = CFG_STEPS.map((s,i)=>\`
+
+  // Usa stepper semplificato per accessori e pannelli
+  const tipo = CFG._tipoAccessorio || (CFG._isPannelloBlindato ? 'pannello' : null);
+  const steps = tipo ? (CFG_ACC_STEPS[tipo]||CFG_STEPS) : CFG_STEPS;
+  const labels = tipo ? {...CFG_LABELS,...CFG_ACC_LABELS} : CFG_LABELS;
+
+  const idx = steps.indexOf(current);
+  el.innerHTML = steps.map((s,i)=>\`
     <div style="display:flex;align-items:center;gap:4px;font-size:11px;
       color:\${i<idx?'var(--green-tx)':i===idx?'var(--red)':'var(--mid)'}">
       <div style="width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:500;flex-shrink:0;
         background:\${i<idx?'var(--green-bg)':i===idx?'var(--red)':'var(--border)'};
         color:\${i<idx?'var(--green-tx)':i===idx?'#fff':'var(--mid)'}">
         \${i<idx?'✓':i+1}</div>
-      <span style="display:\${i===idx?'inline':'none'}">\${CFG_LABELS[s]}</span>
+      <span style="display:\${i===idx?'inline':'none'}">\${labels[s]||s}</span>
     </div>
-    \${i<CFG_STEPS.length-1?'<div style="width:16px;height:1px;background:var(--border);flex-shrink:0"></div>':''}\`
+    \${i<steps.length-1?'<div style="width:16px;height:1px;background:var(--border);flex-shrink:0"></div>':''}\`
   ).join('');
 }
 
@@ -2785,31 +2803,54 @@ function selPomolino(cod,nome,prezzo){
 
 // ── CONFIGURATORE ACCESSORI ───────────────────────────
 
-// Passata: larghezza + altezza libere + spessore muro
+// Passata: misure standard + input libero per custom
 async function cfgAccMisure(){
-  const l = CFG.larghezza||'';
-  const a = CFG.altezza||'';
+  const {data:misure} = await sb.from('misure_standard').select('*').eq('famiglia_apertura','PAS').order('larghezza_mm').order('altezza_mm');
+  const lSel = CFG.larghezza||'';
+  const aSel = CFG.altezza||'';
   const sp = CFG.spessore||'';
+
+  const stdCards = (misure||[]).map(m=>{
+    const sel = m.larghezza_mm==lSel && m.altezza_mm==aSel;
+    return \`<div onclick="selAccMisuraStd(\${m.larghezza_mm},\${m.altezza_mm})"
+      style="padding:8px 10px;border-radius:var(--radius);border:\${sel?'2px solid var(--red)':'0.5px solid var(--border)'};cursor:pointer;background:\${sel?'var(--red-bg)':'var(--white)'};font-size:13px;text-align:center">
+      <div style="font-weight:500;color:\${sel?'var(--red)':'var(--dark)'}">\${m.larghezza_mm}×\${m.altezza_mm}</div>
+      <div style="font-size:10px;color:var(--mid)">mm</div>
+    </div>\`;
+  }).join('');
+
   document.getElementById('cfg-body').innerHTML=\`
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
       <div style="font-size:13px;font-weight:500">Misure passata <span style="color:var(--mid);font-weight:400">— \${CFG.nome_modello}</span></div>
       <button class="btn btn-sm" onclick="renderCfgStep('finitura')">← Indietro</button>
     </div>
-    <div style="display:grid;gap:14px;max-width:360px">
-      <div>
-        <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Larghezza luce (mm)</label>
-        <input type="number" id="acc-l" value="\${l}" placeholder="es. 900" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px">
+    \${stdCards?\`<div style="margin-bottom:12px">
+      <div style="font-size:12px;color:var(--mid);margin-bottom:6px">Misure standard</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">\${stdCards}</div>
+    </div>\`:''}
+    <div style="border-top:0.5px solid var(--border);padding-top:12px">
+      <div style="font-size:12px;color:var(--mid);margin-bottom:8px">Oppure inserisci misura personalizzata</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;align-items:end">
+        <div>
+          <label style="font-size:11px;color:var(--mid);display:block;margin-bottom:3px">Larghezza (mm)</label>
+          <input type="number" id="acc-l" value="\${lSel}" placeholder="es. 900" style="width:100%;padding:7px 8px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px">
+        </div>
+        <div>
+          <label style="font-size:11px;color:var(--mid);display:block;margin-bottom:3px">Altezza (mm)</label>
+          <input type="number" id="acc-a" value="\${aSel}" placeholder="es. 2100" style="width:100%;padding:7px 8px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px">
+        </div>
+        <div>
+          <label style="font-size:11px;color:var(--mid);display:block;margin-bottom:3px">Spessore muro (mm)</label>
+          <input type="number" id="acc-sp" value="\${sp}" placeholder="es. 200" style="width:100%;padding:7px 8px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px">
+        </div>
+        <button class="btn btn-red" onclick="selAccMisure()">Avanti →</button>
       </div>
-      <div>
-        <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Altezza luce (mm)</label>
-        <input type="number" id="acc-a" value="\${a}" placeholder="es. 2100" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px">
-      </div>
-      <div>
-        <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Spessore muro (mm)</label>
-        <input type="number" id="acc-sp" value="\${sp}" placeholder="es. 200" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px">
-      </div>
-      <button class="btn btn-red" onclick="selAccMisure()">Avanti →</button>
     </div>\`;
+}
+
+function selAccMisuraStd(l,a){
+  CFG.larghezza=l; CFG.altezza=a; CFG.misura_custom=false;
+  cfgUpdatePrice(); cfgRiepilogo();
 }
 
 function selAccMisure(){
@@ -2928,7 +2969,7 @@ function selAccQta(){
 
 // Pannello blindato: senso apertura + misure + intero/taglio a misura
 async function cfgAccPannello(){
-  const {data:imp} = await sb.from('impostazioni').select('valore').eq('chiave','supplemento_taglio_pannello').single();
+  const {data:imp} = await sb.from('impostazioni').select('valore').eq('chiave','supplemento_taglio_pannello').maybeSingle();
   const suppTaglio = parseFloat(imp?.valore||0);
   CFG._suppTaglioPannello = suppTaglio;
 
@@ -2944,10 +2985,9 @@ async function cfgAccPannello(){
     <div style="display:grid;gap:16px;max-width:440px">
       <div>
         <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:6px">Senso apertura</label>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">
-          \${sensi.map(s=>\`<div onclick="this.parentElement.querySelectorAll('div').forEach(d=>d.classList.remove('sel-acc'));this.classList.add('sel-acc');document.getElementById('pannello-senso').value='\${s}'"
-            class="\${s===sensoSel?'sel-acc':''}"
-            style="padding:8px;border-radius:var(--radius);border:\${s===sensoSel?'2px solid var(--red)':'0.5px solid var(--border)'};cursor:pointer;text-align:center;font-size:12px;background:\${s===sensoSel?'var(--red-bg)':'var(--white)'}">
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px" id="sensi-grid">
+          \${sensi.map(s=>\`<div onclick="selSensoPannello('\${s}')" id="senso-\${s.replace(/ /g,'-')}"
+            style="padding:8px;border-radius:var(--radius);border:\${s===sensoSel?'2px solid var(--red)':'0.5px solid var(--border)'};cursor:pointer;text-align:center;font-size:12px;background:\${s===sensoSel?'var(--red-bg)':'var(--white)'};color:\${s===sensoSel?'var(--red)':'var(--dark)'}">
             \${s}
           </div>\`).join('')}
         </div>
@@ -2982,19 +3022,14 @@ async function cfgAccPannello(){
     </div>\`;
 }
 
-function selTipoPannello(tipo){
-  CFG._pannelloTipo = tipo;
-  const interoEl = document.getElementById('tipo-intero');
-  const taglioEl = document.getElementById('tipo-taglio');
-  const misureBox = document.getElementById('pannello-misure-box');
-  [interoEl,taglioEl].forEach(el=>{
-    const isTaglio = el.id==='tipo-taglio';
-    const sel = (tipo==='taglio'&&isTaglio)||(tipo==='intero'&&!isTaglio);
-    el.style.border = sel?'2px solid var(--red)':'0.5px solid var(--border)';
-    el.style.background = sel?'var(--red-bg)':'var(--white)';
-    el.querySelector('div').style.color = sel?'var(--red)':'var(--dark)';
+function selSensoPannello(s){
+  document.getElementById('pannello-senso').value = s;
+  document.querySelectorAll('#sensi-grid > div').forEach(el=>{
+    const attivo = el.id === 'senso-'+s.replace(/ /g,'-');
+    el.style.border = attivo?'2px solid var(--red)':'0.5px solid var(--border)';
+    el.style.background = attivo?'var(--red-bg)':'var(--white)';
+    el.style.color = attivo?'var(--red)':'var(--dark)';
   });
-  misureBox.style.display = tipo==='taglio'?'grid':'none';
 }
 
 function selAccPannello(){
