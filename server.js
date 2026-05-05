@@ -2991,6 +2991,9 @@ function selFamTelaioSop(cod){
     el.style.color = attivo?'var(--red)':'var(--dark)';
     el.style.fontWeight = attivo?'600':'400';
   });
+  // Ricalcola spalla se c'è già uno spessore inserito
+  const spEl = document.getElementById('acc-sp-val');
+  if(spEl && spEl.value) calcolaTelaioAcc(spEl.value);
 }
 
 function selPillSop(val){
@@ -3219,20 +3222,72 @@ function selTipoPannello(tipo){
   if(misureBox) misureBox.style.display = tipo==='taglio'?'grid':'none';
 }
 
-function selAccPannello(){
+async function selAccPannello(){
   const senso = document.getElementById('pannello-senso')?.value;
   const tipo = CFG._pannelloTipo||'intero';
   if(!senso){toast('Seleziona il senso di apertura','err');return;}
   CFG.senso=senso;
+
   if(tipo==='taglio'){
     const l = parseInt(document.getElementById('pan-l')?.value||0);
     const a = parseInt(document.getElementById('pan-a')?.value||0);
-    if(!l||!a){toast('Inserisci larghezza e altezza per il taglio a misura','err');return;}
+    if(!l||!a){toast('Inserisci larghezza e altezza','err');return;}
+
+    // Leggi dal magazzino le dimensioni del pannello per questo colore
+    const {data:magPannelli} = await sb.from('magazzino')
+      .select('altezza_mm,larghezza_mm,codice_finitura')
+      .eq('categoria','pannello_blindato')
+      .eq('codice_finitura', CFG.finitura)
+      .order('altezza_mm', {ascending:false});
+
+    const panMag = magPannelli?.[0];
+
+    if(panMag){
+      const hMag = panMag.altezza_mm || 0;
+      const lMax = panMag.larghezza_mm || 0;
+
+      // Blocca se larghezza supera il massimo
+      if(lMax > 0 && l > lMax){
+        toast('Larghezza massima per questo pannello: ' + lMax + ' mm', 'err');
+        return;
+      }
+
+      // Calcola zoccoli automatici
+      // Ogni zoccolo aggiunge 80mm. Il pannello viene tagliato.
+      // Altezza finita richiesta = a
+      // Se a > hMag: impossibile anche con zoccoli (pannello non abbastanza alto)
+      // Se a <= hMag: nessuno zoccolo, taglio diretto
+      // Se a > hMag: aggiungi zoccoli finché hMag + (n*80) >= a
+      // Pannello da tagliare = a - (n*80)
+      const ZOCCOLO_H = 80;
+      let zoccoli = 0;
+      let hTaglio = a;
+
+      if(hMag > 0 && a > hMag){
+        // Quanti zoccoli servono?
+        while(hMag + zoccoli * ZOCCOLO_H < a) zoccoli++;
+        hTaglio = a - zoccoli * ZOCCOLO_H;
+        if(hTaglio <= 0){
+          toast('Altezza non raggiungibile con i pannelli disponibili', 'err');
+          return;
+        }
+      }
+
+      CFG._zoccoliAuto = zoccoli;
+      CFG._hTaglioPannello = hTaglio;
+      CFG._hMagPannello = hMag;
+    } else {
+      CFG._zoccoliAuto = 0;
+      CFG._hTaglioPannello = a;
+      CFG._hMagPannello = 0;
+    }
+
     CFG.larghezza=l; CFG.altezza=a; CFG.misura_custom=true;
     CFG.p_extra = CFG._suppTaglioPannello||0;
   } else {
     CFG.larghezza=null; CFG.altezza=null; CFG.misura_custom=false;
     CFG.p_extra=0;
+    CFG._zoccoliAuto=0; CFG._hTaglioPannello=null;
   }
   cfgUpdatePrice(); cfgRiepilogo();
 }
@@ -3356,6 +3411,22 @@ async function aggiungiRigaAlDocumento(){
     const {data:esistenti} = await sb.from(tabella).select('riga_numero').eq(fk,CFG_TARGET_ID).order('riga_numero',{ascending:false}).limit(1);
     const nextNum = (esistenti?.[0]?.riga_numero||0)+1;
     await sb.from(tabella).insert([{...riga,[fk]:CFG_TARGET_ID,riga_numero:nextNum}]);
+    // Aggiungi righe ZOC automatiche se pannello con zoccoli
+    if((CFG._zoccoliAuto||0)>0){
+      const {data:zocAcc} = await sb.from('modelli_accessori').select('*').eq('codice','ZOC').maybeSingle();
+      const lst = listino().toLowerCase();
+      const pZoc = zocAcc?(zocAcc['prezzo_'+lst]||0):0;
+      await sb.from(tabella).insert([{
+        [fk]:CFG_TARGET_ID, riga_numero:nextNum+1,
+        codice_serie:CFG.serie, nome_serie:CFG.nome_serie,
+        codice_modello:'ZOC', nome_modello:'Zoccolo pannello blindato',
+        codice_finitura:CFG.finitura, nome_finitura:CFG.nome_finitura,
+        quantita:CFG._zoccoliAuto,
+        prezzo_base:pZoc, prezzo_unitario:pZoc,
+        prezzo_totale_riga:pZoc*CFG._zoccoliAuto,
+        note_riga:'Zoccolo automatico (pannello H '+CFG._hMagPannello+' mm, H finita '+CFG.altezza+' mm)'
+      }]);
+    }
     // Aggiorna totale documento
     await ricalcolaTotale(CFG_TARGET_ID, CFG_MODE);
     toast('Porta aggiunta','ok');
@@ -3365,6 +3436,16 @@ async function aggiungiRigaAlDocumento(){
   } else {
     // Accumulo locale (documento non ancora salvato)
     CFG_RIGHE.push(riga);
+    if((CFG._zoccoliAuto||0)>0){
+      CFG_RIGHE.push({
+        codice_serie:CFG.serie, nome_serie:CFG.nome_serie,
+        codice_modello:'ZOC', nome_modello:'Zoccolo pannello blindato',
+        codice_finitura:CFG.finitura, nome_finitura:CFG.nome_finitura,
+        quantita:CFG._zoccoliAuto,
+        prezzo_base:0, prezzo_unitario:0, prezzo_totale_riga:0,
+        note_riga:'Zoccolo automatico (pannello H '+CFG._hMagPannello+' mm, H finita '+CFG.altezza+' mm)'
+      });
+    }
     toast('Porta aggiunta — salva il documento per confermare','ok');
     closeCfg();
     renderNuovoDocBozza();
