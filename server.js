@@ -664,6 +664,62 @@ tr.data-row:hover td{background:var(--beige);cursor:pointer}
   </div>
 </div>
 
+<!-- MODAL MAGAZZINO -->
+<div id="modal-magazzino" class="form-modal-overlay">
+  <div class="form-modal" style="max-width:600px">
+    <div class="form-modal-head">
+      <span class="form-modal-title" id="mag-title">Articolo magazzino</span>
+      <button class="form-close" onclick="closeForm('modal-magazzino')">&times;</button>
+    </div>
+    <div class="form-modal-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="form-field"><label>Codice MP</label><input id="mag-codice_mp" type="text" placeholder="es. PAN-NZ-2150"></div>
+        <div class="form-field"><label>Codice (interno)</label><input id="mag-codice" type="text" placeholder="es. MAG001"></div>
+      </div>
+      <div class="form-field"><label>Descrizione <span class="req">*</span></label><input id="mag-descrizione" type="text" placeholder="es. Pannello blindato Noce Nazionale H2150"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="form-field"><label>Categoria</label>
+          <select id="mag-categoria">
+            <option value="">— Nessuna —</option>
+            <option value="pannello_blindato">Pannello blindato</option>
+            <option value="accessorio">Accessorio</option>
+            <option value="componente">Componente</option>
+            <option value="consumabile">Consumabile</option>
+          </select>
+        </div>
+        <div class="form-field"><label>Unità</label>
+          <select id="mag-unita">
+            <option value="pz">pz</option>
+            <option value="m">m</option>
+            <option value="m2">m²</option>
+            <option value="kg">kg</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="form-field"><label>Codice finitura</label><input id="mag-codice_finitura" type="text" placeholder="es. NZ"></div>
+        <div class="form-field"><label>Nome finitura</label><input id="mag-nome_finitura" type="text" placeholder="es. Noce Nazionale"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+        <div class="form-field"><label>Altezza (mm)</label><input id="mag-altezza_mm" type="number" placeholder="es. 2150"></div>
+        <div class="form-field"><label>Larghezza (mm)</label><input id="mag-larghezza_mm" type="number" placeholder="es. 1050"></div>
+        <div class="form-field"><label>Spessore (mm)</label><input id="mag-spessore_mm" type="number" placeholder="es. 44"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+        <div class="form-field"><label>Giacenza</label><input id="mag-giacenza" type="number" value="0" min="0"></div>
+        <div class="form-field"><label>Scorta minima</label><input id="mag-scorta_minima" type="number" value="0" min="0"></div>
+        <div class="form-field"><label>In ordine</label><input id="mag-quantita_in_ordine" type="number" value="0" min="0"></div>
+      </div>
+      <div class="form-field"><label>Ubicazione</label><input id="mag-ubicazione" type="text" placeholder="es. Scaffale A3"></div>
+    </div>
+    <div class="form-modal-foot">
+      <button class="btn" onclick="closeForm('modal-magazzino')">Annulla</button>
+      <button class="btn" style="color:var(--red)" onclick="eliminaArticoloMag()" id="mag-btn-elimina">Elimina</button>
+      <button class="btn btn-red" onclick="salvaMagazzino()">Salva</button>
+    </div>
+  </div>
+</div>
+
 <!-- FORM ORDINE -->
 <div class="form-overlay" id="form-ordine" style="justify-content:center;align-items:flex-start;padding:20px">
   <div class="form-modal" style="width:min(680px,100%);max-height:92vh;display:flex;flex-direction:column">
@@ -1413,34 +1469,131 @@ async function renderFatture(){
 }
 
 // ── MAGAZZINO ─────────────────────────────────────────
+
 async function renderMagazzino(){
-  const {data} = await sb.from('magazzino').select('*,anagrafiche(ragione_sociale)').order('codice');
-  const rows=(data||[]).map(m=>{
-    const sotto=Number(m.giacenza)<=Number(m.scorta_minima);
-    return \`<tr class="data-row">
-      <td><strong>\${m.codice||'—'}</strong></td>
-      <td>\${m.descrizione||'—'}</td>
-      <td>\${m.categoria?\`<span class="tag">\${m.categoria}</span>\`:'—'}</td>
-      <td>\${m.giacenza||0} \${m.unita||''}</td>
-      <td>\${m.scorta_minima||0} \${m.unita||''}</td>
-      <td>\${m.ubicazione||'—'}</td>
-      <td>\${m.anagrafiche?.ragione_sociale||'—'}</td>
-      <td>\${sotto?'<span class="badge br">Sotto scorta</span>':'<span class="badge bg">OK</span>'}</td>
-    </tr>\`;}).join('');
-  const sottoscorta=(data||[]).filter(m=>Number(m.giacenza)<=Number(m.scorta_minima)).length;
-  document.getElementById('main-content').innerHTML=\`
-  <div class="grid-4" style="margin-bottom:16px">
-    <div class="metric"><div class="metric-label">Articoli totali</div><div class="metric-value">\${(data||[]).length}</div></div>
-    <div class="metric"><div class="metric-label">Sotto scorta minima</div><div class="metric-value" style="color:var(--red)">\${sottoscorta}</div></div>
-  </div>
-  <div class="card">
-    <div class="card-header"><span class="card-title">Giacenze magazzino</span></div>
-    <table>
-      <thead><tr><th>Codice</th><th>Descrizione</th><th>Cat.</th><th>Giacenza</th><th>Scorta min.</th><th>Ubicazione</th><th>Fornitore</th><th>Stato</th></tr></thead>
-      <tbody>\${rows||'<tr><td colspan="8" style="text-align:center;color:var(--mid);padding:24px;font-style:italic">Nessun articolo ancora</td></tr>'}</tbody>
-    </table>
-  </div>\`;
+  const {data,error} = await sb.from('magazzino').select('*').order('categoria').order('descrizione');
+  const items = data||[];
+  const sottoscorta = items.filter(m=>Number(m.giacenza||0)<=Number(m.scorta_minima||0)&&Number(m.giacenza||0)>=0).length;
+  const pannelli = items.filter(m=>m.categoria==='pannello_blindato').length;
+
+  const categorie = [...new Set(items.map(m=>m.categoria).filter(Boolean))].sort();
+
+  const rows = items.map(m=>{
+    const sotto = Number(m.giacenza||0)<=Number(m.scorta_minima||0);
+    const dimStr = (m.altezza_mm||m.larghezza_mm) ? (m.altezza_mm||'?')+'×'+(m.larghezza_mm||'?')+' mm' : '—';
+    return '<tr class="data-row" onclick="apriDettaglioMagazzino(\''+m.id+'\')" style="cursor:pointer">'+
+      '<td><strong>'+(m.codice_mp||m.codice||'—')+'</strong></td>'+
+      '<td>'+(m.descrizione||'—')+'</td>'+
+      '<td>'+(m.categoria?'<span class="tag">'+m.categoria+'</span>':'—')+'</td>'+
+      '<td>'+(m.codice_finitura?'<span class="tag">'+m.codice_finitura+'</span>':'—')+'</td>'+
+      '<td>'+dimStr+'</td>'+
+      '<td>'+(m.giacenza||0)+' '+(m.unita||'pz')+'</td>'+
+      '<td>'+(m.scorta_minima||0)+'</td>'+
+      '<td>'+(m.quantita_in_ordine||0)+'</td>'+
+      '<td>'+(sotto?'<span class="badge br">Sotto scorta</span>':'<span class="badge bg">OK</span>')+'</td>'+
+      '</tr>';
+  }).join('');
+
+  document.getElementById('main-content').innerHTML=
+    '<div class="grid-4" style="margin-bottom:16px">'+
+      '<div class="metric"><div class="metric-label">Articoli totali</div><div class="metric-value">'+items.length+'</div></div>'+
+      '<div class="metric"><div class="metric-label">Pannelli blindati</div><div class="metric-value">'+pannelli+'</div></div>'+
+      '<div class="metric"><div class="metric-label">Sotto scorta</div><div class="metric-value" style="color:var(--red)">'+sottoscorta+'</div></div>'+
+    '</div>'+
+    '<div class="card">'+
+      '<div class="card-header">'+
+        '<span class="card-title">Magazzino</span>'+
+        '<button class="btn btn-red btn-sm" onclick="apriNuovoArticoloMag()">+ Nuovo articolo</button>'+
+      '</div>'+
+      '<table>'+
+        '<thead><tr><th>Codice MP</th><th>Descrizione</th><th>Categoria</th><th>Finitura</th><th>Dimensioni</th><th>Giacenza</th><th>Scorta min.</th><th>In ordine</th><th>Stato</th></tr></thead>'+
+        '<tbody>'+(rows||'<tr><td colspan="9" style="text-align:center;color:var(--mid);padding:24px;font-style:italic">Nessun articolo — clicca "+ Nuovo articolo"</td></tr>')+'</tbody>'+
+      '</table>'+
+    '</div>';
 }
+
+async function apriDettaglioMagazzino(id){
+  const {data:m} = await sb.from('magazzino').select('*').eq('id',id).single();
+  if(!m){toast('Articolo non trovato','err');return;}
+  _magEditId = id;
+  popolaFormMag(m);
+  ensureModalInBody('modal-magazzino').classList.add('open');
+}
+
+function apriNuovoArticoloMag(){
+  _magEditId = null;
+  popolaFormMag({});
+  ensureModalInBody('modal-magazzino').classList.add('open');
+}
+
+function popolaFormMag(m){
+  document.getElementById('mag-title').textContent = _magEditId ? 'Modifica articolo' : 'Nuovo articolo';
+  const fields = {
+    'mag-codice_mp': m.codice_mp||'',
+    'mag-codice': m.codice||'',
+    'mag-descrizione': m.descrizione||'',
+    'mag-categoria': m.categoria||'',
+    'mag-codice_finitura': m.codice_finitura||'',
+    'mag-nome_finitura': m.nome_finitura||'',
+    'mag-altezza_mm': m.altezza_mm||'',
+    'mag-larghezza_mm': m.larghezza_mm||'',
+    'mag-spessore_mm': m.spessore_mm||'',
+    'mag-giacenza': m.giacenza||0,
+    'mag-scorta_minima': m.scorta_minima||0,
+    'mag-quantita_in_ordine': m.quantita_in_ordine||0,
+    'mag-unita': m.unita||'pz',
+    'mag-ubicazione': m.ubicazione||'',
+  };
+  Object.entries(fields).forEach(([id,val])=>{
+    const el = document.getElementById(id);
+    if(el) el.value = val;
+  });
+}
+
+var _magEditId = null;
+
+async function salvaMagazzino(){
+  const data = {
+    codice_mp: document.getElementById('mag-codice_mp')?.value?.trim()||null,
+    codice: document.getElementById('mag-codice')?.value?.trim()||null,
+    descrizione: document.getElementById('mag-descrizione')?.value?.trim()||null,
+    categoria: document.getElementById('mag-categoria')?.value?.trim()||null,
+    codice_finitura: document.getElementById('mag-codice_finitura')?.value?.trim()||null,
+    nome_finitura: document.getElementById('mag-nome_finitura')?.value?.trim()||null,
+    altezza_mm: parseFloat(document.getElementById('mag-altezza_mm')?.value)||null,
+    larghezza_mm: parseFloat(document.getElementById('mag-larghezza_mm')?.value)||null,
+    spessore_mm: parseFloat(document.getElementById('mag-spessore_mm')?.value)||null,
+    giacenza: parseFloat(document.getElementById('mag-giacenza')?.value)||0,
+    scorta_minima: parseFloat(document.getElementById('mag-scorta_minima')?.value)||0,
+    quantita_in_ordine: parseFloat(document.getElementById('mag-quantita_in_ordine')?.value)||0,
+    unita: document.getElementById('mag-unita')?.value?.trim()||'pz',
+    ubicazione: document.getElementById('mag-ubicazione')?.value?.trim()||null,
+    updated_at: new Date().toISOString(),
+  };
+  if(!data.descrizione){toast('Inserisci una descrizione','err');return;}
+  let error;
+  if(_magEditId){
+    ({error} = await sb.from('magazzino').update(data).eq('id',_magEditId));
+  } else {
+    ({error} = await sb.from('magazzino').insert([data]));
+  }
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast(_magEditId?'Articolo aggiornato':'Articolo aggiunto','ok');
+  closeForm('modal-magazzino');
+  renderMagazzino();
+}
+
+async function eliminaArticoloMag(){
+  if(!_magEditId) return;
+  if(!confirm('Eliminare questo articolo dal magazzino?')) return;
+  const {error} = await sb.from('magazzino').delete().eq('id',_magEditId);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Articolo eliminato','ok');
+  closeForm('modal-magazzino');
+  renderMagazzino();
+}
+
+
 
 // ── PRODUZIONE ────────────────────────────────────────
 async function renderProduzione(){
@@ -3148,53 +3301,92 @@ async function cfgAccPannello(){
   const suppTaglio = parseFloat(imp?.valore||0);
   CFG._suppTaglioPannello = suppTaglio;
 
+  const {data:magRows} = await sb.from('magazzino')
+    .select('*').eq('categoria','pannello_blindato')
+    .eq('codice_finitura', CFG.finitura||'');
+  const magPannello = magRows?.[0] || null;
+  CFG._magPannello = magPannello;
+
+  const hMag = magPannello?.altezza_mm || null;
+  const lMax = magPannello?.larghezza_mm || null;
   const sensi = ['Interno DX','Esterno DX','Interno SX','Esterno SX','Nessuno'];
   const sensoSel = CFG.senso||'';
-  const tipoSel = CFG._pannelloTipo||'intero';
+
+  const infoMag = magPannello ?
+    '<div style="background:var(--beige2);border-radius:var(--radius);padding:10px 14px;font-size:12px;margin-bottom:14px">'+
+    '<strong>Pannello a magazzino:</strong> '+hMag+' × '+lMax+' mm'+
+    ' — Giacenza: <strong>'+(magPannello.giacenza||0)+' pz</strong></div>' :
+    '<div style="background:var(--amber-bg);border-radius:var(--radius);padding:10px 14px;font-size:12px;margin-bottom:14px;color:var(--amber-tx)">'+
+    'Nessun pannello in magazzino per questa finitura.</div>';
 
   document.getElementById('cfg-body').innerHTML=\`
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-      <div style="font-size:13px;font-weight:500">Configurazione pannello <span style="color:var(--mid);font-weight:400">— \${CFG.nome_modello}</span></div>
-      <button class="btn btn-sm" onclick="renderCfgStep('finitura')">← Indietro</button>
+      <div style="font-size:13px;font-weight:500">Configurazione pannello <span style="color:var(--mid);font-weight:400">\xe2\x80\x94 \${CFG.nome_modello}</span></div>
+      <button class="btn btn-sm" onclick="renderCfgStep('finitura')">\xe2\x86\x90 Indietro</button>
     </div>
-    <div style="display:grid;gap:16px;max-width:440px">
+    \${infoMag}
+    <div style="display:grid;gap:16px;max-width:480px">
       <div>
         <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:6px">Senso apertura</label>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px" id="sensi-grid">
           \${sensi.map(s=>\`<div onclick="selSensoPannello('\${s}')" id="senso-\${s.replace(/ /g,'-')}"
-            style="padding:8px;border-radius:var(--radius);border:\${s===sensoSel?'2px solid var(--red)':'0.5px solid var(--border)'};cursor:pointer;text-align:center;font-size:12px;background:\${s===sensoSel?'var(--red-bg)':'var(--white)'};color:\${s===sensoSel?'var(--red)':'var(--dark)'}">
-            \${s}
-          </div>\`).join('')}
+            style="padding:8px;border-radius:var(--radius);border:\${s===sensoSel?'2px solid var(--red)':'0.5px solid var(--border)'};cursor:pointer;text-align:center;font-size:12px;background:\${s===sensoSel?'var(--red-bg)':'var(--white)'};color:\${s===sensoSel?'var(--red)':'var(--dark)'}"
+            >\${s}</div>\`).join('')}
         </div>
         <input type="hidden" id="pannello-senso" value="\${sensoSel}">
       </div>
       <div>
-        <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:6px">Tipo fornitura</label>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-          <div id="tipo-intero" onclick="selTipoPannello('intero')"
-            style="padding:12px;border-radius:var(--radius);border:\${tipoSel==='intero'?'2px solid var(--red)':'0.5px solid var(--border)'};cursor:pointer;background:\${tipoSel==='intero'?'var(--red-bg)':'var(--white)'}">
-            <div style="font-size:13px;font-weight:500;color:\${tipoSel==='intero'?'var(--red)':'var(--dark)'}">Pannello intero</div>
-            <div style="font-size:11px;color:var(--mid);margin-top:2px">Misura standard</div>
-          </div>
-          <div id="tipo-taglio" onclick="selTipoPannello('taglio')"
-            style="padding:12px;border-radius:var(--radius);border:\${tipoSel==='taglio'?'2px solid var(--red)':'0.5px solid var(--border)'};cursor:pointer;background:\${tipoSel==='taglio'?'var(--red-bg)':'var(--white)'}">
-            <div style="font-size:13px;font-weight:500;color:\${tipoSel==='taglio'?'var(--red)':'var(--dark)'}">Taglio a misura</div>
-            <div style="font-size:11px;color:var(--mid);margin-top:2px">+€ \${suppTaglio.toFixed(2)}</div>
-          </div>
+        <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:6px">Altezza finita pannello (mm)</label>
+        <input type="number" id="pan-h-richiesta" value="\${CFG._panHRichiesta||CFG.altezza||''}"
+          placeholder="es. 2180" oninput="calcolaZoccoli(this.value)"
+          style="width:160px;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px">
+        <div id="zoccoli-result" style="margin-top:8px"></div>
+      </div>
+      <div>
+        <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:6px">Larghezza (mm) \${lMax?'(max '+lMax+' mm)':''}</label>
+        <input type="number" id="pan-l" value="\${CFG.larghezza||''}" \${lMax?'max="'+lMax+'"':''}
+          placeholder="es. 900" oninput="checkLarghezzaPannello(this.value)"
+          style="width:160px;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px">
+        <div id="larghezza-warn" style="margin-top:4px;font-size:11px;color:var(--red);display:none">
+          Larghezza superiore al pannello a magazzino (\${lMax} mm)
         </div>
       </div>
-      <div id="pannello-misure-box" style="display:\${tipoSel==='taglio'?'grid':'none'};gap:10px">
-        <div>
-          <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Larghezza (mm)</label>
-          <input type="number" id="pan-l" value="\${CFG.larghezza||''}" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px">
-        </div>
-        <div>
-          <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Altezza (mm)</label>
-          <input type="number" id="pan-a" value="\${CFG.altezza||''}" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px">
-        </div>
-      </div>
-      <button class="btn btn-red" onclick="selAccPannello()">Avanti →</button>
+      <button class="btn btn-red" onclick="selAccPannello()">Avanti \xe2\x86\x92</button>
     </div>\`;
+
+  if(CFG._panHRichiesta) calcolaZoccoli(CFG._panHRichiesta);
+}
+
+function calcolaZoccoli(hRichiestaStr){
+  const hRichiesta = parseFloat(hRichiestaStr||0);
+  const mag = CFG._magPannello;
+  const hMag = mag?.altezza_mm || null;
+  const el = document.getElementById('zoccoli-result');
+  CFG._panHRichiesta = hRichiesta||null;
+  if(!hRichiesta||!el){ if(el) el.innerHTML=''; return; }
+  if(!hMag){
+    el.innerHTML='<div style="font-size:12px;color:var(--mid)">Nessun pannello in magazzino.</div>';
+    CFG._zoccoli=0; CFG.altezza=hRichiesta; CFG._pannelloTaglio=hRichiesta; return;
+  }
+  if(hRichiesta<=hMag){
+    CFG._zoccoli=0; CFG.altezza=hRichiesta; CFG._pannelloTaglio=hRichiesta;
+    el.innerHTML='<div style="background:var(--green-bg);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--green-tx)">'+
+      'Taglio dal pannello a magazzino (H '+hMag+' mm) \xe2\x86\x92 tagliato a <strong>'+hRichiesta+' mm</strong></div>';
+  } else {
+    const nZoccoli = Math.ceil((hRichiesta - hMag) / 80);
+    const hTaglio = hRichiesta - (nZoccoli * 80);
+    CFG._zoccoli=nZoccoli; CFG.altezza=hRichiesta; CFG._pannelloTaglio=hTaglio;
+    el.innerHTML='<div style="background:var(--amber-bg);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--amber-tx)">'+
+      '<strong>'+nZoccoli+' zoccolo'+(nZoccoli>1?'li':'')+'</strong> da 80mm '+
+      '\xe2\x80\x94 pannello tagliato a <strong>'+hTaglio+' mm</strong> + '+nZoccoli+'\xc3\x9780mm = '+hRichiesta+' mm</div>';
+  }
+}
+
+function checkLarghezzaPannello(val){
+  const lMax = CFG._magPannello?.larghezza_mm;
+  const warn = document.getElementById('larghezza-warn');
+  if(warn && lMax && parseFloat(val)>lMax) warn.style.display='block';
+  else if(warn) warn.style.display='none';
 }
 
 function selSensoPannello(s){
@@ -3207,90 +3399,21 @@ function selSensoPannello(s){
   });
 }
 
-function selTipoPannello(tipo){
-  CFG._pannelloTipo = tipo;
-  ['intero','taglio'].forEach(t=>{
-    const el = document.getElementById('tipo-'+t);
-    if(!el) return;
-    const sel = t===tipo;
-    el.style.border = sel?'2px solid var(--red)':'0.5px solid var(--border)';
-    el.style.background = sel?'var(--red-bg)':'var(--white)';
-    const title = el.querySelector('div');
-    if(title) title.style.color = sel?'var(--red)':'var(--dark)';
-  });
-  const misureBox = document.getElementById('pannello-misure-box');
-  if(misureBox) misureBox.style.display = tipo==='taglio'?'grid':'none';
-}
-
-async function selAccPannello(){
+function selAccPannello(){
   const senso = document.getElementById('pannello-senso')?.value;
-  const tipo = CFG._pannelloTipo||'intero';
   if(!senso){toast('Seleziona il senso di apertura','err');return;}
+  const l = parseFloat(document.getElementById('pan-l')?.value||0);
+  const lMax = CFG._magPannello?.larghezza_mm;
+  if(!l){toast('Inserisci la larghezza','err');return;}
+  if(lMax && l>lMax){toast('Larghezza massima: '+lMax+' mm','err');return;}
+  if(!CFG.altezza){toast("Inserisci l'altezza finita del pannello",'err');return;}
   CFG.senso=senso;
-
-  if(tipo==='taglio'){
-    const l = parseInt(document.getElementById('pan-l')?.value||0);
-    const a = parseInt(document.getElementById('pan-a')?.value||0);
-    if(!l||!a){toast('Inserisci larghezza e altezza','err');return;}
-
-    // Leggi dal magazzino le dimensioni del pannello per questo colore
-    const {data:magPannelli} = await sb.from('magazzino')
-      .select('altezza_mm,larghezza_mm,codice_finitura')
-      .eq('categoria','pannello_blindato')
-      .eq('codice_finitura', CFG.finitura)
-      .order('altezza_mm', {ascending:false});
-
-    const panMag = magPannelli?.[0];
-
-    if(panMag){
-      const hMag = panMag.altezza_mm || 0;
-      const lMax = panMag.larghezza_mm || 0;
-
-      // Blocca se larghezza supera il massimo
-      if(lMax > 0 && l > lMax){
-        toast('Larghezza massima per questo pannello: ' + lMax + ' mm', 'err');
-        return;
-      }
-
-      // Calcola zoccoli automatici
-      // Ogni zoccolo aggiunge 80mm. Il pannello viene tagliato.
-      // Altezza finita richiesta = a
-      // Se a > hMag: impossibile anche con zoccoli (pannello non abbastanza alto)
-      // Se a <= hMag: nessuno zoccolo, taglio diretto
-      // Se a > hMag: aggiungi zoccoli finché hMag + (n*80) >= a
-      // Pannello da tagliare = a - (n*80)
-      const ZOCCOLO_H = 80;
-      let zoccoli = 0;
-      let hTaglio = a;
-
-      if(hMag > 0 && a > hMag){
-        // Quanti zoccoli servono?
-        while(hMag + zoccoli * ZOCCOLO_H < a) zoccoli++;
-        hTaglio = a - zoccoli * ZOCCOLO_H;
-        if(hTaglio <= 0){
-          toast('Altezza non raggiungibile con i pannelli disponibili', 'err');
-          return;
-        }
-      }
-
-      CFG._zoccoliAuto = zoccoli;
-      CFG._hTaglioPannello = hTaglio;
-      CFG._hMagPannello = hMag;
-    } else {
-      CFG._zoccoliAuto = 0;
-      CFG._hTaglioPannello = a;
-      CFG._hMagPannello = 0;
-    }
-
-    CFG.larghezza=l; CFG.altezza=a; CFG.misura_custom=true;
-    CFG.p_extra = CFG._suppTaglioPannello||0;
-  } else {
-    CFG.larghezza=null; CFG.altezza=null; CFG.misura_custom=false;
-    CFG.p_extra=0;
-    CFG._zoccoliAuto=0; CFG._hTaglioPannello=null;
-  }
+  CFG.larghezza=l;
+  CFG.misura_custom=true;
+  CFG.p_extra = CFG._suppTaglioPannello||0;
   cfgUpdatePrice(); cfgRiepilogo();
 }
+
 
 async function cfgRiepilogo(){
   const tot = cfgTotale();
@@ -3339,9 +3462,10 @@ async function cfgRiepilogo(){
   document.getElementById('cfg-body').innerHTML=\`
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
       <div style="font-size:13px;font-weight:500">Riepilogo configurazione</div>
-      <button class="btn btn-sm" onclick="renderCfgStep(CFG._isAccessorio||CFG._isPannelloBlindato?(CFG._tipoAccessorio==='passata'?'acc_misure':CFG._tipoAccessorio==='sopraluce'?'acc_sopraluce':CFG._tipoAccessorio==='semplice'||CFG._tipoAccessorio==='coprifilo'?'acc_qta':CFG._isPannelloBlindato?'acc_pannello':'finitura'):'ferramenta')">← Modifica</button>
+      <button class="btn btn-sm" onclick="renderCfgStep('ferramenta')">← Modifica</button>
     </div>
-    \${CFG._zoccoliAuto>0?\`<div style="background:var(--beige2);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--mid);margin-bottom:10px">ℹ Pannello H \${CFG._hMagPannello} mm — \${CFG._zoccoliAuto} zoccolo/i aggiunti automaticamente (taglio a H \${CFG._hTaglioPannello} mm)</div>\`:''}
+    \${CFG.misura_custom?\`<div style="background:var(--red-bg);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--red-tx);margin-bottom:10px">⚠ Misura custom — questo ordine richiederà approvazione del responsabile tecnico</div>\`:''}
+        \${CFG._zoccoli>0?'<div style="background:var(--beige2);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--mid);margin-bottom:10px">'+CFG._zoccoli+' zoccolo/i da 80mm (taglio pannello a H '+CFG._pannelloTaglio+' mm)</div>':''}
     <div style="background:var(--beige);border-radius:var(--radius);padding:12px;margin-bottom:12px;font-size:12px;color:var(--mid);line-height:1.6">\${desc}</div>
     <table style="width:100%;font-size:13px;margin-bottom:12px">
       \${righe_prezzo.map(r=>\`<tr><td style="padding:3px 0;color:var(--mid)">\${r.label}</td><td style="text-align:right;font-weight:500">€ \${(r.val||0).toLocaleString('it-IT',{minimumFractionDigits:2})}</td></tr>\`).join('')}
@@ -3412,7 +3536,7 @@ async function aggiungiRigaAlDocumento(){
     const nextNum = (esistenti?.[0]?.riga_numero||0)+1;
     await sb.from(tabella).insert([{...riga,[fk]:CFG_TARGET_ID,riga_numero:nextNum}]);
     // Aggiungi righe ZOC automatiche se pannello con zoccoli
-    if((CFG._zoccoliAuto||0)>0){
+    if((CFG._zoccoli||0)>0){
       const {data:zocAcc} = await sb.from('modelli_accessori').select('*').eq('codice','ZOC').maybeSingle();
       const lst = listino().toLowerCase();
       const pZoc = zocAcc?(zocAcc['prezzo_'+lst]||0):0;
@@ -3421,10 +3545,10 @@ async function aggiungiRigaAlDocumento(){
         codice_serie:CFG.serie, nome_serie:CFG.nome_serie,
         codice_modello:'ZOC', nome_modello:'Zoccolo pannello blindato',
         codice_finitura:CFG.finitura, nome_finitura:CFG.nome_finitura,
-        quantita:CFG._zoccoliAuto,
+        quantita:CFG._zoccoli,
         prezzo_base:pZoc, prezzo_unitario:pZoc,
-        prezzo_totale_riga:pZoc*CFG._zoccoliAuto,
-        note_riga:'Zoccolo automatico (pannello H '+CFG._hMagPannello+' mm, H finita '+CFG.altezza+' mm)'
+        prezzo_totale_riga:pZoc*CFG._zoccoli,
+        note_riga:'Zoccolo automatico (pannello H '+(CFG._magPannello?.altezza_mm||'?')+' mm, H finita '+CFG.altezza+' mm)'
       }]);
     }
     // Aggiorna totale documento
@@ -3436,14 +3560,14 @@ async function aggiungiRigaAlDocumento(){
   } else {
     // Accumulo locale (documento non ancora salvato)
     CFG_RIGHE.push(riga);
-    if((CFG._zoccoliAuto||0)>0){
+    if((CFG._zoccoli||0)>0){
       CFG_RIGHE.push({
         codice_serie:CFG.serie, nome_serie:CFG.nome_serie,
         codice_modello:'ZOC', nome_modello:'Zoccolo pannello blindato',
         codice_finitura:CFG.finitura, nome_finitura:CFG.nome_finitura,
-        quantita:CFG._zoccoliAuto,
+        quantita:CFG._zoccoli,
         prezzo_base:0, prezzo_unitario:0, prezzo_totale_riga:0,
-        note_riga:'Zoccolo automatico (pannello H '+CFG._hMagPannello+' mm, H finita '+CFG.altezza+' mm)'
+        note_riga:'Zoccolo automatico (pannello H '+(CFG._magPannello?.altezza_mm||'?')+' mm, H finita '+CFG.altezza+' mm)'
       });
     }
     toast('Porta aggiunta — salva il documento per confermare','ok');
