@@ -1481,7 +1481,7 @@ async function renderMagazzino(){
   const rows = items.map(m=>{
     const sotto = Number(m.giacenza||0)<=Number(m.scorta_minima||0);
     const dimStr = (m.altezza_mm||m.larghezza_mm) ? (m.altezza_mm||'?')+'×'+(m.larghezza_mm||'?')+' mm' : '—';
-    return '<tr class="data-row" onclick="apriDettaglioMagazzino(\''+m.id+'\')" style="cursor:pointer">'+
+    return '<tr class="data-row" onclick="apriDettaglioMagazzino(this.dataset.id)" data-id="'+m.id+'" style="cursor:pointer">'+
       '<td><strong>'+(m.codice_mp||m.codice||'—')+'</strong></td>'+
       '<td>'+(m.descrizione||'—')+'</td>'+
       '<td>'+(m.categoria?'<span class="tag">'+m.categoria+'</span>':'—')+'</td>'+
@@ -5546,8 +5546,8 @@ async function adminLavorazioni(){
   const {data:lav} = await sb.from('impostazioni').select('*').like('chiave','lav_%');
   const {data:suppTaglio} = await sb.from('impostazioni').select('valore').eq('chiave','supplemento_taglio_pannello').maybeSingle();
   const rows = (lav||[]).map(l=>\`<tr>
-    <td>\${inlineInput(l.descrizione||l.chiave,\`adminSalva('impostazioni','\${l.id}','descrizione',this.value)\`,'240px')}</td>
-    <td>\${inlineInput(l.valore,\`adminSalva('impostazioni','\${l.id}','valore',this.value)\`,'100px','number')} €</td>
+    <td>\${inlineInput(l.descrizione||l.chiave,\`salvaLavorazione('\${l.chiave}','descrizione',this.value)\`,'240px','text')}</td>
+    <td>\${inlineInput(l.valore,\`salvaLavorazione('\${l.chiave}','valore',this.value)\`,'100px','number')} €</td>
     <td><button onclick="eliminaRigaAdmin('impostazioni','\${l.id}','adminLavorazioni')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
   </tr>\`).join('');
 
@@ -5571,6 +5571,13 @@ async function adminLavorazioni(){
       <tbody>\${rows||'<tr><td colspan="3" style="text-align:center;color:var(--mid);padding:16px;font-style:italic">Nessuna lavorazione configurata</td></tr>'}</tbody>
       </table>
     \`)}\`;
+}
+
+async function salvaLavorazione(chiave, campo, valore){
+  const update = {[campo]: valore};
+  const {error} = await sb.from('impostazioni').update(update).eq('chiave', chiave);
+  if(error){toast('Errore salvataggio: '+error.message,'err');return;}
+  toast('Salvato','ok');
 }
 
 async function aggiungiLavorazione(){
