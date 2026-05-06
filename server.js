@@ -3339,9 +3339,9 @@ async function cfgRiepilogo(){
   document.getElementById('cfg-body').innerHTML=\`
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
       <div style="font-size:13px;font-weight:500">Riepilogo configurazione</div>
-      <button class="btn btn-sm" onclick="renderCfgStep('ferramenta')">← Modifica</button>
+      <button class="btn btn-sm" onclick="renderCfgStep(CFG._isAccessorio||CFG._isPannelloBlindato?(CFG._tipoAccessorio==='passata'?'acc_misure':CFG._tipoAccessorio==='sopraluce'?'acc_sopraluce':CFG._tipoAccessorio==='semplice'||CFG._tipoAccessorio==='coprifilo'?'acc_qta':CFG._isPannelloBlindato?'acc_pannello':'finitura'):'ferramenta')">← Modifica</button>
     </div>
-    \${CFG.misura_custom?\`<div style="background:var(--red-bg);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--red-tx);margin-bottom:10px">⚠ Misura custom — questo ordine richiederà approvazione del responsabile tecnico</div>\`:''}
+    \${CFG._zoccoliAuto>0?\`<div style="background:var(--beige2);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--mid);margin-bottom:10px">ℹ Pannello H \${CFG._hMagPannello} mm — \${CFG._zoccoliAuto} zoccolo/i aggiunti automaticamente (taglio a H \${CFG._hTaglioPannello} mm)</div>\`:''}
     <div style="background:var(--beige);border-radius:var(--radius);padding:12px;margin-bottom:12px;font-size:12px;color:var(--mid);line-height:1.6">\${desc}</div>
     <table style="width:100%;font-size:13px;margin-bottom:12px">
       \${righe_prezzo.map(r=>\`<tr><td style="padding:3px 0;color:var(--mid)">\${r.label}</td><td style="text-align:right;font-weight:500">€ \${(r.val||0).toLocaleString('it-IT',{minimumFractionDigits:2})}</td></tr>\`).join('')}
