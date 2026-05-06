@@ -125,7 +125,7 @@ tr.data-row:hover td{background:var(--beige);cursor:pointer}
 .form-overlay{position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.5);z-index:500;display:none;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;box-sizing:border-box}
 .form-overlay.open{display:flex;flex-wrap:wrap}
 #modal-cfg{z-index:600;background:rgba(0,0,0,0.75)}
-.form-modal{background:var(--white);border-radius:var(--radius-lg);width:100%;max-width:680px;overflow:hidden;margin:auto;box-sizing:border-box}
+.form-modal-overlay{position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.5);z-index:1000;display:none;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;box-sizing:border-box}.form-modal-overlay.open{display:flex;flex-wrap:wrap}.form-modal{background:var(--white);border-radius:var(--radius-lg);width:100%;max-width:680px;overflow:hidden;margin:auto;box-sizing:border-box}
 .form-modal-head{padding:16px 20px;border-bottom:0.5px solid var(--border);display:flex;justify-content:space-between;align-items:center;background:var(--dark)}
 .form-modal-title{font-size:15px;font-weight:500;color:#fff}
 .form-close{background:none;border:none;color:rgba(255,255,255,0.5);font-size:20px;cursor:pointer;line-height:1;padding:0 4px}
