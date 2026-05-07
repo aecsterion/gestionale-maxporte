@@ -3187,9 +3187,12 @@ async function calcolaTelaioAcc(spessore){
   CFG.p_telaio=prezzoSpalla;
   cfgUpdatePrice();
   document.getElementById('acc-telaio-result').innerHTML=\`
-    <div style="background:var(--beige2);border-radius:var(--radius);padding:10px;font-size:13px">
-      <span style="color:var(--mid)">Spalla:</span> <strong>\${regola.codice_spalla}</strong>
-      \${prezzoSpalla?\`<span style="margin-left:12px;color:var(--red);font-weight:500">+ € \${prezzoSpalla}</span>\`:''}
+    <div style="background:var(--beige);border-radius:var(--radius);padding:12px 14px;border:0.5px solid var(--border)">
+      <div style="font-size:12px;font-weight:500;margin-bottom:6px;color:var(--mid);text-transform:uppercase;letter-spacing:0.4px">Telaio abbinato automaticamente</div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div><div style="font-size:14px;font-weight:500">Spalla \${regola.codice_spalla} — \${spalla?.spalla_cm||'?'} mm</div></div>
+        <div style="font-size:14px;font-weight:500;color:var(--red)">\${prezzoSpalla?'€ '+prezzoSpalla:'Prezzo da definire'}</div>
+      </div>
     </div>\`;
 }
 
@@ -5538,6 +5541,12 @@ async function adminLavorazioni(){
       <tbody>\${rows||'<tr><td colspan="3" style="text-align:center;color:var(--mid);padding:16px;font-style:italic">Nessuna lavorazione configurata</td></tr>'}</tbody>
       </table>
     \`)}\`;
+}
+
+async function salvaLavorazione(chiave,campo,valore){
+  const {error}=await sb.from('impostazioni').update({[campo]:valore}).eq('chiave',chiave);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Salvato','ok');
 }
 
 async function aggiungiLavorazione(){
