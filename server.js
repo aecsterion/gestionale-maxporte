@@ -3247,15 +3247,33 @@ async function calcolaTelaioAcc(spessore){
   if(!spalla) { const {data:spallaFallback} = await sb.from('telai_spalle').select('*').eq('codice',regola.codice_spalla).limit(1).maybeSingle(); spalla=spallaFallback; }
   const prezzoSpalla = spalla?.[\`prezzo_\${listino().toLowerCase()}\`]||0;
   CFG.spalla=regola.codice_spalla;
+  CFG.accessorio_telaio=regola.tipo_accessorio!=='nessuno'?regola.tipo_accessorio:null;
   CFG.p_telaio=prezzoSpalla;
   cfgUpdatePrice();
-  document.getElementById('acc-telaio-result').innerHTML=\`
-    <div style="background:var(--beige2);border-radius:var(--radius);padding:10px;font-size:13px">
-      <span style="color:var(--mid)">Spalla:</span> <strong>\${regola.codice_spalla}</strong>
-      \${prezzoSpalla?\`<span style="margin-left:12px;color:var(--red);font-weight:500">+ € \${prezzoSpalla}</span>\`:''}
-    </div>\`;
-}
 
+  let noteAcc='';
+  if(regola.nota) noteAcc='<div style="font-size:11px;color:var(--mid);margin-top:4px">'+regola.nota+'</div>';
+  let accHtmlAcc='';
+  if(regola.tipo_accessorio&&regola.tipo_accessorio!=='nessuno'){
+    const prezzoAccAcc=regola['prezzo_access_'+listino()]||0;
+    accHtmlAcc='<div style="margin-top:8px;padding:8px 10px;background:var(--amber-bg);border-radius:var(--radius);font-size:12px;color:var(--amber-tx)">'+
+      'Accessorio necessario: <strong>'+regola.tipo_accessorio+'</strong> '+(regola.cm_accessorio?regola.cm_accessorio+' mm':'')+
+      ' — '+(prezzoAccAcc?'€ '+prezzoAccAcc:'prezzo da definire')+
+      (regola.note?'<br><span style="font-size:11px">'+regola.note+'</span>':'')+
+      '</div>';
+  }
+  document.getElementById('acc-telaio-result').innerHTML=
+    '<div style="background:var(--beige);border-radius:var(--radius);padding:12px 14px;border:0.5px solid var(--border)">'+
+    '<div style="font-size:12px;font-weight:500;margin-bottom:6px;color:var(--mid);text-transform:uppercase;letter-spacing:0.4px">Telaio abbinato automaticamente</div>'+
+    '<div style="display:flex;justify-content:space-between;align-items:center">'+
+    '<div>'+
+    '<div style="font-size:14px;font-weight:500">Spalla '+regola.codice_spalla+' — '+(spalla?.spalla_cm||'?')+' mm</div>'+
+    noteAcc+
+    '</div>'+
+    '<div style="font-size:14px;font-weight:500;color:var(--red)">'+(prezzoSpalla?'€ '+prezzoSpalla:'Prezzo da definire')+'</div>'+
+    '</div>'+
+    accHtmlAcc+
+    '</div>';
 function selAccSpessore(salta){
   if(!salta){
     const sp = parseFloat(document.getElementById('acc-sp-val')?.value||0);
