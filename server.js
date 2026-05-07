@@ -2662,7 +2662,7 @@ async function calcolaTelaio(spessore, fam){
   }
   const regola = regole[0];
   const {data:spalla} = await sb.from('telai_spalle')
-    .select('*').eq('codice',regola.codice_spalla).eq('famiglia_apertura',fam).single();
+    .select('*').eq('codice',regola.codice_spalla).eq('famiglia_apertura',fam).maybeSingle();
   const prezzoSpalla = spalla?.[\`prezzo_\${listino().toLowerCase()}\`]||0;
   const prezzoAcc = regola[\`prezzo_access_\${listino()}\`]||0;
 
@@ -3236,14 +3236,15 @@ async function calcolaTelaioAcc(spessore){
 
   const {data:regole} = await sb.from('regole_telaio')
     .select('*').eq('famiglia_apertura', fam)
-    .lte('spessore_da_cm', sp/10).gte('spessore_a_cm', sp/10);
+    .lte('spessore_da_cm', sp).gte('spessore_a_cm', sp);
 
   if(!regole||regole.length===0){
     document.getElementById('acc-telaio-result').innerHTML=\`<div style="background:var(--amber-bg);border-radius:var(--radius);padding:10px;font-size:12px;color:var(--amber-tx)">Spessore fuori range — verrà registrato senza spalla.</div>\`;
     return;
   }
   const regola = regole[0];
-  const {data:spalla} = await sb.from('telai_spalle').select('*').eq('codice',regola.codice_spalla).maybeSingle();
+  let {data:spalla} = await sb.from('telai_spalle').select('*').eq('codice',regola.codice_spalla).eq('famiglia_apertura',fam).maybeSingle();
+  if(!spalla) { const {data:spallaFallback} = await sb.from('telai_spalle').select('*').eq('codice',regola.codice_spalla).limit(1).maybeSingle(); spalla=spallaFallback; }
   const prezzoSpalla = spalla?.[\`prezzo_\${listino().toLowerCase()}\`]||0;
   CFG.spalla=regola.codice_spalla;
   CFG.p_telaio=prezzoSpalla;
@@ -3462,7 +3463,7 @@ async function cfgRiepilogo(){
   document.getElementById('cfg-body').innerHTML=\`
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
       <div style="font-size:13px;font-weight:500">Riepilogo configurazione</div>
-      <button class="btn btn-sm" onclick="renderCfgStep('ferramenta')">← Modifica</button>
+      <button class="btn btn-sm" onclick="renderCfgStep(CFG._isAccessorio?(CFG._tipoAccessorio==='passata'||CFG._tipoAccessorio==='sopraluce'?'acc_spessore':CFG._tipoAccessorio==='semplice'||CFG._tipoAccessorio==='coprifilo'?'acc_qta':'acc_pannello'):CFG._isPannelloBlindato?'acc_pannello':'ferramenta')">← Modifica</button>
     </div>
     \${CFG.misura_custom?\`<div style="background:var(--red-bg);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--red-tx);margin-bottom:10px">⚠ Misura custom — questo ordine richiederà approvazione del responsabile tecnico</div>\`:''}
         \${CFG._zoccoli>0?'<div style="background:var(--beige2);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--mid);margin-bottom:10px">'+CFG._zoccoli+' zoccolo/i da 80mm (taglio pannello a H '+CFG._pannelloTaglio+' mm)</div>':''}
