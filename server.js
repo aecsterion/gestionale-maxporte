@@ -667,56 +667,38 @@ tr.data-row:hover td{background:var(--beige);cursor:pointer}
 <!-- MODAL MAGAZZINO -->
 <div id="modal-magazzino" class="form-modal-overlay">
   <div class="form-modal" style="max-width:600px">
-    <div class="form-modal-head">
-      <span class="form-modal-title" id="mag-title">Articolo magazzino</span>
-      <button class="form-close" onclick="closeForm('modal-magazzino')">&times;</button>
-    </div>
+    <div class="form-modal-head"><span class="form-modal-title" id="mag-title">Articolo</span>
+      <button class="form-close" onclick="closeForm(\'modal-magazzino\')">&times;</button></div>
     <div class="form-modal-body">
+      <div class="form-field"><label>Descrizione *</label><input id="mag-descrizione" type="text"></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-        <div class="form-field"><label>Codice MP</label><input id="mag-codice_mp" type="text" placeholder="es. PAN-NZ-2150"></div>
-        <div class="form-field"><label>Codice (interno)</label><input id="mag-codice" type="text" placeholder="es. MAG001"></div>
-      </div>
-      <div class="form-field"><label>Descrizione <span class="req">*</span></label><input id="mag-descrizione" type="text" placeholder="es. Pannello blindato Noce Nazionale H2150"></div>
+        <div class="form-field"><label>Codice MP</label><input id="mag-codice_mp" type="text"></div>
+        <div class="form-field"><label>Codice fornitore</label><input id="mag-codice" type="text"></div></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-        <div class="form-field"><label>Categoria</label>
-          <select id="mag-categoria">
-            <option value="">— Nessuna —</option>
-            <option value="pannello_blindato">Pannello blindato</option>
-            <option value="accessorio">Accessorio</option>
-            <option value="componente">Componente</option>
-            <option value="consumabile">Consumabile</option>
-          </select>
-        </div>
-        <div class="form-field"><label>Unità</label>
-          <select id="mag-unita">
-            <option value="pz">pz</option>
-            <option value="m">m</option>
-            <option value="m2">m²</option>
-            <option value="kg">kg</option>
-          </select>
-        </div>
-      </div>
+        <div class="form-field"><label>Categoria</label><select id="mag-categoria">
+          <option value="">&#8212;</option><option value="pannello_blindato">Pannello blindato</option>
+          <option value="accessorio">Accessorio</option><option value="componente">Componente</option>
+          <option value="consumabile">Consumabile</option></select></div>
+        <div class="form-field"><label>Unit&#224;</label><select id="mag-unita">
+          <option value="pz">pz</option><option value="m">m</option>
+          <option value="m2">m&#178;</option><option value="kg">kg</option></select></div></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-        <div class="form-field"><label>Codice finitura</label><input id="mag-codice_finitura" type="text" placeholder="es. NZ"></div>
-        <div class="form-field"><label>Nome finitura</label><input id="mag-nome_finitura" type="text" placeholder="es. Noce Nazionale"></div>
-      </div>
+        <div class="form-field"><label>Codice finitura</label><input id="mag-codice_finitura" type="text"></div>
+        <div class="form-field"><label>Nome finitura</label><input id="mag-nome_finitura" type="text"></div></div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
-        <div class="form-field"><label>Altezza (mm)</label><input id="mag-altezza_mm" type="number" placeholder="es. 2150"></div>
-        <div class="form-field"><label>Larghezza (mm)</label><input id="mag-larghezza_mm" type="number" placeholder="es. 1050"></div>
-        <div class="form-field"><label>Spessore (mm)</label><input id="mag-spessore_mm" type="number" placeholder="es. 44"></div>
-      </div>
+        <div class="form-field"><label>Altezza (mm)</label><input id="mag-altezza_mm" type="number"></div>
+        <div class="form-field"><label>Larghezza (mm)</label><input id="mag-larghezza_mm" type="number"></div>
+        <div class="form-field"><label>Spessore (mm)</label><input id="mag-spessore_mm" type="number"></div></div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
-        <div class="form-field"><label>Giacenza</label><input id="mag-giacenza" type="number" value="0" min="0"></div>
-        <div class="form-field"><label>Scorta minima</label><input id="mag-scorta_minima" type="number" value="0" min="0"></div>
-        <div class="form-field"><label>In ordine</label><input id="mag-quantita_in_ordine" type="number" value="0" min="0"></div>
-      </div>
-      <div class="form-field"><label>Ubicazione</label><input id="mag-ubicazione" type="text" placeholder="es. Scaffale A3"></div>
+        <div class="form-field"><label>Giacenza</label><input id="mag-giacenza" type="number" value="0"></div>
+        <div class="form-field"><label>Scorta min.</label><input id="mag-scorta_minima" type="number" value="0"></div>
+        <div class="form-field"><label>In ordine</label><input id="mag-quantita_in_ordine" type="number" value="0"></div></div>
+      <div class="form-field"><label>Ubicazione</label><input id="mag-ubicazione" type="text"></div>
     </div>
     <div class="form-modal-foot">
-      <button class="btn" onclick="closeForm('modal-magazzino')">Annulla</button>
-      <button class="btn" style="color:var(--red)" onclick="eliminaArticoloMag()" id="mag-btn-elimina">Elimina</button>
-      <button class="btn btn-red" onclick="salvaMagazzino()">Salva</button>
-    </div>
+      <button class="btn" onclick="closeForm(\'modal-magazzino\')">Annulla</button>
+      <button class="btn" style="color:var(--red);display:none" onclick="eliminaArticoloMag()" id="mag-btn-elimina">Elimina</button>
+      <button class="btn btn-red" onclick="salvaMagazzino()">Salva</button></div>
   </div>
 </div>
 
@@ -1469,133 +1451,88 @@ async function renderFatture(){
 }
 
 // ── MAGAZZINO ─────────────────────────────────────────
-
 async function renderMagazzino(){
-  const {data,error} = await sb.from('magazzino').select('*').order('categoria').order('descrizione');
-  const items = data||[];
-  const sottoscorta = items.filter(m=>Number(m.giacenza||0)<=Number(m.scorta_minima||0)&&Number(m.giacenza||0)>=0).length;
-  const pannelli = items.filter(m=>m.categoria==='pannello_blindato').length;
-
-  const categorie = [...new Set(items.map(m=>m.categoria).filter(Boolean))].sort();
-
-  const rows = items.map(m=>{
-    const sotto = Number(m.giacenza||0)<=Number(m.scorta_minima||0);
-    const dimStr = (m.altezza_mm||m.larghezza_mm) ? (m.altezza_mm||'?')+'×'+(m.larghezza_mm||'?')+' mm' : '—';
+  const {data}=await sb.from('magazzino').select('*').order('categoria').order('descrizione');
+  const items=data||[];
+  const sottoscorta=items.filter(function(m){return Number(m.giacenza||0)<=Number(m.scorta_minima||0);}).length;
+  const pannelli=items.filter(function(m){return m.categoria==='pannello_blindato';}).length;
+  const rows=items.map(function(m){
+    const s=Number(m.giacenza||0)<=Number(m.scorta_minima||0);
+    const d=(m.altezza_mm||m.larghezza_mm)?(m.altezza_mm||'?')+'×'+(m.larghezza_mm||'?')+' mm':'—';
     return '<tr class="data-row" onclick="apriDettaglioMagazzino(this.dataset.id)" data-id="'+m.id+'" style="cursor:pointer">'+
       '<td><strong>'+(m.codice_mp||m.codice||'—')+'</strong></td>'+
       '<td>'+(m.descrizione||'—')+'</td>'+
       '<td>'+(m.categoria?'<span class="tag">'+m.categoria+'</span>':'—')+'</td>'+
       '<td>'+(m.codice_finitura?'<span class="tag">'+m.codice_finitura+'</span>':'—')+'</td>'+
-      '<td>'+dimStr+'</td>'+
-      '<td>'+(m.giacenza||0)+' '+(m.unita||'pz')+'</td>'+
-      '<td>'+(m.scorta_minima||0)+'</td>'+
-      '<td>'+(m.quantita_in_ordine||0)+'</td>'+
-      '<td>'+(sotto?'<span class="badge br">Sotto scorta</span>':'<span class="badge bg">OK</span>')+'</td>'+
-      '</tr>';
+      '<td>'+d+'</td><td>'+(m.giacenza||0)+' '+(m.unita||'pz')+'</td>'+
+      '<td>'+(m.scorta_minima||0)+'</td><td>'+(m.quantita_in_ordine||0)+'</td>'+
+      '<td>'+(s?'<span class="badge br">Sotto scorta</span>':'<span class="badge bg">OK</span>')+'</td></tr>';
   }).join('');
-
   document.getElementById('main-content').innerHTML=
     '<div class="grid-4" style="margin-bottom:16px">'+
-      '<div class="metric"><div class="metric-label">Articoli totali</div><div class="metric-value">'+items.length+'</div></div>'+
-      '<div class="metric"><div class="metric-label">Pannelli blindati</div><div class="metric-value">'+pannelli+'</div></div>'+
-      '<div class="metric"><div class="metric-label">Sotto scorta</div><div class="metric-value" style="color:var(--red)">'+sottoscorta+'</div></div>'+
-    '</div>'+
-    '<div class="card">'+
-      '<div class="card-header">'+
-        '<span class="card-title">Magazzino</span>'+
-        '<button class="btn btn-red btn-sm" onclick="apriNuovoArticoloMag()">+ Nuovo articolo</button>'+
-      '</div>'+
-      '<table>'+
-        '<thead><tr><th>Codice MP</th><th>Descrizione</th><th>Categoria</th><th>Finitura</th><th>Dimensioni</th><th>Giacenza</th><th>Scorta min.</th><th>In ordine</th><th>Stato</th></tr></thead>'+
-        '<tbody>'+(rows||'<tr><td colspan="9" style="text-align:center;color:var(--mid);padding:24px;font-style:italic">Nessun articolo — clicca "+ Nuovo articolo"</td></tr>')+'</tbody>'+
-      '</table>'+
-    '</div>';
+    '<div class="metric"><div class="metric-label">Articoli totali</div><div class="metric-value">'+items.length+'</div></div>'+
+    '<div class="metric"><div class="metric-label">Pannelli blindati</div><div class="metric-value">'+pannelli+'</div></div>'+
+    '<div class="metric"><div class="metric-label">Sotto scorta</div><div class="metric-value" style="color:var(--red)">'+sottoscorta+'</div></div>'+
+    '</div><div class="card"><div class="card-header"><span class="card-title">Magazzino</span>'+
+    '<button class="btn btn-red btn-sm" onclick="apriNuovoArticoloMag()">+ Nuovo articolo</button></div>'+
+    '<table><thead><tr><th>Codice MP</th><th>Descrizione</th><th>Categoria</th><th>Finitura</th>'+
+    '<th>Dim.</th><th>Giacenza</th><th>Scorta min.</th><th>In ordine</th><th>Stato</th></tr></thead>'+
+    '<tbody>'+(rows||'<tr><td colspan="9" style="text-align:center;color:var(--mid);padding:24px">Nessun articolo</td></tr>')+
+    '</tbody></table></div>';
 }
-
 async function apriDettaglioMagazzino(id){
-  const {data:m} = await sb.from('magazzino').select('*').eq('id',id).single();
-  if(!m){toast('Articolo non trovato','err');return;}
-  _magEditId = id;
-  popolaFormMag(m);
-  ensureModalInBody('modal-magazzino').classList.add('open');
+  const {data:m}=await sb.from('magazzino').select('*').eq('id',id).single();
+  if(!m){toast('Non trovato','err');return;}
+  _magEditId=id;popolaFormMag(m);
+  const mo=ensureModalInBody('modal-magazzino');if(mo)mo.classList.add('open');
 }
-
 function apriNuovoArticoloMag(){
-  _magEditId = null;
-  popolaFormMag({});
-  ensureModalInBody('modal-magazzino').classList.add('open');
+  _magEditId=null;popolaFormMag({});
+  const mo=ensureModalInBody('modal-magazzino');if(mo)mo.classList.add('open');
 }
-
 function popolaFormMag(m){
-  document.getElementById('mag-title').textContent = _magEditId ? 'Modifica articolo' : 'Nuovo articolo';
-  const fields = {
-    'mag-codice_mp': m.codice_mp||'',
-    'mag-codice': m.codice||'',
-    'mag-descrizione': m.descrizione||'',
-    'mag-categoria': m.categoria||'',
-    'mag-codice_finitura': m.codice_finitura||'',
-    'mag-nome_finitura': m.nome_finitura||'',
-    'mag-altezza_mm': m.altezza_mm||'',
-    'mag-larghezza_mm': m.larghezza_mm||'',
-    'mag-spessore_mm': m.spessore_mm||'',
-    'mag-giacenza': m.giacenza||0,
-    'mag-scorta_minima': m.scorta_minima||0,
-    'mag-quantita_in_ordine': m.quantita_in_ordine||0,
-    'mag-unita': m.unita||'pz',
-    'mag-ubicazione': m.ubicazione||'',
-  };
-  Object.entries(fields).forEach(([id,val])=>{
-    const el = document.getElementById(id);
-    if(el) el.value = val;
-  });
+  document.getElementById('mag-title').textContent=_magEditId?'Modifica':'Nuovo articolo';
+  const ff={'mag-codice_mp':m.codice_mp||'','mag-codice':m.codice||'','mag-descrizione':m.descrizione||'',
+    'mag-categoria':m.categoria||'','mag-codice_finitura':m.codice_finitura||'','mag-nome_finitura':m.nome_finitura||'',
+    'mag-altezza_mm':m.altezza_mm||'','mag-larghezza_mm':m.larghezza_mm||'','mag-spessore_mm':m.spessore_mm||'',
+    'mag-giacenza':m.giacenza||0,'mag-scorta_minima':m.scorta_minima||0,'mag-quantita_in_ordine':m.quantita_in_ordine||0,
+    'mag-unita':m.unita||'pz','mag-ubicazione':m.ubicazione||''};
+  Object.entries(ff).forEach(function(kv){const el=document.getElementById(kv[0]);if(el)el.value=kv[1];});
+  const btn=document.getElementById('mag-btn-elimina');if(btn)btn.style.display=_magEditId?'':'none';
 }
-
-var _magEditId = null;
-
+var _magEditId=null;
 async function salvaMagazzino(){
-  const data = {
-    codice_mp: document.getElementById('mag-codice_mp')?.value?.trim()||null,
-    codice: document.getElementById('mag-codice')?.value?.trim()||null,
-    descrizione: document.getElementById('mag-descrizione')?.value?.trim()||null,
-    categoria: document.getElementById('mag-categoria')?.value?.trim()||null,
-    codice_finitura: document.getElementById('mag-codice_finitura')?.value?.trim()||null,
-    nome_finitura: document.getElementById('mag-nome_finitura')?.value?.trim()||null,
-    altezza_mm: parseFloat(document.getElementById('mag-altezza_mm')?.value)||null,
-    larghezza_mm: parseFloat(document.getElementById('mag-larghezza_mm')?.value)||null,
-    spessore_mm: parseFloat(document.getElementById('mag-spessore_mm')?.value)||null,
-    giacenza: parseFloat(document.getElementById('mag-giacenza')?.value)||0,
-    scorta_minima: parseFloat(document.getElementById('mag-scorta_minima')?.value)||0,
-    quantita_in_ordine: parseFloat(document.getElementById('mag-quantita_in_ordine')?.value)||0,
-    unita: document.getElementById('mag-unita')?.value?.trim()||'pz',
-    ubicazione: document.getElementById('mag-ubicazione')?.value?.trim()||null,
-    updated_at: new Date().toISOString(),
-  };
-  if(!data.descrizione){toast('Inserisci una descrizione','err');return;}
-  let error;
-  if(_magEditId){
-    ({error} = await sb.from('magazzino').update(data).eq('id',_magEditId));
-  } else {
-    ({error} = await sb.from('magazzino').insert([data]));
-  }
-  if(error){toast('Errore: '+error.message,'err');return;}
-  toast(_magEditId?'Articolo aggiornato':'Articolo aggiunto','ok');
-  closeForm('modal-magazzino');
-  renderMagazzino();
+  const d={codice_mp:document.getElementById('mag-codice_mp')?.value?.trim()||null,
+    codice:document.getElementById('mag-codice')?.value?.trim()||null,
+    descrizione:document.getElementById('mag-descrizione')?.value?.trim()||null,
+    categoria:document.getElementById('mag-categoria')?.value?.trim()||null,
+    codice_finitura:document.getElementById('mag-codice_finitura')?.value?.trim()||null,
+    nome_finitura:document.getElementById('mag-nome_finitura')?.value?.trim()||null,
+    altezza_mm:parseFloat(document.getElementById('mag-altezza_mm')?.value)||null,
+    larghezza_mm:parseFloat(document.getElementById('mag-larghezza_mm')?.value)||null,
+    spessore_mm:parseFloat(document.getElementById('mag-spessore_mm')?.value)||null,
+    giacenza:parseFloat(document.getElementById('mag-giacenza')?.value)||0,
+    scorta_minima:parseFloat(document.getElementById('mag-scorta_minima')?.value)||0,
+    quantita_in_ordine:parseFloat(document.getElementById('mag-quantita_in_ordine')?.value)||0,
+    unita:document.getElementById('mag-unita')?.value||'pz',
+    ubicazione:document.getElementById('mag-ubicazione')?.value?.trim()||null,
+    updated_at:new Date().toISOString()};
+  if(!d.descrizione){toast('Inserisci descrizione','err');return;}
+  let er;
+  if(_magEditId){const r=await sb.from('magazzino').update(d).eq('id',_magEditId);er=r.error;}
+  else{const r=await sb.from('magazzino').insert([d]);er=r.error;}
+  if(er){toast('Errore: '+er.message,'err');return;}
+  toast(_magEditId?'Aggiornato':'Aggiunto','ok');
+  closeForm('modal-magazzino');renderMagazzino();
 }
-
 async function eliminaArticoloMag(){
-  if(!_magEditId) return;
-  if(!confirm('Eliminare questo articolo dal magazzino?')) return;
-  const {error} = await sb.from('magazzino').delete().eq('id',_magEditId);
-  if(error){toast('Errore: '+error.message,'err');return;}
-  toast('Articolo eliminato','ok');
-  closeForm('modal-magazzino');
-  renderMagazzino();
+  if(!_magEditId||!confirm('Eliminare?'))return;
+  const r=await sb.from('magazzino').delete().eq('id',_magEditId);
+  if(r.error){toast('Errore: '+r.error.message,'err');return;}
+  toast('Eliminato','ok');closeForm('modal-magazzino');renderMagazzino();
 }
 
 
-
-// ── PRODUZIONE ────────────────────────────────────────
 async function renderProduzione(){
   const {data} = await sb.from('ordini_produzione').select('*,ordini(numero)').order('created_at',{ascending:false});
   const rows=(data||[]).map(op=>\`
@@ -2667,25 +2604,594 @@ async function calcolaTelaio(spessore, fam){
   const prezzoAcc = regola[\`prezzo_access_\${listino()}\`]||0;
 
   CFG.spalla=regola.codice_spalla;
-  CFG.accessorio_telaio=regola.tipo_accessorio!==\'nessuno\'?regola.tipo_accessorio:null;
+  CFG.accessorio_telaio=regola.tipo_accessorio!=='nessuno'?regola.tipo_accessorio:null;
+  CFG.p_telaio=prezzoSpalla;
+  CFG.p_acc_telaio=prezzoAcc;
+
+  let note='';
+  if(regola.nota) note=\`<div style="font-size:11px;color:var(--mid);margin-top:4px">\${regola.nota}</div>\`;
+
+  let accHtml='';
+  if(regola.tipo_accessorio&&regola.tipo_accessorio!=='nessuno'){
+    accHtml=\`<div style="margin-top:8px;padding:8px 10px;background:var(--amber-bg);border-radius:var(--radius);font-size:12px;color:var(--amber-tx)">
+      Accessorio necessario: <strong>\${regola.tipo_accessorio}</strong> \${regola.cm_accessorio?regola.cm_accessorio+' mm':''} 
+      — \${prezzoAcc?'€ '+prezzoAcc:'prezzo da definire'}
+      \${regola.note?'<br><span style="font-size:11px">'+regola.note+'</span>':''}
+    </div>\`;
+  }
+
+  document.getElementById('cfg-telaio-result').innerHTML=\`
+    <div style="background:var(--beige);border-radius:var(--radius);padding:12px 14px;border:0.5px solid var(--border)">
+      <div style="font-size:12px;font-weight:500;margin-bottom:6px;color:var(--mid);text-transform:uppercase;letter-spacing:0.4px">Telaio abbinato automaticamente</div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-size:14px;font-weight:500">Spalla \${regola.codice_spalla} — \${spalla?.spalla_cm||'?'} mm</div>
+          \${note}
+        </div>
+        <div style="font-size:14px;font-weight:500;color:var(--red)">\${prezzoSpalla?'€ '+prezzoSpalla:'Prezzo da definire'}</div>
+      </div>
+      \${accHtml}
+    </div>\`;
+  cfgUpdatePrice();
+}
+
+function selCassone(kit, prezzo, cassone){
+  CFG.spalla=kit; CFG.p_telaio=prezzo; CFG._cassone=cassone;
+  cfgUpdatePrice();
+}
+
+function avanzaAFerramenta(){
+  if(!CFG.spessore){ toast('Inserisci lo spessore del muro','err'); return; }
+  renderCfgStep('ferramenta');
+}
+
+async function cfgSerratura(){
+  const fam = CFG.apertura||'';
+  const {data:defaults} = await sb.from('apertura_serrature').select('codice_serratura,is_default').eq('codice_apertura',fam);
+  const defaultSerr = (defaults||[]).find(d=>d.is_default)?.codice_serratura;
+  const {data:tutte} = await sb.from('tipi_serratura').select('*').eq('attiva',true).eq('is_automatica',false);
+  const famUpper = fam.toUpperCase().trim();
+  // Mappa l'apertura alla sua famiglia generica
+  const getFamiglia = (a) => {
+    if(!a) return 'BAT';
+    if(a==='SI'||a.startsWith('SI/')||a.startsWith('SI ')||a==='SE'||a.startsWith('SE/')||a.startsWith('SE ')||a.startsWith('S/')) return 'SCORREVOLE';
+    if(a==='LIBRO'||a.startsWith('LIBRO/')||a.startsWith('LIBRO ')) return 'LIBRO';
+    if(a.startsWith('CS')) return 'CS';
+    if(a.startsWith('COM')) return 'COM';
+    if(a.startsWith('FM')) return 'FM';
+    if(a.startsWith('ROTO')) return 'ROTO';
+    return 'BAT';
+  };
+  const famigliaCorrente = getFamiglia(famUpper);
+  // Filtro famiglie_apertura: se vuoto → visibile per tutti; se compilato → matcha codice esatto, prefisso o famiglia
+  const serratureFam = (tutte||[]).filter(s=>{
+    if(!s.famiglie_apertura) return true;
+    const fams = s.famiglie_apertura.split(',').map(x=>x.trim().toUpperCase()).filter(Boolean);
+    return fams.some(f =>
+      famUpper === f ||                          // codice esatto: "LIBRO Q" === "LIBRO Q"
+      famUpper.startsWith(f+'/') ||             // variante slash: "LIBRO/S"
+      famUpper.startsWith(f+' ') ||             // variante spazio: "LIBRO Q"
+      famigliaCorrente === f                    // famiglia generica: "LIBRO" per tutte le varianti libro
+    );
+  });
+  // Poi applica le regole della tab compatibilità (esclusioni specifiche)
+  const serrature = await filtraPerCompatibilita(serratureFam, 'serratura', 'codice');
+  if(!CFG.serratura&&defaultSerr){
+    const def=serrature.find(s=>s.codice===defaultSerr);
+    if(def){CFG.serratura=def.codice;CFG.nome_serratura=def.nome;}
+  }
+  const cards=serrature.map(s=>{
+    const sp=s[\`sovrapprezzo_\${listino().toLowerCase()}\`]||0;
+    const sel=CFG.serratura===s.codice;
+    const isDefault=s.codice===defaultSerr;
+    const tags=[];
+    if(s.richiede_cilindro) tags.push('<span style="font-size:10px;background:var(--blue-bg);color:var(--blue-tx);padding:1px 5px;border-radius:3px">+ cilindro</span>');
+    if(s.richiede_pomolino) tags.push('<span style="font-size:10px;background:var(--amber-bg);color:var(--amber-tx);padding:1px 5px;border-radius:3px">+ pomolino</span>');
+    if(isDefault) tags.push('<span style="font-size:10px;background:var(--green-bg);color:var(--green-tx);padding:1px 5px;border-radius:3px">★ standard</span>');
+    return \`<div onclick="selSerratura('\${s.codice}','\${s.nome.replace(/'/g,"\\'")}',\${sp},\${s.richiede_cilindro},\${s.richiede_pomolino})"
+      style="border:\${sel?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:10px 12px;cursor:pointer;background:\${sel?'var(--red-bg)':'var(--white)'}">
+      <div style="font-size:13px;font-weight:500;color:\${sel?'var(--red)':'var(--dark)'};margin-bottom:4px">\${s.nome}</div>
+      <div style="font-size:11px;color:var(--mid);margin-bottom:4px">\${s.descrizione||''}</div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap">\${tags.join('')}</div>
+      <div style="font-size:11px;color:var(--mid);margin-top:4px">\${sp>0?'+€'+sp:'Inclusa'}</div>
+    </div>\`;
+  }).join('');
+  document.getElementById('cfg-body').innerHTML=\`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:500">Serratura <span style="color:var(--mid);font-weight:400">— \${CFG.nome_apertura||''} \${CFG.senso||''}</span></div>
+      <button class="btn btn-sm" onclick="renderCfgStep('apertura')">← Indietro</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+      \${cards||'<p style="color:var(--mid);font-size:12px;grid-column:1/-1">Nessuna serratura configurata</p>'}
+    </div>\`;
+}
+async function selSerratura(cod,nome,sovr,richiede_cilindro,richiede_pomolino){
+  CFG.serratura=cod;CFG.nome_serratura=nome;CFG.p_serratura=sovr||0;
+  CFG._richiede_cilindro=richiede_cilindro;CFG._richiede_pomolino=richiede_pomolino;
+  cfgUpdatePrice();
+  await renderCfgStep(richiede_cilindro?'cilindro':'misure');
+}
+
+async function cfgCilindro(){
+  const fam=CFG.apertura||'';
+  const {data:tutti}=await sb.from('tipi_cilindro').select('*').eq('attivo',true).order('misura_mm');
+  const cilindri=(tutti||[]).filter(c=>{
+    if(!c.famiglie_apertura) return true;
+    return c.famiglie_apertura.split(',').map(x=>x.trim()).some(f=>fam.startsWith(f));
+  });
+  const cards=cilindri.map(c=>{
+    const sp=c[\`sovrapprezzo_\${listino().toLowerCase()}\`]||0;
+    const sel=CFG.cilindro===c.codice;
+    return \`<div onclick="selCilindro('\${c.codice}','\${c.nome.replace(/'/g,"\\'")}',\${sp})"
+      style="border:\${sel?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:10px 12px;cursor:pointer;background:\${sel?'var(--red-bg)':'var(--white)'}">
+      <div style="font-size:13px;font-weight:500;color:\${sel?'var(--red)':'var(--dark)'}">\${c.nome}</div>
+      \${c.misura_mm?\`<div style="font-size:11px;color:var(--mid)">\${c.misura_mm}mm</div>\`:''}
+      \${c.fornitore?\`<div style="font-size:11px;color:var(--mid)">\${c.fornitore}</div>\`:''}
+      <div style="font-size:11px;color:var(--mid);margin-top:4px">\${sp>0?'+€'+sp:'Incluso'}</div>
+    </div>\`;
+  }).join('');
+  document.getElementById('cfg-body').innerHTML=\`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:500">Cilindro <span style="color:var(--mid);font-weight:400">— \${CFG.nome_serratura||''}</span></div>
+      <button class="btn btn-sm" onclick="renderCfgStep('serratura')">← Indietro</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+      \${cards||'<p style="color:var(--mid);font-size:12px;grid-column:1/-1">Nessun cilindro disponibile</p>'}
+    </div>\`;
+}
+
+function selCilindro(cod,nome,sovr){
+  CFG.cilindro=cod;CFG.nome_cilindro=nome;CFG.p_cilindro=sovr||0;
+  cfgUpdatePrice();renderCfgStep('misure');
+}
+
+async function cfgFerramenta(){
+  const {data:tuttaFerr}=await sb.from('ferramenta').select('*').eq('attivo',true).order('nome');
+  const ferr=await filtraPerCompatibilita(tuttaFerr||[],'ferramenta','codice');
+  const rowsFerr=(ferr||[]).map(f=>{
+    const sp=f[\`sovrapprezzo_\${listino().toLowerCase()}\`]||0;
+    const hex=f.colore_hex||'CCCCCC';
+    return \`<div onclick="selFerramenta('\${f.codice}','\${f.nome}',\${sp})"
+      style="border:\${CFG.ferramenta===f.codice?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:8px 10px;cursor:pointer;background:\${CFG.ferramenta===f.codice?'var(--red-bg)':'var(--white)'};display:flex;align-items:center;gap:8px">
+      <div style="width:22px;height:22px;border-radius:50%;background:#\${hex};border:0.5px solid rgba(0,0,0,0.15);flex-shrink:0"></div>
+      <div>
+        <div style="font-size:12px;font-weight:500;color:\${CFG.ferramenta===f.codice?'var(--red)':'var(--dark)'}">\${f.nome}</div>
+        <div style="font-size:10px;color:var(--mid)">\${sp>0?'+€'+sp:'Inclusa'}</div>
+      </div>
+    </div>\`;
+  }).join('');
+  document.getElementById('cfg-body').innerHTML=\`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:500">Colore ferramenta</div>
+      <button class="btn btn-sm" onclick="renderCfgStep('spessore')">← Indietro</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:16px">\${rowsFerr||'<p style="color:var(--mid);font-size:12px">Nessuna ferramenta configurata</p>'}</div>
+    <div style="display:flex;justify-content:flex-end">
+      <button class="btn btn-red btn-sm" onclick="renderCfgStep('maniglia')" \${!CFG.ferramenta?'disabled':''}>Avanti →</button>
+    </div>\`;
+  cfgUpdatePrice();
+}
+
+function selFerramenta(cod,nome,sovr){CFG.ferramenta=cod;CFG.nome_ferramenta=nome;CFG.p_ferramenta=sovr;cfgUpdatePrice();renderCfgStep('maniglia');}
+
+async function cfgManiglia(){
+  const fam = (CFG.apertura||'').toUpperCase();
+  const isScorrevole = fam==='SI'||fam==='SE'||fam.startsWith('SI')||fam.startsWith('SE')||fam.startsWith('S/');
+  const isLibro = fam==='LIBRO'||fam.startsWith('LIBRO');
+  const isBattente = !isScorrevole && !isLibro;
+
+  // Carica maniglie
+  const {data:tutteMan}=await sb.from('maniglie').select('*').eq('attivo',true).order('nome');
+  // Filtra per aperture_escluse: scarta maniglie che escludono esplicitamente l'apertura corrente
+  const aperturaCorrente = (CFG.apertura||'').toUpperCase().trim();
+  const manCompatibili = (tutteMan||[]).filter(m=>{
+    if(!m.aperture_escluse || m.codice==='NESSUNA') return true;
+    const escluse = m.aperture_escluse.split(',').map(s=>s.trim().toUpperCase()).filter(Boolean);
+    // Confronto per famiglia: "LIBRO" esclude "LIBRO", "LIBRO/S", "LIBRO Q", ecc.
+    return !escluse.some(e => aperturaCorrente === e || aperturaCorrente.startsWith(e+'/') || aperturaCorrente.startsWith(e+' '));
+  });
+  const manAll=await filtraPerCompatibilita(manCompatibili,'maniglia','codice');
+
+  // Versioni ammesse per tipo apertura
+  // SCORREVOLE → versione=SCORREVOLE (+ NESSUNA)
+  // LIBRO → versione=LIBRO (+ NESSUNA)
+  // BATTENTE → versione=CHIAVE|CILINDRO|WC|MANIGLIONE in base a serratura (+ NESSUNA)
+  let versioniAmmesse;
+  if(isScorrevole){
+    versioniAmmesse = new Set(['SCORREVOLE']);
+  } else if(isLibro){
+    versioniAmmesse = new Set(['LIBRO']);
+  } else {
+    // Battente/CS/COM ecc: filtra per serratura
+    if(CFG._richiede_cilindro) versioniAmmesse = new Set(['CILINDRO']);
+    else if(CFG.serratura==='L-O'||CFG.serratura==='WC'||CFG._richiede_pomolino) versioniAmmesse = new Set(['WC']);
+    else versioniAmmesse = new Set(['CHIAVE']);
+  }
+
+  let man = manAll.filter(m=>{
+    if(m.codice==='NESSUNA') return true;
+    if(!m.versione) return isBattente; // senza versione = battente generico
+    return versioniAmmesse.has(m.versione.toUpperCase());
+  });
+
+  // NESSUNA sempre prima
+  const nessuna = man.filter(m=>m.codice==='NESSUNA');
+  const resto = man.filter(m=>m.codice!=='NESSUNA');
+  man = [...nessuna, ...resto];
+
+  const rowsMan=man.map(m=>{
+    const pr=m[\`prezzo_\${listino().toLowerCase()}\`]||0;
+    const sel=CFG.maniglia===m.codice;
+    const isNessuna=m.codice==='NESSUNA';
+    return \`<div onclick="selManiglia('\${m.codice}','\${m.nome.replace(/'/g,"\\'")}',\${pr})"
+      style="border:\${sel?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:8px 10px;cursor:pointer;background:\${sel?'var(--red-bg)':'var(--white)'}">
+      \${isNessuna?'<div style="font-size:12px;font-weight:500;color:var(--mid)">⊘ Senza maniglia</div><div style="font-size:10px;color:var(--mid)">non fornita da Max Porte</div>':''}
+      \${!isNessuna?\`<div style="font-size:12px;font-weight:500;color:\${sel?'var(--red)':'var(--dark)'}">\${m.nome}</div>\`:''}
+      \${!isNessuna&&m.versione?\`<div style="font-size:10px;color:var(--mid)">\${m.versione}</div>\`:''}
+      \${!isNessuna?\`<div style="font-size:11px;color:var(--mid);margin-top:2px">\${pr>0?'da €'+pr:'Inclusa'}</div>\`:''}
+    </div>\`;
+  }).join('');
+
+  document.getElementById('cfg-body').innerHTML=\`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:500">Maniglia<span style="font-size:11px;color:var(--mid);font-weight:400"> — \${isScorrevole?'Scorrevole':isLibro?'Libro':'vers. '+[...versioniAmmesse].join('/')}</span></div>
+      <button class="btn btn-sm" onclick="renderCfgStep('ferramenta')">← Indietro</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">\${rowsMan||'<p style="color:var(--mid);font-size:12px;grid-column:1/-1">Nessuna maniglia disponibile</p>'}</div>\`;
+}
+
+async function selManiglia(cod,nome,pr){
+  CFG.maniglia=cod;CFG.nome_maniglia=nome;CFG.p_maniglia=pr;
+  CFG._maniglia_esclusa=(cod==='NESSUNA');
+  cfgUpdatePrice();
+  if(cod==='NESSUNA'){
+    CFG.colore_maniglia=null;CFG.nome_colore_maniglia='';
+    await renderCfgStep(CFG._richiede_pomolino?'pomolino':'riepilogo');
+  } else {
+    await renderCfgStep('colore_maniglia');
+  }
+}
+
+async function cfgColoreManiglia(){
+  const {data:colori}=await sb.from('colori_maniglia').select('*').eq('codice_maniglia',CFG.maniglia).eq('attivo',true).order('nome_colore');
+  const cards=(colori||[]).map(c=>{
+    const sel=CFG.colore_maniglia===c.codice_colore;
+    const hex=c.colore_hex;
+    return \`<div onclick="selColoreManiglia('\${c.codice_colore}','\${c.nome_colore.replace(/'/g,"\\'")}',\${c.prezzo_maniglia||0})"
+      style="border:\${sel?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:8px 10px;cursor:pointer;background:\${sel?'var(--red-bg)':'var(--white)'}">
+      \${hex?\`<div style="width:100%;height:18px;border-radius:4px;background:#\${hex};border:0.5px solid rgba(0,0,0,0.1);margin-bottom:4px"></div>\`:''}
+      <div style="font-size:11px;font-weight:500;color:\${sel?'var(--red)':'var(--dark)'}">\${c.nome_colore}</div>
+      <div style="font-size:10px;color:var(--mid)">\${c.prezzo_maniglia>0?'€'+c.prezzo_maniglia:'Incluso'}</div>
+    </div>\`;
+  }).join('');
+  document.getElementById('cfg-body').innerHTML=\`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:500">Colore maniglia <span style="color:var(--mid);font-weight:400">— \${CFG.nome_maniglia||''}</span></div>
+      <button class="btn btn-sm" onclick="renderCfgStep('maniglia')">← Indietro</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">\${cards||'<p style="color:var(--mid);font-size:12px;grid-column:1/-1">Nessun colore disponibile</p>'}</div>\`;
+}
+
+async function selColoreManiglia(cod,nome,prezzo){
+  CFG.colore_maniglia=cod;CFG.nome_colore_maniglia=nome;CFG.p_maniglia=prezzo;
+  cfgUpdatePrice();await cfgRiepilogo();
+}
+
+async function cfgPomolino(){
+  const {data:pomolini}=await sb.from('pomolini_wc').select('*').eq('attivo',true);
+  const cards=(pomolini||[]).map(p=>{
+    const sel=CFG.pomolino===p.codice;
+    return \`<div onclick="selPomolino('\${p.codice}','\${p.nome.replace(/'/g,"\\'")}',\${p[\`prezzo_\${listino().toLowerCase()}\`]||0})"
+      style="border:\${sel?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:10px 12px;cursor:pointer;background:\${sel?'var(--red-bg)':'var(--white)'}">
+      <div style="font-size:13px;font-weight:500;color:\${sel?'var(--red)':'var(--dark)'}">\${p.nome}</div>
+    </div>\`;
+  }).join('');
+  document.getElementById('cfg-body').innerHTML=\`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:500">Pomolino WC <span style="color:var(--mid);font-weight:400;font-size:12px">— maniglia esclusa</span></div>
+      <button class="btn btn-sm" onclick="renderCfgStep('maniglia')">← Indietro</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">\${cards||'<p style="color:var(--mid);font-size:12px">Nessun pomolino configurato</p>'}</div>\`;
+}
+
+function selPomolino(cod,nome,prezzo){
+  CFG.pomolino=cod;CFG.nome_pomolino=nome;CFG.p_pomolino=prezzo;
+  cfgUpdatePrice();cfgRiepilogo();
+}
+
+// ── CONFIGURATORE ACCESSORI ───────────────────────────
+
+// Passata: layout identico a misure porte
+async function cfgAccMisure(){
+  const {data:misure} = await sb.from('misure_standard').select('*').eq('famiglia_apertura','PAS').order('larghezza_mm').order('altezza_mm');
+  const lSel = CFG.larghezza||'';
+  const aSel = CFG.altezza||'';
+
+  const larghezze = [...new Set((misure||[]).map(m=>m.larghezza_mm))];
+  const altezze   = [...new Set((misure||[]).map(m=>m.altezza_mm).filter(a=>a>0))];
+
+  const pillL = larghezze.map(l=>\`<div onclick="selPillPas('l',\${l})" id="pas-l-\${l}"
+    style="padding:6px 14px;border-radius:20px;border:\${l==lSel?'2px solid var(--red)':'0.5px solid var(--border)'};
+    cursor:pointer;font-size:13px;font-weight:\${l==lSel?'600':'400'};
+    background:\${l==lSel?'var(--red-bg)':'var(--white)'};color:\${l==lSel?'var(--red)':'var(--dark)'}">
+    \${l}
+  </div>\`).join('');
+
+  const pillA = altezze.map(a=>\`<div onclick="selPillPas('a',\${a})" id="pas-a-\${a}"
+    style="padding:6px 14px;border-radius:20px;border:\${a==aSel?'2px solid var(--red)':'0.5px solid var(--border)'};
+    cursor:pointer;font-size:13px;font-weight:\${a==aSel?'600':'400'};
+    background:\${a==aSel?'var(--red-bg)':'var(--white)'};color:\${a==aSel?'var(--red)':'var(--dark)'}">
+    \${a}
+  </div>\`).join('');
+
+  document.getElementById('cfg-body').innerHTML=\`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div style="font-size:13px;font-weight:500">Misure passata <span style="color:var(--mid);font-weight:400">— \${CFG.nome_modello}</span></div>
+      <button class="btn btn-sm" onclick="renderCfgStep('finitura')">← Indietro</button>
+    </div>
+    \${larghezze.length?\`
+    <div style="margin-bottom:16px">
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--mid);margin-bottom:8px">LARGHEZZA (MM)</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">\${pillL}</div>
+    </div>\`:''}
+    \${altezze.length?\`
+    <div style="margin-bottom:16px">
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--mid);margin-bottom:8px">ALTEZZA (MM)</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">\${pillA}</div>
+    </div>\`:''}
+    <div style="background:var(--amber-bg);border-radius:var(--radius);padding:10px 14px;font-size:12px;color:var(--amber-tx);margin-bottom:12px">
+      Misura non presente nell'elenco? Inseriscila manualmente — verrà marcata come <strong>misura custom</strong>.
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px">
+      <div>
+        <label style="font-size:11px;color:var(--mid);display:block;margin-bottom:3px">Larghezza custom (mm)</label>
+        <input type="number" id="acc-l" placeholder="es. 870" style="width:100%;padding:7px 8px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--mid);display:block;margin-bottom:3px">Altezza custom (mm)</label>
+        <input type="number" id="acc-a" placeholder="es. 2100" style="width:100%;padding:7px 8px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px">
+      </div>
+      <div></div>
+    </div>
+    <div style="display:flex;justify-content:flex-end">
+      <button class="btn btn-red" onclick="selAccMisure()">Avanti →</button>
+    </div>\`;
+}
+
+function selPillPas(dim, val){
+  if(dim==='l'){
+    CFG._pasL=val;
+    document.querySelectorAll('[id^="pas-l-"]').forEach(el=>{
+      const attivo = el.id==='pas-l-'+val;
+      el.style.border=attivo?'2px solid var(--red)':'0.5px solid var(--border)';
+      el.style.background=attivo?'var(--red-bg)':'var(--white)';
+      el.style.color=attivo?'var(--red)':'var(--dark)';
+      el.style.fontWeight=attivo?'600':'400';
+    });
+  } else {
+    CFG._pasA=val;
+    document.querySelectorAll('[id^="pas-a-"]').forEach(el=>{
+      const attivo = el.id==='pas-a-'+val;
+      el.style.border=attivo?'2px solid var(--red)':'0.5px solid var(--border)';
+      el.style.background=attivo?'var(--red-bg)':'var(--white)';
+      el.style.color=attivo?'var(--red)':'var(--dark)';
+      el.style.fontWeight=attivo?'600':'400';
+    });
+  }
+}
+
+function selAccMisuraStd(l,a){
+  CFG.larghezza=l; CFG.altezza=a; CFG.misura_custom=false;
+  cfgUpdatePrice(); renderCfgStep('acc_spessore');
+}
+
+function selAccMisure(){
+  // Priorità: input custom > pill selezionate
+  const lCustom = parseInt(document.getElementById('acc-l')?.value||0);
+  const aCustom = parseInt(document.getElementById('acc-a')?.value||0);
+  const l = lCustom || CFG._pasL || 0;
+  const a = aCustom || CFG._pasA || 0;
+  if(!l||!a){toast('Seleziona o inserisci larghezza e altezza','err');return;}
+  CFG.larghezza=l; CFG.altezza=a;
+  CFG.misura_custom = !!(lCustom||aCustom);
+  cfgUpdatePrice(); renderCfgStep('acc_spessore');
+}
+
+// Sopraluce: pill larghezza + input libero + calcolo altezza
+async function cfgAccSopraluce(){
+  const {data:misure} = await sb.from('misure_standard').select('*').eq('famiglia_apertura','SOP').order('larghezza_mm');
+  const larghezze = [...new Set((misure||[]).map(m=>m.larghezza_mm))];
+  const lSel = CFG.larghezza||'';
+
+  const pillL = larghezze.map(l=>\`<div onclick="selPillSop(\${l})" id="sop-l-\${l}"
+    style="padding:6px 14px;border-radius:20px;border:\${l==lSel?'2px solid var(--red)':'0.5px solid var(--border)'};
+    cursor:pointer;font-size:13px;font-weight:\${l==lSel?'600':'400'};
+    background:\${l==lSel?'var(--red-bg)':'var(--white)'};color:\${l==lSel?'var(--red)':'var(--dark)'}">
+    \${l}
+  </div>\`).join('');
+
+  document.getElementById('cfg-body').innerHTML=\`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div style="font-size:13px;font-weight:500">Misure sopraluce <span style="color:var(--mid);font-weight:400">— \${CFG.nome_modello}</span></div>
+      <button class="btn btn-sm" onclick="renderCfgStep('finitura')">← Indietro</button>
+    </div>
+    \${larghezze.length?\`
+    <div style="margin-bottom:16px">
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--mid);margin-bottom:8px">LARGHEZZA (MM)</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">\${pillL}</div>
+    </div>\`:''}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+      <div>
+        <label style="font-size:11px;color:var(--mid);display:block;margin-bottom:3px">Larghezza custom (mm)</label>
+        <input type="number" id="sop-l-custom" value="\${!larghezze.includes(lSel)?lSel:''}" placeholder="es. 870"
+          style="width:100%;padding:7px 8px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px"
+          oninput="selPillSop(null)">
+      </div>
+      <div></div>
+    </div>
+    <div style="background:var(--beige2);border-radius:var(--radius);padding:12px;font-size:12px;color:var(--mid);margin-bottom:12px">
+      <strong style="color:var(--dark);display:block;margin-bottom:6px">Calcolo altezza sopraluce</strong>
+      L'altezza viene calcolata sottraendo l'altezza della porta dall'altezza del foro muro.
+    </div>
+    <div style="margin-bottom:14px">
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--mid);margin-bottom:8px">TIPOLOGIA PORTA SOTTO</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        \${[['BAT','Battente'],['CS','Senza battura'],['PAS','Passata']].map(([cod,label])=>\`
+          <div onclick="selFamTelaioSop('\${cod}')" id="sop-fam-\${cod}"
+            style="padding:6px 14px;border-radius:20px;border:\${(CFG._sopFamTelaio||'BAT')===cod?'2px solid var(--red)':'0.5px solid var(--border)'};
+            cursor:pointer;font-size:13px;font-weight:\${(CFG._sopFamTelaio||'BAT')===cod?'600':'400'};
+            background:\${(CFG._sopFamTelaio||'BAT')===cod?'var(--red-bg)':'var(--white)'};
+            color:\${(CFG._sopFamTelaio||'BAT')===cod?'var(--red)':'var(--dark)'}">\${label}</div>
+        \`).join('')}
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;align-items:end;margin-bottom:8px">
+      <div>
+        <label style="font-size:11px;color:var(--mid);display:block;margin-bottom:3px">Altezza foro muro (mm)</label>
+        <input type="number" id="sop-foro" value="\${CFG._sopForo||''}" placeholder="es. 2400"
+          oninput="calcAltezzaSopraluce()"
+          style="width:100%;padding:7px 8px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--mid);display:block;margin-bottom:3px">Altezza luce porta (mm)</label>
+        <input type="number" id="sop-porta" value="\${CFG._sopPorta||''}" placeholder="es. 2100"
+          oninput="calcAltezzaSopraluce()"
+          style="width:100%;padding:7px 8px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--mid);display:block;margin-bottom:3px">Altezza sopraluce calcolata</label>
+        <div id="sop-result" style="padding:7px 8px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:15px;font-weight:600;color:var(--red);background:var(--beige2)">
+          \${CFG.altezza?CFG.altezza+' mm':'—'}
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:flex-end">
+      <button class="btn btn-red" onclick="selAccSopraluce()">Avanti →</button>
+    </div>\`;
+}
+
+function selFamTelaioSop(cod){
+  CFG._sopFamTelaio = cod;
+  ['BAT','CS','PAS'].forEach(c=>{
+    const el = document.getElementById('sop-fam-'+c);
+    if(!el) return;
+    const attivo = c===cod;
+    el.style.border = attivo?'2px solid var(--red)':'0.5px solid var(--border)';
+    el.style.background = attivo?'var(--red-bg)':'var(--white)';
+    el.style.color = attivo?'var(--red)':'var(--dark)';
+    el.style.fontWeight = attivo?'600':'400';
+  });
+  // Ricalcola spalla se c'è già uno spessore inserito
+  const spEl = document.getElementById('acc-sp-val');
+  if(spEl && spEl.value) calcolaTelaioAcc(spEl.value);
+}
+
+function selPillSop(val){
+  if(val!==null){
+    CFG._sopL=val;
+    // Deseleziona input custom
+    const inp = document.getElementById('sop-l-custom');
+    if(inp) inp.value='';
+  } else {
+    CFG._sopL=null;
+  }
+  document.querySelectorAll('[id^="sop-l-"]').forEach(el=>{
+    if(!el.id.includes('custom')){
+      const attivo = val!==null && el.id==='sop-l-'+val;
+      el.style.border=attivo?'2px solid var(--red)':'0.5px solid var(--border)';
+      el.style.background=attivo?'var(--red-bg)':'var(--white)';
+      el.style.color=attivo?'var(--red)':'var(--dark)';
+      el.style.fontWeight=attivo?'600':'400';
+    }
+  });
+}
+
+function calcAltezzaSopraluce(){
+  const foro = parseInt(document.getElementById('sop-foro')?.value||0);
+  const porta = parseInt(document.getElementById('sop-porta')?.value||0);
+  const el = document.getElementById('sop-result');
+  if(foro && porta && foro>porta+120){
+    const h = foro - porta - 120;
+    el.textContent = h+' mm';
+    el.style.color='var(--red)';
+    CFG._sopCalcH = h;
+  } else {
+    el.textContent='—';
+    el.style.color='var(--mid)';
+    CFG._sopCalcH = null;
+  }
+}
+
+function selAccSopraluce(){
+  const lCustom = parseInt(document.getElementById('sop-l-custom')?.value||0);
+  const l = lCustom || CFG._sopL || 0;
+  const foro = parseInt(document.getElementById('sop-foro')?.value||0);
+  const porta = parseInt(document.getElementById('sop-porta')?.value||0);
+  if(!l){toast('Seleziona o inserisci la larghezza','err');return;}
+  if(!foro||!porta){toast('Inserisci altezza foro e altezza porta','err');return;}
+  if(foro<=porta+120){toast('Il foro muro deve essere almeno 120mm più alto della porta','err');return;}
+  const h = foro - porta - 120;
+  if(!CFG._sopFamTelaio) CFG._sopFamTelaio='BAT';
+  CFG.larghezza=l; CFG.altezza=h;
+  CFG._sopForo=foro; CFG._sopPorta=porta;
+  CFG.misura_custom=!!lCustom;
+  cfgUpdatePrice(); renderCfgStep('acc_spessore');
+}
+
+// Spessore muro per passate e sopraluce (con regole_telaio come porte)
+async function cfgAccSpessore(){
+  const stepIndietro = CFG._tipoAccessorio==='sopraluce' ? 'acc_sopraluce' : 'acc_misure';
+  document.getElementById('cfg-body').innerHTML=\`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:500">Spessore muro <span style="color:var(--mid);font-weight:400">— \${CFG.larghezza}×\${CFG.altezza} mm</span></div>
+      <button class="btn btn-sm" onclick="renderCfgStep('\${stepIndietro}')">← Indietro</button>
+    </div>
+    <div style="margin-bottom:14px">
+      <div style="font-size:12px;font-weight:500;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.4px;color:var(--mid)">Spessore muro (mm)</div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <input type="number" id="acc-sp-val" value="\${CFG.spessore||''}" placeholder="es. 200" step="1" min="1"
+          style="width:120px;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px;font-family:inherit"
+          oninput="calcolaTelaioAcc(this.value)">
+        <span style="font-size:13px;color:var(--mid)">mm</span>
+      </div>
+    </div>
+    <div id="acc-telaio-result" style="margin-bottom:14px"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-sm" onclick="selAccSpessore(true)">Salta →</button>
+      <button class="btn btn-red btn-sm" onclick="selAccSpessore(false)">Avanti →</button>
+    </div>\`;
+  if(CFG.spessore) calcolaTelaioAcc(CFG.spessore);
+}
+
+async function calcolaTelaioAcc(spessore){
+  const sp = parseFloat(spessore);
+  if(!sp||sp<1){ document.getElementById('acc-telaio-result').innerHTML=''; return; }
+  CFG.spessore=sp;
+
+  // Per le passate usa famiglia PAS, per i sopraluce dipende dalla porta sotto (gestito dopo)
+  const fam = CFG._tipoAccessorio==='sopraluce' ? (CFG._sopFamTelaio||'BAT') : 'PAS';
+
+  const {data:regole} = await sb.from('regole_telaio')
+    .select('*').eq('famiglia_apertura', fam)
+    .lte('spessore_da_cm', sp/10).gte('spessore_a_cm', sp/10);
+
+  if(!regole||regole.length===0){
+    document.getElementById('acc-telaio-result').innerHTML=\`<div style="background:var(--amber-bg);border-radius:var(--radius);padding:10px;font-size:12px;color:var(--amber-tx)">Spessore fuori range — verrà registrato senza spalla.</div>\`;
+    return;
+  }
+  const regola = regole[0];
+  let {data:spalla}=await sb.from('telai_spalle').select('*').eq('codice',regola.codice_spalla).eq('famiglia_apertura',fam).maybeSingle();
+  if(!spalla){const {data:sf}=await sb.from('telai_spalle').select('*').eq('codice',regola.codice_spalla).limit(1).maybeSingle();spalla=sf;}
+  const prezzoSpalla = spalla?.[\`prezzo_\${listino().toLowerCase()}\`]||0;
+  CFG.spalla=regola.codice_spalla;
   CFG.p_telaio=prezzoSpalla;
   cfgUpdatePrice();
-  var _noteAcc=regola.nota?\'<div style="font-size:11px;color:var(--mid);margin-top:4px">\'+regola.nota+\'</div>\':\'\';
-  var _accHtml=\'\';
-  if(regola.tipo_accessorio&&regola.tipo_accessorio!==\'nessuno\'){
-    var _pAcc=regola[\'prezzo_access_\'+listino()]||0;
-    _accHtml=\'<div style="margin-top:8px;padding:8px 10px;background:var(--amber-bg);border-radius:var(--radius);font-size:12px;color:var(--amber-tx)">\'+
-      \'Accessorio: <strong>\'+regola.tipo_accessorio+\'</strong> \'+
-      (regola.cm_accessorio?regola.cm_accessorio+\' mm\':\'\')+
-      \' \xe2\x80\x94 \'+(_pAcc?\'\xe2\x82\xac \'+_pAcc:\'prezzo da definire\')+\'</div>\';
-  }
-  document.getElementById(\'acc-telaio-result\').innerHTML=
-    \'<div style="background:var(--beige);border-radius:var(--radius);padding:12px 14px;border:0.5px solid var(--border)">\'+
-    \'<div style="font-size:12px;font-weight:500;margin-bottom:6px;color:var(--mid);text-transform:uppercase;letter-spacing:0.4px">Telaio abbinato automaticamente</div>\'+
-    \'<div style="display:flex;justify-content:space-between;align-items:center">\'+
-    \'<div><div style="font-size:14px;font-weight:500">Spalla \'+regola.codice_spalla+\' \xe2\x80\x94 \'+(spalla?.spalla_cm||\'?\')+\' mm</div>\'+_noteAcc+\'</div>\'+
-    \'<div style="font-size:14px;font-weight:500;color:var(--red)">\'+(prezzoSpalla?\'\xe2\x82\xac \'+prezzoSpalla:\'Prezzo da definire\')+\'</div>\'+
-    \'</div>\'+_accHtml+\'</div>\';
+  document.getElementById('acc-telaio-result').innerHTML=\`
+    <div style="background:var(--beige2);border-radius:var(--radius);padding:10px;font-size:13px">
+      <span style="color:var(--mid)">Spalla:</span> <strong>\${regola.codice_spalla}</strong>
+      \${prezzoSpalla?\`<span style="margin-left:12px;color:var(--red);font-weight:500">+ € \${prezzoSpalla}</span>\`:''}
+    </div>\`;
+}
 
 function selAccSpessore(salta){
   if(!salta){
@@ -2733,92 +3239,53 @@ async function cfgAccPannello(){
   const suppTaglio = parseFloat(imp?.valore||0);
   CFG._suppTaglioPannello = suppTaglio;
 
-  const {data:magRows} = await sb.from('magazzino')
-    .select('*').eq('categoria','pannello_blindato')
-    .eq('codice_finitura', CFG.finitura||'');
-  const magPannello = magRows?.[0] || null;
-  CFG._magPannello = magPannello;
-
-  const hMag = magPannello?.altezza_mm || null;
-  const lMax = magPannello?.larghezza_mm || null;
   const sensi = ['Interno DX','Esterno DX','Interno SX','Esterno SX','Nessuno'];
   const sensoSel = CFG.senso||'';
-
-  const infoMag = magPannello ?
-    '<div style="background:var(--beige2);border-radius:var(--radius);padding:10px 14px;font-size:12px;margin-bottom:14px">'+
-    '<strong>Pannello a magazzino:</strong> '+hMag+' × '+lMax+' mm'+
-    ' — Giacenza: <strong>'+(magPannello.giacenza||0)+' pz</strong></div>' :
-    '<div style="background:var(--amber-bg);border-radius:var(--radius);padding:10px 14px;font-size:12px;margin-bottom:14px;color:var(--amber-tx)">'+
-    'Nessun pannello in magazzino per questa finitura.</div>';
+  const tipoSel = CFG._pannelloTipo||'intero';
 
   document.getElementById('cfg-body').innerHTML=\`
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-      <div style="font-size:13px;font-weight:500">Configurazione pannello <span style="color:var(--mid);font-weight:400">\xe2\x80\x94 \${CFG.nome_modello}</span></div>
-      <button class="btn btn-sm" onclick="renderCfgStep('finitura')">\xe2\x86\x90 Indietro</button>
+      <div style="font-size:13px;font-weight:500">Configurazione pannello <span style="color:var(--mid);font-weight:400">— \${CFG.nome_modello}</span></div>
+      <button class="btn btn-sm" onclick="renderCfgStep('finitura')">← Indietro</button>
     </div>
-    \${infoMag}
-    <div style="display:grid;gap:16px;max-width:480px">
+    <div style="display:grid;gap:16px;max-width:440px">
       <div>
         <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:6px">Senso apertura</label>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px" id="sensi-grid">
           \${sensi.map(s=>\`<div onclick="selSensoPannello('\${s}')" id="senso-\${s.replace(/ /g,'-')}"
-            style="padding:8px;border-radius:var(--radius);border:\${s===sensoSel?'2px solid var(--red)':'0.5px solid var(--border)'};cursor:pointer;text-align:center;font-size:12px;background:\${s===sensoSel?'var(--red-bg)':'var(--white)'};color:\${s===sensoSel?'var(--red)':'var(--dark)'}"
-            >\${s}</div>\`).join('')}
+            style="padding:8px;border-radius:var(--radius);border:\${s===sensoSel?'2px solid var(--red)':'0.5px solid var(--border)'};cursor:pointer;text-align:center;font-size:12px;background:\${s===sensoSel?'var(--red-bg)':'var(--white)'};color:\${s===sensoSel?'var(--red)':'var(--dark)'}">
+            \${s}
+          </div>\`).join('')}
         </div>
         <input type="hidden" id="pannello-senso" value="\${sensoSel}">
       </div>
       <div>
-        <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:6px">Altezza finita pannello (mm)</label>
-        <input type="number" id="pan-h-richiesta" value="\${CFG._panHRichiesta||CFG.altezza||''}"
-          placeholder="es. 2180" oninput="calcolaZoccoli(this.value)"
-          style="width:160px;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px">
-        <div id="zoccoli-result" style="margin-top:8px"></div>
-      </div>
-      <div>
-        <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:6px">Larghezza (mm) \${lMax?'(max '+lMax+' mm)':''}</label>
-        <input type="number" id="pan-l" value="\${CFG.larghezza||''}" \${lMax?'max="'+lMax+'"':''}
-          placeholder="es. 900" oninput="checkLarghezzaPannello(this.value)"
-          style="width:160px;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px">
-        <div id="larghezza-warn" style="margin-top:4px;font-size:11px;color:var(--red);display:none">
-          Larghezza superiore al pannello a magazzino (\${lMax} mm)
+        <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:6px">Tipo fornitura</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div id="tipo-intero" onclick="selTipoPannello('intero')"
+            style="padding:12px;border-radius:var(--radius);border:\${tipoSel==='intero'?'2px solid var(--red)':'0.5px solid var(--border)'};cursor:pointer;background:\${tipoSel==='intero'?'var(--red-bg)':'var(--white)'}">
+            <div style="font-size:13px;font-weight:500;color:\${tipoSel==='intero'?'var(--red)':'var(--dark)'}">Pannello intero</div>
+            <div style="font-size:11px;color:var(--mid);margin-top:2px">Misura standard</div>
+          </div>
+          <div id="tipo-taglio" onclick="selTipoPannello('taglio')"
+            style="padding:12px;border-radius:var(--radius);border:\${tipoSel==='taglio'?'2px solid var(--red)':'0.5px solid var(--border)'};cursor:pointer;background:\${tipoSel==='taglio'?'var(--red-bg)':'var(--white)'}">
+            <div style="font-size:13px;font-weight:500;color:\${tipoSel==='taglio'?'var(--red)':'var(--dark)'}">Taglio a misura</div>
+            <div style="font-size:11px;color:var(--mid);margin-top:2px">+€ \${suppTaglio.toFixed(2)}</div>
+          </div>
         </div>
       </div>
-      <button class="btn btn-red" onclick="selAccPannello()">Avanti \xe2\x86\x92</button>
+      <div id="pannello-misure-box" style="display:\${tipoSel==='taglio'?'grid':'none'};gap:10px">
+        <div>
+          <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Larghezza (mm)</label>
+          <input type="number" id="pan-l" value="\${CFG.larghezza||''}" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px">
+        </div>
+        <div>
+          <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Altezza (mm)</label>
+          <input type="number" id="pan-a" value="\${CFG.altezza||''}" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px">
+        </div>
+      </div>
+      <button class="btn btn-red" onclick="selAccPannello()">Avanti →</button>
     </div>\`;
-
-  if(CFG._panHRichiesta) calcolaZoccoli(CFG._panHRichiesta);
-}
-
-function calcolaZoccoli(hRichiestaStr){
-  const hRichiesta = parseFloat(hRichiestaStr||0);
-  const mag = CFG._magPannello;
-  const hMag = mag?.altezza_mm || null;
-  const el = document.getElementById('zoccoli-result');
-  CFG._panHRichiesta = hRichiesta||null;
-  if(!hRichiesta||!el){ if(el) el.innerHTML=''; return; }
-  if(!hMag){
-    el.innerHTML='<div style="font-size:12px;color:var(--mid)">Nessun pannello in magazzino.</div>';
-    CFG._zoccoli=0; CFG.altezza=hRichiesta; CFG._pannelloTaglio=hRichiesta; return;
-  }
-  if(hRichiesta<=hMag){
-    CFG._zoccoli=0; CFG.altezza=hRichiesta; CFG._pannelloTaglio=hRichiesta;
-    el.innerHTML='<div style="background:var(--green-bg);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--green-tx)">'+
-      'Taglio dal pannello a magazzino (H '+hMag+' mm) \xe2\x86\x92 tagliato a <strong>'+hRichiesta+' mm</strong></div>';
-  } else {
-    const nZoccoli = Math.ceil((hRichiesta - hMag) / 80);
-    const hTaglio = hRichiesta - (nZoccoli * 80);
-    CFG._zoccoli=nZoccoli; CFG.altezza=hRichiesta; CFG._pannelloTaglio=hTaglio;
-    el.innerHTML='<div style="background:var(--amber-bg);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--amber-tx)">'+
-      '<strong>'+nZoccoli+' zoccolo'+(nZoccoli>1?'li':'')+'</strong> da 80mm '+
-      '\xe2\x80\x94 pannello tagliato a <strong>'+hTaglio+' mm</strong> + '+nZoccoli+'\xc3\x9780mm = '+hRichiesta+' mm</div>';
-  }
-}
-
-function checkLarghezzaPannello(val){
-  const lMax = CFG._magPannello?.larghezza_mm;
-  const warn = document.getElementById('larghezza-warn');
-  if(warn && lMax && parseFloat(val)>lMax) warn.style.display='block';
-  else if(warn) warn.style.display='none';
 }
 
 function selSensoPannello(s){
@@ -2831,21 +3298,90 @@ function selSensoPannello(s){
   });
 }
 
-function selAccPannello(){
-  const senso = document.getElementById('pannello-senso')?.value;
-  if(!senso){toast('Seleziona il senso di apertura','err');return;}
-  const l = parseFloat(document.getElementById('pan-l')?.value||0);
-  const lMax = CFG._magPannello?.larghezza_mm;
-  if(!l){toast('Inserisci la larghezza','err');return;}
-  if(lMax && l>lMax){toast('Larghezza massima: '+lMax+' mm','err');return;}
-  if(!CFG.altezza){toast("Inserisci l'altezza finita del pannello",'err');return;}
-  CFG.senso=senso;
-  CFG.larghezza=l;
-  CFG.misura_custom=true;
-  CFG.p_extra = CFG._suppTaglioPannello||0;
-  cfgUpdatePrice(); cfgRiepilogo();
+function selTipoPannello(tipo){
+  CFG._pannelloTipo = tipo;
+  ['intero','taglio'].forEach(t=>{
+    const el = document.getElementById('tipo-'+t);
+    if(!el) return;
+    const sel = t===tipo;
+    el.style.border = sel?'2px solid var(--red)':'0.5px solid var(--border)';
+    el.style.background = sel?'var(--red-bg)':'var(--white)';
+    const title = el.querySelector('div');
+    if(title) title.style.color = sel?'var(--red)':'var(--dark)';
+  });
+  const misureBox = document.getElementById('pannello-misure-box');
+  if(misureBox) misureBox.style.display = tipo==='taglio'?'grid':'none';
 }
 
+async function selAccPannello(){
+  const senso = document.getElementById('pannello-senso')?.value;
+  const tipo = CFG._pannelloTipo||'intero';
+  if(!senso){toast('Seleziona il senso di apertura','err');return;}
+  CFG.senso=senso;
+
+  if(tipo==='taglio'){
+    const l = parseInt(document.getElementById('pan-l')?.value||0);
+    const a = parseInt(document.getElementById('pan-a')?.value||0);
+    if(!l||!a){toast('Inserisci larghezza e altezza','err');return;}
+
+    // Leggi dal magazzino le dimensioni del pannello per questo colore
+    const {data:magPannelli} = await sb.from('magazzino')
+      .select('altezza_mm,larghezza_mm,codice_finitura')
+      .eq('categoria','pannello_blindato')
+      .eq('codice_finitura', CFG.finitura)
+      .order('altezza_mm', {ascending:false});
+
+    const panMag = magPannelli?.[0];
+
+    if(panMag){
+      const hMag = panMag.altezza_mm || 0;
+      const lMax = panMag.larghezza_mm || 0;
+
+      // Blocca se larghezza supera il massimo
+      if(lMax > 0 && l > lMax){
+        toast('Larghezza massima per questo pannello: ' + lMax + ' mm', 'err');
+        return;
+      }
+
+      // Calcola zoccoli automatici
+      // Ogni zoccolo aggiunge 80mm. Il pannello viene tagliato.
+      // Altezza finita richiesta = a
+      // Se a > hMag: impossibile anche con zoccoli (pannello non abbastanza alto)
+      // Se a <= hMag: nessuno zoccolo, taglio diretto
+      // Se a > hMag: aggiungi zoccoli finché hMag + (n*80) >= a
+      // Pannello da tagliare = a - (n*80)
+      const ZOCCOLO_H = 80;
+      let zoccoli = 0;
+      let hTaglio = a;
+
+      if(hMag > 0 && a > hMag){
+        // Quanti zoccoli servono?
+        while(hMag + zoccoli * ZOCCOLO_H < a) zoccoli++;
+        hTaglio = a - zoccoli * ZOCCOLO_H;
+        if(hTaglio <= 0){
+          toast('Altezza non raggiungibile con i pannelli disponibili', 'err');
+          return;
+        }
+      }
+
+      CFG._zoccoliAuto = zoccoli;
+      CFG._hTaglioPannello = hTaglio;
+      CFG._hMagPannello = hMag;
+    } else {
+      CFG._zoccoliAuto = 0;
+      CFG._hTaglioPannello = a;
+      CFG._hMagPannello = 0;
+    }
+
+    CFG.larghezza=l; CFG.altezza=a; CFG.misura_custom=true;
+    CFG.p_extra = CFG._suppTaglioPannello||0;
+  } else {
+    CFG.larghezza=null; CFG.altezza=null; CFG.misura_custom=false;
+    CFG.p_extra=0;
+    CFG._zoccoliAuto=0; CFG._hTaglioPannello=null;
+  }
+  cfgUpdatePrice(); cfgRiepilogo();
+}
 
 async function cfgRiepilogo(){
   const tot = cfgTotale();
@@ -2894,10 +3430,9 @@ async function cfgRiepilogo(){
   document.getElementById('cfg-body').innerHTML=\`
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
       <div style="font-size:13px;font-weight:500">Riepilogo configurazione</div>
-      <button class="btn btn-sm" onclick="renderCfgStep(CFG._isAccessorio?(CFG._tipoAccessorio==='passata'||CFG._tipoAccessorio==='sopraluce'?'acc_spessore':CFG._tipoAccessorio==='semplice'||CFG._tipoAccessorio==='coprifilo'?'acc_qta':'acc_pannello'):CFG._isPannelloBlindato?'acc_pannello':'ferramenta')">← Modifica</button>
+      <button class="btn btn-sm" onclick="renderCfgStep('ferramenta')">← Modifica</button>
     </div>
     \${CFG.misura_custom?\`<div style="background:var(--red-bg);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--red-tx);margin-bottom:10px">⚠ Misura custom — questo ordine richiederà approvazione del responsabile tecnico</div>\`:''}
-        \${CFG._zoccoli>0?'<div style="background:var(--beige2);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--mid);margin-bottom:10px">'+CFG._zoccoli+' zoccolo/i da 80mm (taglio pannello a H '+CFG._pannelloTaglio+' mm)</div>':''}
     <div style="background:var(--beige);border-radius:var(--radius);padding:12px;margin-bottom:12px;font-size:12px;color:var(--mid);line-height:1.6">\${desc}</div>
     <table style="width:100%;font-size:13px;margin-bottom:12px">
       \${righe_prezzo.map(r=>\`<tr><td style="padding:3px 0;color:var(--mid)">\${r.label}</td><td style="text-align:right;font-weight:500">€ \${(r.val||0).toLocaleString('it-IT',{minimumFractionDigits:2})}</td></tr>\`).join('')}
@@ -2968,7 +3503,7 @@ async function aggiungiRigaAlDocumento(){
     const nextNum = (esistenti?.[0]?.riga_numero||0)+1;
     await sb.from(tabella).insert([{...riga,[fk]:CFG_TARGET_ID,riga_numero:nextNum}]);
     // Aggiungi righe ZOC automatiche se pannello con zoccoli
-    if((CFG._zoccoli||0)>0){
+    if((CFG._zoccoliAuto||0)>0){
       const {data:zocAcc} = await sb.from('modelli_accessori').select('*').eq('codice','ZOC').maybeSingle();
       const lst = listino().toLowerCase();
       const pZoc = zocAcc?(zocAcc['prezzo_'+lst]||0):0;
@@ -2977,10 +3512,10 @@ async function aggiungiRigaAlDocumento(){
         codice_serie:CFG.serie, nome_serie:CFG.nome_serie,
         codice_modello:'ZOC', nome_modello:'Zoccolo pannello blindato',
         codice_finitura:CFG.finitura, nome_finitura:CFG.nome_finitura,
-        quantita:CFG._zoccoli,
+        quantita:CFG._zoccoliAuto,
         prezzo_base:pZoc, prezzo_unitario:pZoc,
-        prezzo_totale_riga:pZoc*CFG._zoccoli,
-        note_riga:'Zoccolo automatico (pannello H '+(CFG._magPannello?.altezza_mm||'?')+' mm, H finita '+CFG.altezza+' mm)'
+        prezzo_totale_riga:pZoc*CFG._zoccoliAuto,
+        note_riga:'Zoccolo automatico (pannello H '+CFG._hMagPannello+' mm, H finita '+CFG.altezza+' mm)'
       }]);
     }
     // Aggiorna totale documento
@@ -2992,14 +3527,14 @@ async function aggiungiRigaAlDocumento(){
   } else {
     // Accumulo locale (documento non ancora salvato)
     CFG_RIGHE.push(riga);
-    if((CFG._zoccoli||0)>0){
+    if((CFG._zoccoliAuto||0)>0){
       CFG_RIGHE.push({
         codice_serie:CFG.serie, nome_serie:CFG.nome_serie,
         codice_modello:'ZOC', nome_modello:'Zoccolo pannello blindato',
         codice_finitura:CFG.finitura, nome_finitura:CFG.nome_finitura,
-        quantita:CFG._zoccoli,
+        quantita:CFG._zoccoliAuto,
         prezzo_base:0, prezzo_unitario:0, prezzo_totale_riga:0,
-        note_riga:'Zoccolo automatico (pannello H '+(CFG._magPannello?.altezza_mm||'?')+' mm, H finita '+CFG.altezza+' mm)'
+        note_riga:'Zoccolo automatico (pannello H '+CFG._hMagPannello+' mm, H finita '+CFG.altezza+' mm)'
       });
     }
     toast('Porta aggiunta — salva il documento per confermare','ok');
@@ -4978,8 +5513,8 @@ async function adminLavorazioni(){
   const {data:lav} = await sb.from('impostazioni').select('*').like('chiave','lav_%');
   const {data:suppTaglio} = await sb.from('impostazioni').select('valore').eq('chiave','supplemento_taglio_pannello').maybeSingle();
   const rows = (lav||[]).map(l=>\`<tr>
-    <td>\${inlineInput(l.descrizione||l.chiave,\`salvaLavorazione('\${l.chiave}','descrizione',this.value)\`,'240px','text')}</td>
-    <td>\${inlineInput(l.valore,\`salvaLavorazione('\${l.chiave}','valore',this.value)\`,'100px','number')} €</td>
+    <td>\${inlineInput(l.descrizione||l.chiave,\`adminSalva('impostazioni','\${l.id}','descrizione',this.value)\`,'240px')}</td>
+    <td>\${inlineInput(l.valore,\`adminSalva('impostazioni','\${l.id}','valore',this.value)\`,'100px','number')} €</td>
     <td><button onclick="eliminaRigaAdmin('impostazioni','\${l.id}','adminLavorazioni')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
   </tr>\`).join('');
 
@@ -5003,13 +5538,6 @@ async function adminLavorazioni(){
       <tbody>\${rows||'<tr><td colspan="3" style="text-align:center;color:var(--mid);padding:16px;font-style:italic">Nessuna lavorazione configurata</td></tr>'}</tbody>
       </table>
     \`)}\`;
-}
-
-async function salvaLavorazione(chiave, campo, valore){
-  const update = {[campo]: valore};
-  const {error} = await sb.from('impostazioni').update(update).eq('chiave', chiave);
-  if(error){toast('Errore salvataggio: '+error.message,'err');return;}
-  toast('Salvato','ok');
 }
 
 async function aggiungiLavorazione(){
