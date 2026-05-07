@@ -2898,7 +2898,7 @@ async function cfgManiglia(){
   document.getElementById('cfg-body').innerHTML=\`
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
       <div style="font-size:13px;font-weight:500">Maniglia<span style="font-size:11px;color:var(--mid);font-weight:400"> — \${isScorrevole?'Scorrevole':isLibro?'Libro':'vers. '+[...versioniAmmesse].join('/')}</span></div>
-      <button class="btn btn-sm" onclick="renderCfgStep('ferramenta')">← Indietro</button>
+      <button class="btn btn-sm" onclick="renderCfgStep(CFG._isAccessorio?(CFG._tipoAccessorio==='passata'?'acc_spessore':CFG._tipoAccessorio==='sopraluce'?'acc_spessore':CFG._tipoAccessorio==='semplice'||CFG._tipoAccessorio==='coprifilo'?'acc_qta':'acc_pannello'):CFG._isPannelloBlindato?'acc_pannello':'ferramenta')">← Modifica</button>
     </div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">\${rowsMan||'<p style="color:var(--mid);font-size:12px;grid-column:1/-1">Nessuna maniglia disponibile</p>'}</div>\`;
 }
@@ -3243,7 +3243,7 @@ async function calcolaTelaioAcc(spessore){
     return;
   }
   const regola = regole[0];
-  const {data:spalla} = await sb.from('telai_spalle').select('*').eq('codice',regola.codice_spalla).eq('famiglia_apertura',fam).maybeSingle();
+  const {data:spalla} = await sb.from('telai_spalle').select('*').eq('codice',regola.codice_spalla).maybeSingle();
   const prezzoSpalla = spalla?.[\`prezzo_\${listino().toLowerCase()}\`]||0;
   CFG.spalla=regola.codice_spalla;
   CFG.p_telaio=prezzoSpalla;
