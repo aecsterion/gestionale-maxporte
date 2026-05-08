@@ -3682,6 +3682,7 @@ async function apriModificaPreventivo(id){
   document.getElementById('ndoc-cap').value=prev.cap_destinazione||'';
   document.getElementById('ndoc-cit').value=prev.citta_destinazione||'';
   document.getElementById('ndoc-prv').value=prev.provincia_destinazione||'';
+  var rifDestEl=document.getElementById('ndoc-rif-dest');if(rifDestEl)rifDestEl.value=prev.riferimenti_destinazione||'';
   var no=document.getElementById('ndoc-note');if(no)no.value=prev.note||'';
   const {data:righe}=await sb.from('righe_preventivo').select('*').eq('preventivo_id',id).order('riga_numero',{ascending:true});
   CFG_RIGHE=(righe||[]).map(function(r){return Object.assign({},r);});
@@ -3845,6 +3846,7 @@ async function salvaNuovoDoc(){
       listino, sconto1:sc1, sconto2:sc2,
       indirizzo_destinazione:ind, cap_destinazione:cap,
       citta_destinazione:cit, provincia_destinazione:prv,
+      riferimenti_destinazione:document.getElementById('ndoc-rif-dest')?.value?.trim()||null,
       trasporto,
       resa: document.getElementById('ndoc-resa')?.value || 'Franco fabbrica',
       riferimento_cliente: document.getElementById('ndoc-rif-cliente')?.value?.trim() || null,
@@ -6078,6 +6080,10 @@ async function esportaPDF(tipo, id) {
         <div class="form-field"><label>CAP</label><input type="text" id="ndoc-cap" maxlength="5"></div>
         <div class="form-field"><label>Città</label><input type="text" id="ndoc-cit"></div>
         <div class="form-field"><label>Prov.</label><input type="text" id="ndoc-prv" maxlength="2" style="text-transform:uppercase"></div>
+      </div>
+      <div class="form-field" style="margin-bottom:10px">
+        <label>Riferimenti destinazione</label>
+        <input type="text" id="ndoc-rif-dest" placeholder="Es. Referente: Mario Rossi">
       </div>
       <!-- Note -->
       <div class="form-field" style="margin-bottom:16px">
