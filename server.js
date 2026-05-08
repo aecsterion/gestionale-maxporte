@@ -1220,9 +1220,11 @@ async function buildPreventivoPayload(id){
   var doc=r1.data;if(!doc)return null;
   var r2=await sb.from('righe_preventivo').select('*').eq('preventivo_id',id).order('riga_numero',{ascending:true});
   var righe=r2.data||[];var an=doc.anagrafiche||{};var ag=doc.agenti||{};var sc1=doc.sconto1||0;
-  return {documento:{tipo:'PREVENTIVO',numero:doc.numero||'',data:(doc.data_documento||'').slice(0,10),
+  return {documento:{tipo:'PREVENTIVO',numero:doc.numero||'',
+    data:(doc.data_documento||doc.created_at||'').slice(0,10),
     data_modifica:(doc.updated_at||'').slice(0,10),
-    compilatore:doc.compilato_da||'',compilato_da:doc.compilato_da||'',
+    compilatore:doc.nome_compilatore||doc.compilato_da||'',
+    compilato_da:doc.nome_compilatore||doc.compilato_da||'',
     validita_giorni:doc.validita_giorni||30,riferimento_cliente:doc.riferimento_cliente||'',
     condizioni_pagamento:doc.condizioni_pagamento||an.condizioni_pagamento||'',
     trasporto:doc.trasporto||'',
@@ -1242,7 +1244,8 @@ async function buildPreventivoPayload(id){
     dest_nome:doc.indirizzo_destinazione?an.ragione_sociale:'',
     dest_indirizzo:doc.indirizzo_destinazione||'',dest_cap:doc.cap_destinazione||'',
     dest_citta:doc.citta_destinazione||'',dest_provincia:doc.provincia_destinazione||'',
-    dest_paese:doc.paese_destinazione||''},
+    dest_paese:doc.paese_destinazione||'',
+    dest_riferimenti:doc.riferimenti_destinazione||doc.referente_destinazione||''},
   cliente:{ragione_sociale:an.ragione_sociale||'',indirizzo:an.indirizzo||'',
     cap:an.cap||'',citta:an.citta||'',provincia:an.provincia||'',paese:an.paese||'Italia',
     partita_iva:an.partita_iva||'',codice_fiscale:an.codice_fiscale||'',
