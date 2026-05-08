@@ -1221,9 +1221,11 @@ async function buildPreventivoPayload(id){
   var r2=await sb.from('righe_preventivo').select('*').eq('preventivo_id',id).order('riga_numero',{ascending:true});
   var righe=r2.data||[];var an=doc.anagrafiche||{};var ag=doc.agenti||{};var sc1=doc.sconto1||0;
   return {documento:{tipo:'PREVENTIVO',numero:doc.numero||'',data:(doc.data_documento||'').slice(0,10),
-    data_modifica:(doc.updated_at||'').slice(0,10),compilato_da:doc.compilato_da||'',
+    data_modifica:(doc.updated_at||'').slice(0,10),
+    compilatore:doc.compilato_da||'',compilato_da:doc.compilato_da||'',
     validita_giorni:doc.validita_giorni||30,riferimento_cliente:doc.riferimento_cliente||'',
-    condizioni_pagamento:doc.condizioni_pagamento||'',trasporto:doc.trasporto||'',
+    condizioni_pagamento:doc.condizioni_pagamento||an.condizioni_pagamento||'',
+    trasporto:doc.trasporto||'',
     resa:doc.resa||'Franco fabbrica',note:doc.note||'',
     sconto1:sc1,totale_imponibile:doc.totale_imponibile||0,totale_netto:doc.totale_netto||0,
     ragione_sociale:an.ragione_sociale||'',indirizzo:an.indirizzo||'',
@@ -1231,6 +1233,8 @@ async function buildPreventivoPayload(id){
     partita_iva:an.partita_iva||'',codice_fiscale:an.codice_fiscale||'',
     telefono:an.telefono_principale||an.telefono||'',cellulare:an.cellulare_principale||'',
     email1:an.email_principale||an.email||'',email_ordini:an.email_ordini||'',
+    sdi:an.codice_sdi||'',pec:an.pec_fatturazione||an.pec||'',
+    pec_fatturazione:an.pec_fatturazione||'',
     banca:an.banca||'',cin:an.cin||'',abi:an.abi||'',cab:an.cab||'',
     referente:an.referente||'',
     codice_cliente:an.codice||'',
