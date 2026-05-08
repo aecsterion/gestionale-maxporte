@@ -3173,7 +3173,7 @@ async function calcolaTelaioAcc(spessore){
 
   const {data:regole} = await sb.from('regole_telaio')
     .select('*').eq('famiglia_apertura', fam)
-    .lte('spessore_da_cm', sp/10).gte('spessore_a_cm', sp/10);
+    .lte('spessore_da_cm', sp).gte('spessore_a_cm', sp);
 
   if(!regole||regole.length===0){
     document.getElementById('acc-telaio-result').innerHTML=\`<div style="background:var(--amber-bg);border-radius:var(--radius);padding:10px;font-size:12px;color:var(--amber-tx)">Spessore fuori range — verrà registrato senza spalla.</div>\`;
