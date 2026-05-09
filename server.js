@@ -666,43 +666,66 @@ tr.data-row:hover td{background:var(--beige);cursor:pointer}
 
 <!-- MODAL MAGAZZINO -->
 <div id="modal-magazzino" class="form-modal-overlay">
-  <div class="form-modal" style="max-width:600px">
+  <div class="form-modal" style="max-width:680px">
     <div class="form-modal-head"><span class="form-modal-title" id="mag-title">Articolo</span>
-      <button class="form-close" onclick="closeForm(\'modal-magazzino\')">&times;</button></div>
-    <div class="form-modal-body">
-      <div class="form-field"><label>Descrizione *</label><input id="mag-descrizione" type="text"></div>
+      <button class="form-close" onclick="closeForm('modal-magazzino')">&times;</button></div>
+    <div class="form-modal-body" style="max-height:70vh;overflow-y:auto">
+      <div class="form-field"><label>Descrizione *</label><input id="mag-descrizione" type="text" oninput="aggiornaCodiceMP()"></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-        <div class="form-field"><label>Codice MP</label><input id="mag-codice_mp" type="text"></div>
-        <div class="form-field"><label>Codice fornitore</label><input id="mag-codice" type="text"></div></div>
+        <div class="form-field"><label>Codice MP <span style="font-size:10px;color:var(--mid)">(auto)</span></label>
+          <div style="display:flex;gap:6px"><input id="mag-codice_mp" type="text" style="flex:1">
+          <button class="btn btn-sm" onclick="aggiornaCodiceMP(true)" title="Rigenera">&#8635;</button></div></div>
+        <div class="form-field"><label>Categoria</label><select id="mag-categoria" onchange="aggiornaCodiceMP()"><option value="">&#8212;</option></select></div>
+      </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-        <div class="form-field"><label>Categoria</label><select id="mag-categoria">
-          <option value="">&#8212;</option><option value="pannello_blindato">Pannello blindato</option>
-          <option value="accessorio">Accessorio</option><option value="componente">Componente</option>
-          <option value="consumabile">Consumabile</option></select></div>
+        <div class="form-field"><label>Finitura</label><select id="mag-codice_finitura" onchange="aggiornaFinMag(this);aggiornaCodiceMP()"><option value="">&#8212; Nessuna &#8212;</option></select></div>
         <div class="form-field"><label>Unit&#224;</label><select id="mag-unita">
           <option value="pz">pz</option><option value="m">m</option>
-          <option value="m2">m&#178;</option><option value="kg">kg</option></select></div></div>
+          <option value="m2">m&#178;</option><option value="kg">kg</option></select></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+        <div class="form-field"><label>Altezza (mm)</label><input id="mag-altezza_mm" type="number" oninput="aggiornaCodiceMP()"></div>
+        <div class="form-field"><label>Larghezza (mm)</label><input id="mag-larghezza_mm" type="number" oninput="aggiornaCodiceMP()"></div>
+        <div class="form-field"><label>Spessore (mm)</label><input id="mag-spessore_mm" type="number" oninput="aggiornaCodiceMP()"></div>
+      </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-        <div class="form-field"><label>Finitura</label><select id="mag-codice_finitura" onchange="aggiornaFinMag(this)"><option value="">&#8212; Nessuna &#8212;</option></select></div>
-        <div class="form-field"><label>Nome finitura</label><input id="mag-nome_finitura" type="text" readonly style="background:var(--beige);color:var(--mid)"></div></div>
+        <div class="form-field"><label>Pz per confezione/bancale</label><input id="mag-pz_per_confezione" type="number" min="1" value="1"></div>
+        <div class="form-field"><label>Unit&#224; di ordine</label><select id="mag-unita_ordine">
+          <option value="pz">Pezzi singoli</option>
+          <option value="confezione">Confezioni/bancali</option></select></div>
+      </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
-        <div class="form-field"><label>Altezza (mm)</label><input id="mag-altezza_mm" type="number"></div>
-        <div class="form-field"><label>Larghezza (mm)</label><input id="mag-larghezza_mm" type="number"></div>
-        <div class="form-field"><label>Spessore (mm)</label><input id="mag-spessore_mm" type="number"></div></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
-        <div class="form-field"><label>Giacenza</label><input id="mag-giacenza" type="number" value="0"></div>
+        <div class="form-field"><label>Giacenza</label><input id="mag-giacenza" type="number" value="0" readonly style="background:var(--beige);color:var(--mid)" title="Modifica tramite movimenti"></div>
         <div class="form-field"><label>Scorta min.</label><input id="mag-scorta_minima" type="number" value="0"></div>
-        <div class="form-field"><label>In ordine</label><input id="mag-quantita_in_ordine" type="number" value="0"></div></div>
+        <div class="form-field"><label>Scorta target</label><input id="mag-scorta_target" type="number" value="0"></div>
+      </div>
       <div class="form-field"><label>Ubicazione</label><input id="mag-ubicazione" type="text"></div>
+      <div id="mag-fornitori-section" style="display:none">
+        <div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.4px;color:var(--mid);margin:14px 0 8px">Fornitori</div>
+        <div id="mag-fornitori-list" style="margin-bottom:8px"></div>
+        <button class="btn btn-sm" onclick="apriAggiuntaFornitore()">+ Aggiungi fornitore</button>
+      </div>
+      <div id="mag-movimenti-section" style="display:none">
+        <div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.4px;color:var(--mid);margin:14px 0 8px">Movimenti di magazzino</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
+          <select id="mov-tipo" style="padding:6px 8px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px">
+            <option value="carico">Carico</option>
+            <option value="scarico">Scarico</option>
+            <option value="rettifica">Rettifica giacenza</option>
+          </select>
+          <input type="number" id="mov-quantita" placeholder="Quantit&#224;" style="padding:6px 8px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px">
+          <input type="text" id="mov-causale" placeholder="Causale" style="padding:6px 8px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px">
+        </div>
+        <button class="btn btn-sm btn-red" onclick="registraMovimento()">Registra</button>
+        <div id="mag-movimenti-list" style="margin-top:10px;font-size:12px"></div>
+      </div>
     </div>
     <div class="form-modal-foot">
-      <button class="btn" onclick="closeForm(\'modal-magazzino\')">Annulla</button>
+      <button class="btn" onclick="closeForm('modal-magazzino')">Chiudi</button>
       <button class="btn" style="color:var(--red);display:none" onclick="eliminaArticoloMag()" id="mag-btn-elimina">Elimina</button>
       <button class="btn btn-red" onclick="salvaMagazzino()">Salva</button></div>
   </div>
-</div>
-
-<!-- FORM ORDINE -->
+</div><!-- FORM ORDINE -->
 <div class="form-overlay" id="form-ordine" style="justify-content:center;align-items:flex-start;padding:20px">
   <div class="form-modal" style="width:min(680px,100%);max-height:92vh;display:flex;flex-direction:column">
     <div class="form-modal-head">
@@ -1472,20 +1495,22 @@ async function renderFatture(){
 
 // ── MAGAZZINO ─────────────────────────────────────────
 async function renderMagazzino(){
+  const {data:cats}=await sb.from('categorie_magazzino').select('*').order('nome');
   const {data}=await sb.from('magazzino').select('*').order('categoria').order('descrizione');
   const items=data||[];
   const sottoscorta=items.filter(function(m){return Number(m.giacenza||0)<=Number(m.scorta_minima||0);}).length;
   const pannelli=items.filter(function(m){return m.categoria==='pannello_blindato';}).length;
   const rows=items.map(function(m){
     const s=Number(m.giacenza||0)<=Number(m.scorta_minima||0);
-    const d=(m.altezza_mm||m.larghezza_mm)?(m.altezza_mm||'?')+'×'+(m.larghezza_mm||'?')+' mm':'—';
+    const dim=(m.altezza_mm||m.larghezza_mm)?(m.altezza_mm||'?')+'\xc3\x97'+(m.larghezza_mm||'?')+' mm':'\xe2\x80\x94';
+    const catNome=(cats||[]).find(function(c){return c.codice===m.categoria;})?.nome||m.categoria||'\xe2\x80\x94';
     return '<tr class="data-row" onclick="apriDettaglioMagazzino(this.dataset.id)" data-id="'+m.id+'" style="cursor:pointer">'+
-      '<td><strong>'+(m.codice_mp||m.codice||'—')+'</strong></td>'+
-      '<td>'+(m.descrizione||'—')+'</td>'+
-      '<td>'+(m.categoria?'<span class="tag">'+m.categoria+'</span>':'—')+'</td>'+
-      '<td>'+(m.codice_finitura?'<span class="tag">'+m.codice_finitura+'</span>':'—')+'</td>'+
-      '<td>'+d+'</td><td>'+(m.giacenza||0)+' '+(m.unita||'pz')+'</td>'+
-      '<td>'+(m.scorta_minima||0)+'</td><td>'+(m.quantita_in_ordine||0)+'</td>'+
+      '<td><strong>'+(m.codice_mp||'\xe2\x80\x94')+'</strong></td>'+
+      '<td>'+(m.descrizione||'\xe2\x80\x94')+'</td>'+
+      '<td>'+(catNome?'<span class="tag">'+catNome+'</span>':'\xe2\x80\x94')+'</td>'+
+      '<td>'+(m.codice_finitura?'<span class="tag">'+m.codice_finitura+'</span>':'\xe2\x80\x94')+'</td>'+
+      '<td>'+dim+'</td><td>'+(m.giacenza||0)+' '+(m.unita||'pz')+'</td>'+
+      '<td>'+(m.scorta_minima||0)+'</td>'+
       '<td>'+(s?'<span class="badge br">Sotto scorta</span>':'<span class="badge bg">OK</span>')+'</td></tr>';
   }).join('');
   document.getElementById('main-content').innerHTML=
@@ -1496,26 +1521,48 @@ async function renderMagazzino(){
     '</div><div class="card"><div class="card-header"><span class="card-title">Magazzino</span>'+
     '<button class="btn btn-red btn-sm" onclick="apriNuovoArticoloMag()">+ Nuovo articolo</button></div>'+
     '<table><thead><tr><th>Codice MP</th><th>Descrizione</th><th>Categoria</th><th>Finitura</th>'+
-    '<th>Dim.</th><th>Giacenza</th><th>Scorta min.</th><th>In ordine</th><th>Stato</th></tr></thead>'+
-    '<tbody>'+(rows||'<tr><td colspan="9" style="text-align:center;color:var(--mid);padding:24px">Nessun articolo</td></tr>')+
+    '<th>Dim.</th><th>Giacenza</th><th>Scorta min.</th><th>Stato</th></tr></thead>'+
+    '<tbody>'+(rows||'<tr><td colspan="8" style="text-align:center;color:var(--mid);padding:24px">Nessun articolo</td></tr>')+
     '</tbody></table></div>';
 }
+
 async function apriDettaglioMagazzino(id){
   const {data:m}=await sb.from('magazzino').select('*').eq('id',id).single();
   if(!m){toast('Non trovato','err');return;}
-  _magEditId=id;popolaFormMag(m);
+  _magEditId=id;
+  await popolaFormMag(m);
+  // Carica fornitori e movimenti
+  const fSec=document.getElementById('mag-fornitori-section');
+  const mSec=document.getElementById('mag-movimenti-section');
+  if(fSec) fSec.style.display='block';
+  if(mSec) mSec.style.display='block';
+  await caricaFornitori(id);
+  await caricaMovimenti(id);
   const mo=ensureModalInBody('modal-magazzino');if(mo)mo.classList.add('open');
 }
+
 function apriNuovoArticoloMag(){
-  _magEditId=null;popolaFormMag({});
+  _magEditId=null;
+  popolaFormMag({});
+  const fSec=document.getElementById('mag-fornitori-section');
+  const mSec=document.getElementById('mag-movimenti-section');
+  if(fSec) fSec.style.display='none';
+  if(mSec) mSec.style.display='none';
   const mo=ensureModalInBody('modal-magazzino');if(mo)mo.classList.add('open');
 }
+
 async function popolaFormMag(m){
   document.getElementById('mag-title').textContent=_magEditId?'Modifica':'Nuovo articolo';
-  // Carica finiture dal DB
+  // Carica categorie
+  const {data:cats}=await sb.from('categorie_magazzino').select('*').order('nome');
+  const catSel=document.getElementById('mag-categoria');
+  if(catSel){
+    catSel.innerHTML='<option value="">&#8212;</option>'+
+      (cats||[]).map(function(c){return '<option value="'+c.codice+'"'+(m.categoria===c.codice?' selected':'')+'>'+c.nome+'</option>';}).join('');
+  }
+  // Carica finiture
   const {data:fins}=await sb.from('finiture').select('codice_finitura,nome_finitura').order('nome_finitura');
-  const finsUnique=[];
-  const finsSet=new Set();
+  const finsUnique=[];const finsSet=new Set();
   (fins||[]).forEach(function(f){if(!finsSet.has(f.codice_finitura)){finsSet.add(f.codice_finitura);finsUnique.push(f);}});
   const finSel=document.getElementById('mag-codice_finitura');
   if(finSel){
@@ -1523,25 +1570,41 @@ async function popolaFormMag(m){
       finsUnique.map(function(f){return '<option value="'+f.codice_finitura+'" data-nome="'+f.nome_finitura+'"'+(m.codice_finitura===f.codice_finitura?' selected':'')+'>'+f.codice_finitura+' - '+f.nome_finitura+'</option>';}).join('');
     aggiornaFinMag(finSel);
   }
-  const ff={'mag-codice_mp':m.codice_mp||'','mag-codice':m.codice||'','mag-descrizione':m.descrizione||'',
-    'mag-categoria':m.categoria||'','mag-codice_finitura':m.codice_finitura||'','mag-nome_finitura':m.nome_finitura||'',
+  const ff={'mag-codice_mp':m.codice_mp||'','mag-descrizione':m.descrizione||'',
     'mag-altezza_mm':m.altezza_mm||'','mag-larghezza_mm':m.larghezza_mm||'','mag-spessore_mm':m.spessore_mm||'',
-    'mag-giacenza':m.giacenza||0,'mag-scorta_minima':m.scorta_minima||0,'mag-quantita_in_ordine':m.quantita_in_ordine||0,
-    'mag-unita':m.unita||'pz','mag-ubicazione':m.ubicazione||''};
+    'mag-giacenza':m.giacenza||0,'mag-scorta_minima':m.scorta_minima||0,'mag-scorta_target':m.scorta_target||0,
+    'mag-pz_per_confezione':m.pz_per_confezione||1,'mag-unita':m.unita||'pz',
+    'mag-unita_ordine':m.unita_ordine||'pz','mag-ubicazione':m.ubicazione||''};
   Object.entries(ff).forEach(function(kv){const el=document.getElementById(kv[0]);if(el)el.value=kv[1];});
   const btn=document.getElementById('mag-btn-elimina');if(btn)btn.style.display=_magEditId?'':'none';
+  if(!m.codice_mp) aggiornaCodiceMP(false);
 }
-var _magEditId=null;
+
 function aggiornaFinMag(sel){
   const opt=sel.options[sel.selectedIndex];
   const nomeEl=document.getElementById('mag-nome_finitura');
-  if(!nomeEl) return;
-  nomeEl.value=(opt&&opt.value)?opt.getAttribute('data-nome')||'':'';
+  if(nomeEl) nomeEl.value=(opt&&opt.value)?opt.getAttribute('data-nome')||'':'';
 }
 
+function aggiornaCodiceMP(force){
+  const mp=document.getElementById('mag-codice_mp');
+  if(!mp) return;
+  if(mp.value&&!force) return; // non sovrascrivere se già compilato
+  const catSel=document.getElementById('mag-categoria');
+  const cat=(catSel&&catSel.value)?catSel.value.toUpperCase().replace('_','-').slice(0,6):'';
+  const h=document.getElementById('mag-altezza_mm')?.value||'';
+  const l=document.getElementById('mag-larghezza_mm')?.value||'';
+  const s=document.getElementById('mag-spessore_mm')?.value||'';
+  const fin=document.getElementById('mag-codice_finitura')?.value||'';
+  const parts=[cat,h,l,s,fin].filter(Boolean);
+  if(parts.length>1) mp.value=parts.join('-');
+}
+
+var _magEditId=null;
+
 async function salvaMagazzino(){
-  const d={codice_mp:document.getElementById('mag-codice_mp')?.value?.trim()||null,
-    codice:document.getElementById('mag-codice')?.value?.trim()||null,
+  const d={
+    codice_mp:document.getElementById('mag-codice_mp')?.value?.trim()||null,
     descrizione:document.getElementById('mag-descrizione')?.value?.trim()||null,
     categoria:document.getElementById('mag-categoria')?.value?.trim()||null,
     codice_finitura:document.getElementById('mag-codice_finitura')?.value?.trim()||null,
@@ -1549,25 +1612,131 @@ async function salvaMagazzino(){
     altezza_mm:parseFloat(document.getElementById('mag-altezza_mm')?.value)||null,
     larghezza_mm:parseFloat(document.getElementById('mag-larghezza_mm')?.value)||null,
     spessore_mm:parseFloat(document.getElementById('mag-spessore_mm')?.value)||null,
-    giacenza:parseFloat(document.getElementById('mag-giacenza')?.value)||0,
+    pz_per_confezione:parseFloat(document.getElementById('mag-pz_per_confezione')?.value)||1,
+    unita_ordine:document.getElementById('mag-unita_ordine')?.value||'pz',
     scorta_minima:parseFloat(document.getElementById('mag-scorta_minima')?.value)||0,
-    quantita_in_ordine:parseFloat(document.getElementById('mag-quantita_in_ordine')?.value)||0,
+    scorta_target:parseFloat(document.getElementById('mag-scorta_target')?.value)||0,
     unita:document.getElementById('mag-unita')?.value||'pz',
     ubicazione:document.getElementById('mag-ubicazione')?.value?.trim()||null,
-    updated_at:new Date().toISOString()};
+    updated_at:new Date().toISOString()
+  };
   if(!d.descrizione){toast('Inserisci descrizione','err');return;}
   let er;
   if(_magEditId){const r=await sb.from('magazzino').update(d).eq('id',_magEditId);er=r.error;}
   else{const r=await sb.from('magazzino').insert([d]);er=r.error;}
   if(er){toast('Errore: '+er.message,'err');return;}
   toast(_magEditId?'Aggiornato':'Aggiunto','ok');
-  closeForm('modal-magazzino');renderMagazzino();
+  if(!_magEditId) closeForm('modal-magazzino');
+  renderMagazzino();
 }
+
 async function eliminaArticoloMag(){
-  if(!_magEditId||!confirm('Eliminare?'))return;
+  if(!_magEditId||!confirm('Eliminare questo articolo e tutti i suoi movimenti?'))return;
   const r=await sb.from('magazzino').delete().eq('id',_magEditId);
   if(r.error){toast('Errore: '+r.error.message,'err');return;}
   toast('Eliminato','ok');closeForm('modal-magazzino');renderMagazzino();
+}
+
+async function caricaFornitori(magId){
+  const {data}=await sb.from('magazzino_fornitori').select('*,anagrafiche(ragione_sociale)').eq('magazzino_id',magId);
+  const el=document.getElementById('mag-fornitori-list');
+  if(!el) return;
+  if(!data||!data.length){el.innerHTML='<div style="font-size:12px;color:var(--mid)">Nessun fornitore associato.</div>';return;}
+  el.innerHTML=data.map(function(f){
+    return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:0.5px solid var(--border);font-size:12px">'+
+      '<span style="flex:1"><strong>'+(f.anagrafiche?.ragione_sociale||'?')+'</strong>'+
+      (f.codice_fornitore?' <span style="color:var(--mid)">'+f.codice_fornitore+'</span>':'')+
+      (f.prezzo_acquisto?' &#8212; &#8364;'+f.prezzo_acquisto:'')+
+      (f.lead_time_giorni?' &#8212; '+f.lead_time_giorni+'gg':'')+
+      (f.preferito?' <span class="badge bg">preferito</span>':'')+
+      '</span>'+
+      '<button class="btn btn-sm" onclick="eliminaFornitore(''+f.id+'')">&#215;</button></div>';
+  }).join('');
+}
+
+async function apriAggiuntaFornitore(){
+  const {data:fornitori}=await sb.from('anagrafiche').select('id,ragione_sociale').eq('tipo','fornitore').order('ragione_sociale');
+  const opts=(fornitori||[]).map(function(a){return '<option value="'+a.id+'">'+a.ragione_sociale+'</option>';}).join('');
+  const html='<div style="background:var(--beige);border-radius:var(--radius);padding:12px;margin-top:8px">'+
+    '<div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px">'+
+    '<select id="forn-ana" style="padding:6px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:12px"><option value="">Seleziona fornitore...</option>'+opts+'</select>'+
+    '<input id="forn-cod" type="text" placeholder="Cod. articolo forn." style="padding:6px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:12px">'+
+    '<input id="forn-prez" type="number" placeholder="Prezzo acquisto" step="0.01" style="padding:6px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:12px">'+
+    '<input id="forn-lead" type="number" placeholder="Lead time gg" style="padding:6px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:12px">'+
+    '</div>'+
+    '<div style="display:flex;gap:8px;align-items:center">'+
+    '<label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" id="forn-pref"> Fornitore preferito</label>'+
+    '<button class="btn btn-sm btn-red" onclick="salvaFornitore()">Salva fornitore</button>'+
+    '<button class="btn btn-sm" onclick="this.parentElement.parentElement.remove()">Annulla</button>'+
+    '</div></div>';
+  const btn=document.querySelector('#mag-fornitori-section button');
+  if(btn) btn.insertAdjacentHTML('afterend',html);
+}
+
+async function salvaFornitore(){
+  const anaId=document.getElementById('forn-ana')?.value;
+  if(!anaId||!_magEditId){toast('Seleziona fornitore','err');return;}
+  const d={magazzino_id:_magEditId,anagrafica_id:anaId,
+    codice_fornitore:document.getElementById('forn-cod')?.value?.trim()||null,
+    prezzo_acquisto:parseFloat(document.getElementById('forn-prez')?.value)||0,
+    lead_time_giorni:parseInt(document.getElementById('forn-lead')?.value)||0,
+    preferito:document.getElementById('forn-pref')?.checked||false};
+  if(d.preferito) await sb.from('magazzino_fornitori').update({preferito:false}).eq('magazzino_id',_magEditId);
+  const {error}=await sb.from('magazzino_fornitori').insert([d]);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Fornitore aggiunto','ok');
+  caricaFornitori(_magEditId);
+}
+
+async function eliminaFornitore(id){
+  if(!confirm('Rimuovere questo fornitore?'))return;
+  await sb.from('magazzino_fornitori').delete().eq('id',id);
+  caricaFornitori(_magEditId);
+}
+
+async function caricaMovimenti(magId){
+  const {data}=await sb.from('magazzino_movimenti').select('*').eq('magazzino_id',magId).order('created_at',{ascending:false}).limit(10);
+  const el=document.getElementById('mag-movimenti-list');
+  if(!el) return;
+  if(!data||!data.length){el.innerHTML='<div style="color:var(--mid)">Nessun movimento.</div>';return;}
+  el.innerHTML='<table style="width:100%;font-size:12px"><thead><tr>'+
+    '<th>Data</th><th>Tipo</th><th>Q.tà</th><th>Causale</th></tr></thead><tbody>'+
+    data.map(function(m){
+      const col=m.tipo==='carico'?'var(--green-tx)':m.tipo==='scarico'?'var(--red)':'var(--mid)';
+      return '<tr><td>'+(m.created_at||'').slice(0,10)+'</td>'+
+        '<td style="color:'+col+';font-weight:500">'+m.tipo+'</td>'+
+        '<td>'+(m.tipo==='scarico'?'-':'+')+''+m.quantita+'</td>'+
+        '<td>'+(m.causale||'&#8212;')+'</td></tr>';
+    }).join('')+'</tbody></table>';
+}
+
+async function registraMovimento(){
+  if(!_magEditId){toast('Salva prima l'articolo','err');return;}
+  const tipo=document.getElementById('mov-tipo')?.value;
+  const qty=parseFloat(document.getElementById('mov-quantita')?.value||0);
+  const causale=document.getElementById('mov-causale')?.value?.trim()||null;
+  if(!qty||qty<=0){toast('Inserisci una quantità','err');return;}
+  // Calcola nuova giacenza
+  const {data:art}=await sb.from('magazzino').select('giacenza,scorta_minima,scorta_target').eq('id',_magEditId).single();
+  let giacenza=parseFloat(art?.giacenza||0);
+  if(tipo==='carico') giacenza+=qty;
+  else if(tipo==='scarico') giacenza=Math.max(0,giacenza-qty);
+  else giacenza=qty; // rettifica
+  // Salva movimento
+  await sb.from('magazzino_movimenti').insert([{magazzino_id:_magEditId,tipo,quantita:qty,causale}]);
+  // Aggiorna giacenza
+  await sb.from('magazzino').update({giacenza,updated_at:new Date().toISOString()}).eq('id',_magEditId);
+  // Aggiorna UI
+  const gEl=document.getElementById('mag-giacenza');if(gEl)gEl.value=giacenza;
+  document.getElementById('mov-quantita').value='';
+  document.getElementById('mov-causale').value='';
+  toast('Movimento registrato','ok');
+  caricaMovimenti(_magEditId);
+  renderMagazzino();
+  // Controlla sottoscorta
+  if(tipo==='scarico'&&giacenza<=parseFloat(art?.scorta_minima||0)){
+    toast('Attenzione: articolo sotto scorta!','err');
+  }
 }
 
 
