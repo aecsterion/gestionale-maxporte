@@ -1646,11 +1646,11 @@ async function caricaFornitori(magId){
     return \'<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:0.5px solid var(--border);font-size:12px">\'+
       \'<span style="flex:1"><strong>\'+(f.anagrafiche?.ragione_sociale||\'?\')+\'</strong>\'+
       (f.codice_fornitore?\' <span style="color:var(--mid)">\'+f.codice_fornitore+\'</span>\':\'\')+
-      (f.prezzo_acquisto?\' &#8212; &#8364;\'+f.prezzo_acquisto:\'\')+
-      (f.lead_time_giorni?\' &#8212; \'+f.lead_time_giorni+\'gg\':\'\')+
+      (f.prezzo_acquisto?\' \xe2\x80\x94 \xe2\x82\xac\'+f.prezzo_acquisto:\'\')+
+      (f.lead_time_giorni?\' \xe2\x80\x94 \'+f.lead_time_giorni+\'gg\':\'\')+
       (f.preferito?\' <span class="badge bg">preferito</span>\':\'\')+
       \'</span>\'+
-      \'<button class="btn btn-sm" onclick="eliminaFornitore(\'\'+f.id+\'\')">&#215;</button></div>\';
+      \'<button class="btn btn-sm" data-fid="\'+f.id+\'" onclick="eliminaFornitore(this.dataset.fid)">\xc3\x97</button></div>\';
   }).join(\'\');
 }
 
