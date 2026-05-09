@@ -1711,7 +1711,7 @@ async function caricaMovimenti(magId){
 }
 
 async function registraMovimento(){
-  if(!_magEditId){toast(\'Salva prima l\'articolo\',\'err\');return;}
+  if(!_magEditId){toast(\'Salva prima: articolo non salvato\',\'err\');return;}
   const tipo=document.getElementById(\'mov-tipo\')?.value;
   const qty=parseFloat(document.getElementById(\'mov-quantita\')?.value||0);
   const causale=document.getElementById(\'mov-causale\')?.value?.trim()||null;
