@@ -683,8 +683,8 @@ tr.data-row:hover td{background:var(--beige);cursor:pointer}
           <option value="pz">pz</option><option value="m">m</option>
           <option value="m2">m&#178;</option><option value="kg">kg</option></select></div></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-        <div class="form-field"><label>Codice finitura</label><input id="mag-codice_finitura" type="text"></div>
-        <div class="form-field"><label>Nome finitura</label><input id="mag-nome_finitura" type="text"></div></div>
+        <div class="form-field"><label>Finitura</label><select id="mag-codice_finitura" onchange="aggiornaFinMag(this)"><option value="">&#8212; Nessuna &#8212;</option></select></div>
+        <div class="form-field"><label>Nome finitura</label><input id="mag-nome_finitura" type="text" readonly style="background:var(--beige);color:var(--mid)"></div></div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
         <div class="form-field"><label>Altezza (mm)</label><input id="mag-altezza_mm" type="number"></div>
         <div class="form-field"><label>Larghezza (mm)</label><input id="mag-larghezza_mm" type="number"></div>
@@ -1510,8 +1510,18 @@ function apriNuovoArticoloMag(){
   _magEditId=null;popolaFormMag({});
   const mo=ensureModalInBody('modal-magazzino');if(mo)mo.classList.add('open');
 }
-function popolaFormMag(m){
+async function popolaFormMag(m){
   document.getElementById('mag-title').textContent=_magEditId?'Modifica':'Nuovo articolo';
+  // Carica finiture dal DB
+  const {data:fins}=await sb.from('finiture').select('codice_finitura,nome_finitura').order('nome_finitura');
+  const finsUnique=[];
+  const finsSet=new Set();
+  (fins||[]).forEach(function(f){if(!finsSet.has(f.codice_finitura)){finsSet.add(f.codice_finitura);finsUnique.push(f);}});
+  const finSel=document.getElementById('mag-codice_finitura');
+  if(finSel){
+    finSel.innerHTML='<option value="">&#8212; Nessuna &#8212;</option>'+
+      finsUnique.map(function(f){return '<option value="'+f.codice_finitura+'"'+(m.codice_finitura===f.codice_finitura?' selected':'')+'>'+f.codice_finitura+' â '+f.nome_finitura+'</option>';}).join('');
+  }
   const ff={'mag-codice_mp':m.codice_mp||'','mag-codice':m.codice||'','mag-descrizione':m.descrizione||'',
     'mag-categoria':m.categoria||'','mag-codice_finitura':m.codice_finitura||'','mag-nome_finitura':m.nome_finitura||'',
     'mag-altezza_mm':m.altezza_mm||'','mag-larghezza_mm':m.larghezza_mm||'','mag-spessore_mm':m.spessore_mm||'',
@@ -1521,6 +1531,19 @@ function popolaFormMag(m){
   const btn=document.getElementById('mag-btn-elimina');if(btn)btn.style.display=_magEditId?'':'none';
 }
 var _magEditId=null;
+function aggiornaFinMag(sel){
+  const opt=sel.options[sel.selectedIndex];
+  const nomeEl=document.getElementById('mag-nome_finitura');
+  if(!nomeEl) return;
+  if(opt&&opt.value){
+    // Estrae il nome dalla stringa 'CODICE — Nome'
+    const parts=opt.text.split(' â ');
+    nomeEl.value=parts.length>1?parts.slice(1).join(' â '):'';
+  } else {
+    nomeEl.value='';
+  }
+}
+
 async function salvaMagazzino(){
   const d={codice_mp:document.getElementById('mag-codice_mp')?.value?.trim()||null,
     codice:document.getElementById('mag-codice')?.value?.trim()||null,
