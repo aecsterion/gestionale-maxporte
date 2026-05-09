@@ -1520,7 +1520,8 @@ async function popolaFormMag(m){
   const finSel=document.getElementById('mag-codice_finitura');
   if(finSel){
     finSel.innerHTML='<option value="">&#8212; Nessuna &#8212;</option>'+
-      finsUnique.map(function(f){return '<option value="'+f.codice_finitura+'"'+(m.codice_finitura===f.codice_finitura?' selected':'')+'>'+f.codice_finitura+' â '+f.nome_finitura+'</option>';}).join('');
+      finsUnique.map(function(f){return '<option value="'+f.codice_finitura+'" data-nome="'+f.nome_finitura+'"'+(m.codice_finitura===f.codice_finitura?' selected':'')+'>'+f.codice_finitura+' - '+f.nome_finitura+'</option>';}).join('');
+    aggiornaFinMag(finSel);
   }
   const ff={'mag-codice_mp':m.codice_mp||'','mag-codice':m.codice||'','mag-descrizione':m.descrizione||'',
     'mag-categoria':m.categoria||'','mag-codice_finitura':m.codice_finitura||'','mag-nome_finitura':m.nome_finitura||'',
@@ -1535,13 +1536,7 @@ function aggiornaFinMag(sel){
   const opt=sel.options[sel.selectedIndex];
   const nomeEl=document.getElementById('mag-nome_finitura');
   if(!nomeEl) return;
-  if(opt&&opt.value){
-    // Estrae il nome dalla stringa 'CODICE — Nome'
-    const parts=opt.text.split(' â ');
-    nomeEl.value=parts.length>1?parts.slice(1).join(' â '):'';
-  } else {
-    nomeEl.value='';
-  }
+  nomeEl.value=(opt&&opt.value)?opt.getAttribute('data-nome')||'':'';
 }
 
 async function salvaMagazzino(){
