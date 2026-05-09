@@ -1658,7 +1658,7 @@ async function apriAggiuntaFornitore(){
   const {data:fornitori}=await sb.from(\'anagrafiche\').select(\'id,ragione_sociale\').eq(\'tipo\',\'fornitore\').order(\'ragione_sociale\');
   const opts=(fornitori||[]).map(function(a){return \'<option value="\'+a.id+\'">\'+a.ragione_sociale+\'</option>\';}).join(\'\');
   const html=\'<div style="background:var(--beige);border-radius:var(--radius);padding:12px;margin-top:8px">\'+
-    \'<div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px">\'+
+    \'<div style="display:grid;grid-template-columns:2fr 1fr 1fr 80px;gap:8px;margin-bottom:8px">\'+
     \'<select id="forn-ana" style="padding:6px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:12px"><option value="">Seleziona fornitore...</option>\'+opts+\'</select>\'+
     \'<input id="forn-cod" type="text" placeholder="Cod. articolo forn." style="padding:6px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:12px">\'+
     \'<input id="forn-prez" type="number" placeholder="Prezzo acquisto" step="0.01" style="padding:6px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:12px">\'+
@@ -4417,6 +4417,7 @@ const ADMIN_SECTIONS = [
   {id:'lavorazioni', label:'Lavorazioni extra', icon:'M4 2h8l2 4-10 0zM2 6h12v10H2zM6 10h4'},
   {id:'agenti',      label:'Agenti',            icon:'M8 5a3 3 0 100 6 3 3 0 000-6zM2 14c0-3 2-5 6-5s6 2 6 5'},
   {id:'impostazioni',label:'Impostazioni',      icon:'M8 5a3 3 0 100 6M8 1v2M8 13v2M1 8h2M13 8h2'},
+  {id:'magazzino_admin',label:'Magazzino',       icon:'M2 4h12v10H2zM2 4l6-3 6 3M6 14v-4h4v4'},
 ];
 
 const ADMIN_SUB = {
@@ -4426,6 +4427,7 @@ const ADMIN_SUB = {
   distinte:   ['db_modelli'],
   agenti:     ['agenti_lista'],
   impostazioni:['generale','utenti'],
+  magazzino_admin:['categorie'],
 };
 
 let adminSection = 'catalogo';
@@ -4470,6 +4472,7 @@ function loadAdminSection(){
   else if(adminSection==='lavorazioni') adminLavorazioni();
   else if(adminSection==='agenti') adminAgenti();
   else if(adminSection==='impostazioni') adminImpostazioni();
+  else if(adminSection==='magazzino_admin') adminMagazzino();
 }
 
 // ── HELPER UI ──────────────────────────────────────────
@@ -5750,6 +5753,59 @@ async function adminLavorazioni(){
       <tbody>\${rows||'<tr><td colspan="3" style="text-align:center;color:var(--mid);padding:16px;font-style:italic">Nessuna lavorazione configurata</td></tr>'}</tbody>
       </table>
     \`)}\`;
+}
+
+async function adminMagazzino(){
+  const tabs=[{id:\'categorie\',label:\'Categorie\'}];
+  const sub=adminSub===\'categorie\'?\'categorie\':\'categorie\';
+  const tabsHtml=adminSubTabs(tabs,sub,\'switchMagSub\');
+  document.getElementById(\'admin-main\').innerHTML=tabsHtml+\'<div id="admin-sub"></div>\';
+  adminCategorieMag();
+}
+
+function switchMagSub(sub){
+  adminSub=sub;
+  adminMagazzino();
+}
+
+async function adminCategorieMag(){
+  const {data,error}=await sb.from(\'categorie_magazzino\').select(\'*\').order(\'nome\');
+  if(error){document.getElementById(\'admin-sub\').innerHTML=\'<p style="color:var(--red)">Errore caricamento.</p>\';return;}
+  const rows=(data||[]).map(function(c){
+    return \'<tr>\'+
+      \'<td>\'+inlineInput(c.nome,\'adminSalvaCategoriaMag(\'\'+c.id+\'\',\'\''+'nome'+\'\',this.value)\',\'160px\')+\'</td>\'+
+      \'<td>\'+inlineInput(c.codice,\'adminSalvaCategoriaMag(\'\'+c.id+\'\',\'\''+'codice'+\'\',this.value)\',\'120px\')+\'</td>\'+
+      \'<td>\'+inlineInput(c.descrizione||\'\',\'adminSalvaCategoriaMag(\'\'+c.id+\'\',\'\''+'descrizione'+\'\',this.value)\',\'220px\',\'text\',\'Descrizione opzionale\')+\'</td>\'+
+      \'<td><button class="btn btn-sm" style="color:var(--red)" onclick="eliminaCategoriaMag(\'\'+c.id+\'\')">×</button></td>\'+
+      \'</tr>\';
+  }).join(\'\');
+  document.getElementById(\'admin-sub\').innerHTML=adminCard(\'Categorie magazzino\',\'\n    <table><thead><tr><th>Nome</th><th>Codice</th><th>Descrizione</th><th></th></tr></thead>\'+
+    \'<tbody>\'+rows+\'</tbody></table>\',
+    \'<button class="btn btn-sm btn-red" onclick="aggiungiCategoriaMag()">+ Nuova categoria</button>\');
+}
+
+async function adminSalvaCategoriaMag(id,campo,valore){
+  const {error}=await sb.from(\'categorie_magazzino\').update({[campo]:valore}).eq(\'id\',id);
+  if(error){toast(\'Errore: \'+error.message,\'err\');return;}
+  toast(\'Salvato\',\'ok\');
+}
+
+async function aggiungiCategoriaMag(){
+  const nome=prompt(\'Nome categoria (es. Pannello blindato):\');
+  if(!nome) return;
+  const codice=prompt(\'Codice categoria (es. pannello_blindato):\')||nome.toLowerCase().replace(/ /g,\'_\');
+  const {error}=await sb.from(\'categorie_magazzino\').insert([{nome,codice}]);
+  if(error){toast(\'Errore: \'+error.message,\'err\');return;}
+  toast(\'Categoria aggiunta\',\'ok\');
+  adminCategorieMag();
+}
+
+async function eliminaCategoriaMag(id){
+  if(!confirm(\'Eliminare questa categoria? Gli articoli associati non verranno eliminati.\')) return;
+  const {error}=await sb.from(\'categorie_magazzino\').delete().eq(\'id\',id);
+  if(error){toast(\'Errore: \'+error.message,\'err\');return;}
+  toast(\'Eliminata\',\'ok\');
+  adminCategorieMag();
 }
 
 async function salvaLavorazione(chiave,campo,valore){
