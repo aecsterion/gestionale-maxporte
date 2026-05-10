@@ -4654,6 +4654,7 @@ async function adminFiniture(){
       <select onchange="adminSalva('finiture','\${f.id}','fascia',this.value);window._adminFinSerie='\${serieFilter}';adminFiniture();"
         style="padding:3px 6px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:11px;font-family:inherit">
         <option value="" \${!f.fascia?'selected':''}>— nessuna —</option>
+        <option value="LAMINATO" \${f.fascia==='LAMINATO'?'selected':''}>LAMINATO</option>
         <option value="MP CLASSIC" \${f.fascia==='MP CLASSIC'?'selected':''}>MP CLASSIC</option>
         <option value="MP LIGHT" \${f.fascia==='MP LIGHT'?'selected':''}>MP LIGHT</option>
         <option value="MP PREMIUM" \${f.fascia==='MP PREMIUM'?'selected':''}>MP PREMIUM</option>
