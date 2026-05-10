@@ -1626,8 +1626,12 @@ async function aggiornaColoriMag(){
   }
   const finSel=document.getElementById(\'mag-codice_finitura\');
   if(finSel){
-    finSel.innerHTML=\'<option value="">&mdash; Nessuna &mdash;</option>\'+
-      finsUnique.map(function(f){return \'<option value="\'+f.codice_finitura+\'" data-nome="\'+f.nome_finitura+\'"\'>\'+f.codice_finitura+\' - \'+f.nome_finitura+\'</option>\';}).join(\'\');
+    var opts=\'<option value="">&mdash; Nessuna &mdash;</option>\'+
+      finsUnique.map(function(f){
+        var sel=f.codice_finitura===m.codice_finitura?\' selected\':\'\';
+        return \'<option value="\'+f.codice_finitura+\'" data-nome="\'+f.nome_finitura+\'"\'+sel+\'>\'+ f.codice_finitura+\' - \'+f.nome_finitura+\'</option>\';
+      }).join(\'\');
+    finSel.innerHTML=opts;
     aggiornaFinMag(finSel);
   }
 }
