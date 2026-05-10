@@ -675,7 +675,7 @@ tr.data-row:hover td{background:var(--beige);cursor:pointer}
         <div class="form-field"><label>Codice MP <span style="font-size:10px;color:var(--mid)">(auto)</span></label>
           <div style="display:flex;gap:6px"><input id="mag-codice_mp" type="text" style="flex:1">
           <button class="btn btn-sm" onclick="aggiornaCodiceMP(true)" title="Rigenera">&#8635;</button></div></div>
-        <div class="form-field"><label>Categoria</label><select id="mag-categoria" onchange="aggiornaCodiceMP()"><option value="">&#8212;</option></select></div>
+        <div class="form-field"><label>Categoria</label><select id="mag-categoria" onchange="aggiornaCodiceMP();aggiornaColoriMag()"><option value="">&#8212;</option></select></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div class="form-field"><label>Colore</label><select id="mag-codice_finitura" onchange="aggiornaFinMag(this);aggiornaCodiceMP()"><option value="">&#8212; Nessuna &#8212;</option></select></div>
@@ -1560,14 +1560,33 @@ async function popolaFormMag(m){
     catSel.innerHTML=\'<option value="">&#8212;</option>\'+
       (cats||[]).map(function(c){return \'<option value="\'+c.codice+\'" data-descr="\'+( c.descrizione||\'\')+\'"\'+(m.categoria===c.codice?\' selected\':\'\')+\'>\'+c.nome+\'</option>\';}).join(\'\');
   }
-  // Carica finiture
-  const {data:fins}=await sb.from(\'finiture\').select(\'codice_finitura,nome_finitura\').order(\'nome_finitura\');
-  const finsUnique=[];const finsSet=new Set();
-  (fins||[]).forEach(function(f){if(!finsSet.has(f.codice_finitura)){finsSet.add(f.codice_finitura);finsUnique.push(f);}});
+  // Carica colori in base ai flag della categoria
+  var catCodice=m.categoria||\'\';
+  var catInfo=null;
+  if(catCodice){
+    const {data:catRow}=await sb.from(\'categorie_magazzino\').select(\'colori_laminato,colori_laccato,colori_ferramenta\').eq(\'codice\',catCodice).maybeSingle();
+    catInfo=catRow;
+  }
+  var finsUnique=[];
+  if(catInfo&&(catInfo.colori_laminato||catInfo.colori_laccato)){
+    var fasce=[];
+    if(catInfo.colori_laminato) fasce.push(\'LAMINATO\');
+    if(catInfo.colori_laccato) fasce=fasce.concat([\'MP CLASSIC\',\'MP LIGHT\',\'MP PREMIUM\']);
+    const {data:fins2}=await sb.from(\'finiture\').select(\'codice_finitura,nome_finitura\').in(\'fascia\',fasce).order(\'nome_finitura\');
+    const seen=new Set();
+    (fins2||[]).forEach(function(f){if(!seen.has(f.codice_finitura)){seen.add(f.codice_finitura);finsUnique.push({codice_finitura:f.codice_finitura,nome_finitura:f.nome_finitura});}});
+  } else if(catInfo&&catInfo.colori_ferramenta){
+    const {data:ferr}=await sb.from(\'ferramenta\').select(\'codice,nome\').eq(\'attivo\',true).order(\'nome\');
+    (ferr||[]).forEach(function(f){finsUnique.push({codice_finitura:f.codice,nome_finitura:f.nome});});
+  } else {
+    const {data:fins3}=await sb.from(\'finiture\').select(\'codice_finitura,nome_finitura\').order(\'nome_finitura\');
+    const seen2=new Set();
+    (fins3||[]).forEach(function(f){if(!seen2.has(f.codice_finitura)){seen2.add(f.codice_finitura);finsUnique.push(f);}});
+  }
   const finSel=document.getElementById(\'mag-codice_finitura\');
   if(finSel){
-    finSel.innerHTML=\'<option value="">&#8212; Nessuna &#8212;</option>\'+
-      finsUnique.map(function(f){return \'<option value="\'+f.codice_finitura+\'" data-nome="\'+f.nome_finitura+\'"\'+(m.codice_finitura===f.codice_finitura?\' selected\':\'\')+\'>\'+f.codice_finitura+\' - \'+f.nome_finitura+\'</option>\';}).join(\'\');
+    finSel.innerHTML=\'<option value="">&mdash; Nessuna &mdash;</option>\'+
+      finsUnique.map(function(f){return \'<option value="\'+f.codice_finitura+\'" data-nome="\'+f.nome_finitura+\'"\'+( m.codice_finitura===f.codice_finitura?\' selected\':\'\')+\'>\'+f.codice_finitura+\' - \'+f.nome_finitura+\'</option>\';}).join(\'\');
     aggiornaFinMag(finSel);
   }
   const ff={\'mag-codice_mp\':m.codice_mp||\'\',\'mag-descrizione\':m.descrizione||\'\',
@@ -1578,6 +1597,39 @@ async function popolaFormMag(m){
   Object.entries(ff).forEach(function(kv){const el=document.getElementById(kv[0]);if(el)el.value=kv[1];});
   const btn=document.getElementById(\'mag-btn-elimina\');if(btn)btn.style.display=_magEditId?\'\':\'none\';
   if(!m.codice_mp) aggiornaCodiceMP(false);
+}
+
+async function aggiornaColoriMag(){
+  const catSel=document.getElementById(\'mag-categoria\');
+  if(!catSel) return;
+  const m={categoria:catSel.value,codice_finitura:document.getElementById(\'mag-codice_finitura\')?.value||\'\'  };
+  var catInfo=null;
+  if(m.categoria){
+    const {data:catRow}=await sb.from(\'categorie_magazzino\').select(\'colori_laminato,colori_laccato,colori_ferramenta\').eq(\'codice\',m.categoria).maybeSingle();
+    catInfo=catRow;
+  }
+  var finsUnique=[];
+  if(catInfo&&(catInfo.colori_laminato||catInfo.colori_laccato)){
+    var fasce=[];
+    if(catInfo.colori_laminato) fasce.push(\'LAMINATO\');
+    if(catInfo.colori_laccato) fasce=fasce.concat([\'MP CLASSIC\',\'MP LIGHT\',\'MP PREMIUM\']);
+    const {data:fins2}=await sb.from(\'finiture\').select(\'codice_finitura,nome_finitura\').in(\'fascia\',fasce).order(\'nome_finitura\');
+    const seen=new Set();
+    (fins2||[]).forEach(function(f){if(!seen.has(f.codice_finitura)){seen.add(f.codice_finitura);finsUnique.push({codice_finitura:f.codice_finitura,nome_finitura:f.nome_finitura});}});
+  } else if(catInfo&&catInfo.colori_ferramenta){
+    const {data:ferr}=await sb.from(\'ferramenta\').select(\'codice,nome\').eq(\'attivo\',true).order(\'nome\');
+    (ferr||[]).forEach(function(f){finsUnique.push({codice_finitura:f.codice,nome_finitura:f.nome});});
+  } else {
+    const {data:fins3}=await sb.from(\'finiture\').select(\'codice_finitura,nome_finitura\').order(\'nome_finitura\');
+    const seen2=new Set();
+    (fins3||[]).forEach(function(f){if(!seen2.has(f.codice_finitura)){seen2.add(f.codice_finitura);finsUnique.push(f);}});
+  }
+  const finSel=document.getElementById(\'mag-codice_finitura\');
+  if(finSel){
+    finSel.innerHTML=\'<option value="">&mdash; Nessuna &mdash;</option>\'+
+      finsUnique.map(function(f){return \'<option value="\'+f.codice_finitura+\'" data-nome="\'+f.nome_finitura+\'"\'>\'+f.codice_finitura+\' - \'+f.nome_finitura+\'</option>\';}).join(\'\');
+    aggiornaFinMag(finSel);
+  }
 }
 
 function aggiornaFinMag(sel){
