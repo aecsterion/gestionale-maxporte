@@ -1558,7 +1558,7 @@ async function popolaFormMag(m){
   const catSel=document.getElementById(\'mag-categoria\');
   if(catSel){
     catSel.innerHTML=\'<option value="">&#8212;</option>\'+
-      (cats||[]).map(function(c){return \'<option value="\'+c.codice+\'"\'+(m.categoria===c.codice?\' selected\':\'\')+\'>\'+c.nome+\'</option>\';}).join(\'\');
+      (cats||[]).map(function(c){return \'<option value="\'+c.codice+\'" data-descr="\'+( c.descrizione||\'\')+\'"\'+(m.categoria===c.codice?\' selected\':\'\')+\'>\'+c.nome+\'</option>\';}).join(\'\');
   }
   // Carica finiture
   const {data:fins}=await sb.from(\'finiture\').select(\'codice_finitura,nome_finitura\').order(\'nome_finitura\');
@@ -1593,7 +1593,9 @@ function aggiornaCodiceMP(force){
   const catSel2=document.getElementById(\'mag-categoria\');
   const descEl=document.getElementById(\'mag-descrizione\');
   if(catSel2&&descEl&&!descEl.value&&catSel2.value){
-    descEl.value=catSel2.options[catSel2.selectedIndex]?.text||\'\';
+    const opt2=catSel2.options[catSel2.selectedIndex];
+    const descr2=opt2?opt2.getAttribute(\'data-descr\')||\'\':null;
+    if(descr2) descEl.value=descr2;
   }
   if(mp.value&&!force) return; // non sovrascrivere se già compilato
   const catSel=document.getElementById(\'mag-categoria\');
