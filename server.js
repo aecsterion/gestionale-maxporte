@@ -2135,12 +2135,16 @@ async function filtraPerCompatibilita(opzioni, categoria, codiceChiave){
 }
 
 async function cfgFinitura(){
-  const {data:tutteFiniture} = await sb.from('finiture')
-    .select('*')
+  var finQuery = sb.from('finiture').select('*')
     .eq('codice_serie',CFG.serie)
     .or(\`codice_modello.is.null,codice_modello.eq.\${CFG.modello}\`)
-    .eq('attiva',true)
-    .order('fascia').order('nome_finitura');
+    .eq('attiva',true);
+  // Filtra per fascia se pannello blindato
+  if(CFG.serie==='PAN-BL'){
+    if(CFG.modello==='PAN-LAM') finQuery=finQuery.eq('fascia','LAMINATO');
+    else if(CFG.modello==='PAN-LAC') finQuery=finQuery.in('fascia',['MP CLASSIC','MP LIGHT','MP PREMIUM']);
+  }
+  const {data:tutteFiniture} = await finQuery.order('fascia').order('nome_finitura');
 
   const tutteNoSpec = (tutteFiniture||[]).filter(f=>f.codice_finitura!=='SPECIALE');
   const hasSpeciale = (tutteFiniture||[]).some(f=>f.codice_finitura==='SPECIALE');
