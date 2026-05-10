@@ -1558,7 +1558,7 @@ async function popolaFormMag(m){
   const catSel=document.getElementById(\'mag-categoria\');
   if(catSel){
     catSel.innerHTML=\'<option value="">&#8212;</option>\'+
-      (cats||[]).map(function(c){return \'<option value="\'+c.codice+\'" data-descr="\'+( c.descrizione||\'\')+\'"\'+(m.categoria===c.codice?\' selected\':\'\')+\'>\'+c.nome+\'</option>\';}).join(\'\');
+      (cats||[]).map(function(c){return \'<option value="\'+c.codice+\'"\'+(m.categoria===c.codice?\' selected\':\'\')+\'>\'+c.nome+\'</option>\';}).join(\'\');
   }
   // Carica finiture
   const {data:fins}=await sb.from(\'finiture\').select(\'codice_finitura,nome_finitura\').order(\'nome_finitura\');
@@ -1593,9 +1593,7 @@ function aggiornaCodiceMP(force){
   const catSel2=document.getElementById(\'mag-categoria\');
   const descEl=document.getElementById(\'mag-descrizione\');
   if(catSel2&&descEl&&!descEl.value&&catSel2.value){
-    const opt2=catSel2.options[catSel2.selectedIndex];
-    const descr2=opt2?opt2.getAttribute(\'data-descr\')||\'\':null;
-    if(descr2) descEl.value=descr2;
+    descEl.value=catSel2.options[catSel2.selectedIndex]?.text||\'\';
   }
   if(mp.value&&!force) return; // non sovrascrivere se già compilato
   const catSel=document.getElementById(\'mag-categoria\');
@@ -3453,89 +3451,57 @@ function selAccQta(){
 
 // Pannello blindato: senso apertura + misure + intero/taglio a misura
 async function cfgAccPannello(){
-  const {data:imp}=await sb.from(\'impostazioni\').select(\'valore\').eq(\'chiave\',\'supplemento_taglio_pannello\').maybeSingle();
-  CFG._suppTaglioPannello=parseFloat(imp?.valore||0);
-  const {data:magP}=await sb.from(\'magazzino\')
-    .select(\'altezza_mm,larghezza_mm,giacenza\')
-    .eq(\'categoria\',\'pannello_blindato\').eq(\'codice_finitura\',CFG.finitura||\'\').order(\'altezza_mm\',{ascending:false});
-  CFG._panMag=magP?.[0]||null;
-  const hMag=CFG._panMag?.altezza_mm||0;
-  const lMax=CFG._panMag?.larghezza_mm||0;
-  const sensi=[\'Interno DX\',\'Esterno DX\',\'Interno SX\',\'Esterno SX\',\'Nessuno\'];
-  const sensoSel=CFG.senso||\'\' ;
-  const infoMag=CFG._panMag
-    ?\'<div style="background:var(--beige);border-radius:var(--radius);padding:10px 14px;font-size:12px;margin-bottom:14px;border:0.5px solid var(--border)">\'+
-      \'<strong>Pannello a magazzino:</strong> \'+hMag+\' x \'+lMax+\' mm\'+
-      (CFG._panMag.giacenza!=null?\' \xe2\x80\x94 Giacenza: <strong>\'+CFG._panMag.giacenza+\' pz</strong>\':\'\')+\'</div>\'
-    :\'<div style="background:var(--amber-bg);border-radius:var(--radius);padding:10px 14px;font-size:12px;margin-bottom:14px;color:var(--amber-tx)">\'+
-      \'Nessun pannello in magazzino per la finitura <strong>\'+( CFG.finitura||\'\' )+\'</strong>.</div>\';
-  document.getElementById(\'cfg-body\').innerHTML=\\`
+  const {data:imp} = await sb.from('impostazioni').select('valore').eq('chiave','supplemento_taglio_pannello').maybeSingle();
+  const suppTaglio = parseFloat(imp?.valore||0);
+  CFG._suppTaglioPannello = suppTaglio;
+
+  const sensi = ['Interno DX','Esterno DX','Interno SX','Esterno SX','Nessuno'];
+  const sensoSel = CFG.senso||'';
+  const tipoSel = CFG._pannelloTipo||'intero';
+
+  document.getElementById('cfg-body').innerHTML=\`
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-      <div style="font-size:13px;font-weight:500">Configurazione pannello <span style="color:var(--mid);font-weight:400">— \\${CFG.nome_modello}</span></div>
+      <div style="font-size:13px;font-weight:500">Configurazione pannello <span style="color:var(--mid);font-weight:400">— \${CFG.nome_modello}</span></div>
       <button class="btn btn-sm" onclick="renderCfgStep('finitura')">← Indietro</button>
     </div>
-    \\${infoMag}
-    <div style="display:grid;gap:14px;max-width:440px">
+    <div style="display:grid;gap:16px;max-width:440px">
       <div>
         <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:6px">Senso apertura</label>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px" id="sensi-grid">
-          \\${sensi.map(s=>\\`<div onclick="selSensoPannello('\\${s}')" id="senso-\\${s.replace(/ /g,'-')}"
-            style="padding:8px;border-radius:var(--radius);border:\\${s===sensoSel?'2px solid var(--red)':'0.5px solid var(--border)'};cursor:pointer;text-align:center;font-size:12px;background:\\${s===sensoSel?'var(--red-bg)':'var(--white)'};color:\\${s===sensoSel?'var(--red)':'var(--dark)'}">\\${s}</div>\\`).join('')}
+          \${sensi.map(s=>\`<div onclick="selSensoPannello('\${s}')" id="senso-\${s.replace(/ /g,'-')}"
+            style="padding:8px;border-radius:var(--radius);border:\${s===sensoSel?'2px solid var(--red)':'0.5px solid var(--border)'};cursor:pointer;text-align:center;font-size:12px;background:\${s===sensoSel?'var(--red-bg)':'var(--white)'};color:\${s===sensoSel?'var(--red)':'var(--dark)'}">
+            \${s}
+          </div>\`).join('')}
         </div>
-        <input type="hidden" id="pannello-senso" value="\\${sensoSel}">
+        <input type="hidden" id="pannello-senso" value="\${sensoSel}">
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <div>
-          <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Larghezza (mm)\\${lMax?' — max '+lMax+' mm':''}</label>
-          <input type="number" id="pan-l" value="\\${CFG.larghezza||\'\'}" placeholder="es. 900"
-            style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px"
-            oninput="checkLarghezzaPan(this.value)">
-          <div id="pan-l-warn" style="font-size:11px;color:var(--red);margin-top:3px;display:none">Supera il massimo disponibile</div>
-        </div>
-        <div>
-          <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Altezza richiesta (mm)</label>
-          <input type="number" id="pan-a" value="\\${CFG.altezza||\''}" placeholder="es. 2200"
-            style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px"
-            oninput="aggiornaZoccoliPreview(this.value)">
+      <div>
+        <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:6px">Tipo fornitura</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div id="tipo-intero" onclick="selTipoPannello('intero')"
+            style="padding:12px;border-radius:var(--radius);border:\${tipoSel==='intero'?'2px solid var(--red)':'0.5px solid var(--border)'};cursor:pointer;background:\${tipoSel==='intero'?'var(--red-bg)':'var(--white)'}">
+            <div style="font-size:13px;font-weight:500;color:\${tipoSel==='intero'?'var(--red)':'var(--dark)'}">Pannello intero</div>
+            <div style="font-size:11px;color:var(--mid);margin-top:2px">Misura standard</div>
+          </div>
+          <div id="tipo-taglio" onclick="selTipoPannello('taglio')"
+            style="padding:12px;border-radius:var(--radius);border:\${tipoSel==='taglio'?'2px solid var(--red)':'0.5px solid var(--border)'};cursor:pointer;background:\${tipoSel==='taglio'?'var(--red-bg)':'var(--white)'}">
+            <div style="font-size:13px;font-weight:500;color:\${tipoSel==='taglio'?'var(--red)':'var(--dark)'}">Taglio a misura</div>
+            <div style="font-size:11px;color:var(--mid);margin-top:2px">+€ \${suppTaglio.toFixed(2)}</div>
+          </div>
         </div>
       </div>
-      <div id="zoccoli-preview"></div>
+      <div id="pannello-misure-box" style="display:\${tipoSel==='taglio'?'grid':'none'};gap:10px">
+        <div>
+          <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Larghezza (mm)</label>
+          <input type="number" id="pan-l" value="\${CFG.larghezza||''}" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px">
+        </div>
+        <div>
+          <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Altezza (mm)</label>
+          <input type="number" id="pan-a" value="\${CFG.altezza||''}" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px">
+        </div>
+      </div>
       <button class="btn btn-red" onclick="selAccPannello()">Avanti →</button>
-    </div>\\`;
-  if(CFG.altezza) aggiornaZoccoliPreview(CFG.altezza);
-}
-
-function checkLarghezzaPan(val){
-  const lMax=CFG._panMag?.larghezza_mm||0;
-  const warn=document.getElementById(\'pan-l-warn\');
-  if(warn) warn.style.display=(lMax>0&&parseFloat(val)>lMax)?\'block\':\'none\';
-}
-
-function aggiornaZoccoliPreview(hStr){
-  const el=document.getElementById(\'zoccoli-preview\');
-  if(!el) return;
-  const h=parseFloat(hStr||0);
-  const hMag=CFG._panMag?.altezza_mm||0;
-  if(!h){el.innerHTML=\'\';return;}
-  if(!hMag){
-    el.innerHTML=\'<div style="font-size:12px;color:var(--mid)">Altezza registrata senza calcolo zoccoli.</div>\';
-    return;
-  }
-  if(h<=hMag){
-    el.innerHTML=\'<div style="background:var(--green-bg);border-radius:var(--radius);padding:10px 12px;font-size:12px;color:var(--green-tx)">\'+
-      \'✓ Taglio diretto: pannello H \'+hMag+\' mm → <strong>\'+h+\' mm</strong></div>\';
-  } else {
-    let z=0;
-    while(hMag+z*80<h) z++;
-    const hT=h-z*80;
-    if(hT<=0){
-      el.innerHTML=\'<div style="background:var(--red-bg);border-radius:var(--radius);padding:10px 12px;font-size:12px;color:var(--red)">Altezza non raggiungibile.</div>\';
-    } else {
-      el.innerHTML=\'<div style="background:var(--amber-bg);border-radius:var(--radius);padding:10px 12px;font-size:12px;color:var(--amber-tx)">\'+
-        \'<strong>\'+z+\' zoccolo\'+( z>1?\'li\':\'\')+\'</strong> da 80 mm — \'+
-        \'pannello tagliato a <strong>\'+hT+\' mm</strong> + \'+z+\' x 80 mm = \'+h+\' mm</div>\';
-    }
-  }
+    </div>\`;
 }
 
 function selSensoPannello(s){
@@ -3564,25 +3530,73 @@ function selTipoPannello(tipo){
 }
 
 async function selAccPannello(){
-  const senso=document.getElementById(\'pannello-senso\')?.value;
-  if(!senso){toast(\'Seleziona il senso di apertura\',\'err\');return;}
-  const l=parseInt(document.getElementById(\'pan-l\')?.value||0);
-  const a=parseInt(document.getElementById(\'pan-a\')?.value||0);
-  if(!l||!a){toast(\'Inserisci larghezza e altezza\',\'err\');return;}
-  const panMag=CFG._panMag;
-  const hMag=panMag?.altezza_mm||0;
-  const lMax=panMag?.larghezza_mm||0;
-  if(lMax>0&&l>lMax){toast(\'Larghezza massima: \'+lMax+\' mm\',\'err\');return;}
-  CFG.senso=senso;CFG.larghezza=l;CFG.altezza=a;CFG.misura_custom=true;
-  CFG.p_extra=CFG._suppTaglioPannello||0;
-  CFG._zoccoliAuto=0;CFG._hTaglioPannello=a;CFG._hMagPannello=hMag;
-  if(hMag>0&&a>hMag){
-    let z=0; while(hMag+z*80<a) z++;
-    const hT=a-z*80;
-    if(hT<=0){toast(\'Altezza non raggiungibile\',\'err\');return;}
-    CFG._zoccoliAuto=z;CFG._hTaglioPannello=hT;
+  const senso = document.getElementById('pannello-senso')?.value;
+  const tipo = CFG._pannelloTipo||'intero';
+  if(!senso){toast('Seleziona il senso di apertura','err');return;}
+  CFG.senso=senso;
+
+  if(tipo==='taglio'){
+    const l = parseInt(document.getElementById('pan-l')?.value||0);
+    const a = parseInt(document.getElementById('pan-a')?.value||0);
+    if(!l||!a){toast('Inserisci larghezza e altezza','err');return;}
+
+    // Leggi dal magazzino le dimensioni del pannello per questo colore
+    const {data:magPannelli} = await sb.from('magazzino')
+      .select('altezza_mm,larghezza_mm,codice_finitura')
+      .eq('categoria','pannello_blindato')
+      .eq('codice_finitura', CFG.finitura)
+      .order('altezza_mm', {ascending:false});
+
+    const panMag = magPannelli?.[0];
+
+    if(panMag){
+      const hMag = panMag.altezza_mm || 0;
+      const lMax = panMag.larghezza_mm || 0;
+
+      // Blocca se larghezza supera il massimo
+      if(lMax > 0 && l > lMax){
+        toast('Larghezza massima per questo pannello: ' + lMax + ' mm', 'err');
+        return;
+      }
+
+      // Calcola zoccoli automatici
+      // Ogni zoccolo aggiunge 80mm. Il pannello viene tagliato.
+      // Altezza finita richiesta = a
+      // Se a > hMag: impossibile anche con zoccoli (pannello non abbastanza alto)
+      // Se a <= hMag: nessuno zoccolo, taglio diretto
+      // Se a > hMag: aggiungi zoccoli finché hMag + (n*80) >= a
+      // Pannello da tagliare = a - (n*80)
+      const ZOCCOLO_H = 80;
+      let zoccoli = 0;
+      let hTaglio = a;
+
+      if(hMag > 0 && a > hMag){
+        // Quanti zoccoli servono?
+        while(hMag + zoccoli * ZOCCOLO_H < a) zoccoli++;
+        hTaglio = a - zoccoli * ZOCCOLO_H;
+        if(hTaglio <= 0){
+          toast('Altezza non raggiungibile con i pannelli disponibili', 'err');
+          return;
+        }
+      }
+
+      CFG._zoccoliAuto = zoccoli;
+      CFG._hTaglioPannello = hTaglio;
+      CFG._hMagPannello = hMag;
+    } else {
+      CFG._zoccoliAuto = 0;
+      CFG._hTaglioPannello = a;
+      CFG._hMagPannello = 0;
+    }
+
+    CFG.larghezza=l; CFG.altezza=a; CFG.misura_custom=true;
+    CFG.p_extra = CFG._suppTaglioPannello||0;
+  } else {
+    CFG.larghezza=null; CFG.altezza=null; CFG.misura_custom=false;
+    CFG.p_extra=0;
+    CFG._zoccoliAuto=0; CFG._hTaglioPannello=null;
   }
-  cfgUpdatePrice();cfgRiepilogo();
+  cfgUpdatePrice(); cfgRiepilogo();
 }
 
 async function cfgRiepilogo(){
@@ -3861,6 +3875,7 @@ async function apriModificaPreventivo(id){
   document.getElementById('ndoc-cap').value=prev.cap_destinazione||'';
   document.getElementById('ndoc-cit').value=prev.citta_destinazione||'';
   document.getElementById('ndoc-prv').value=prev.provincia_destinazione||'';
+  var rifDestEl=document.getElementById('ndoc-rif-dest');if(rifDestEl)rifDestEl.value=prev.riferimenti_destinazione||'';
   var no=document.getElementById('ndoc-note');if(no)no.value=prev.note||'';
   const {data:righe}=await sb.from('righe_preventivo').select('*').eq('preventivo_id',id).order('riga_numero',{ascending:true});
   CFG_RIGHE=(righe||[]).map(function(r){return Object.assign({},r);});
@@ -4024,6 +4039,7 @@ async function salvaNuovoDoc(){
       listino, sconto1:sc1, sconto2:sc2,
       indirizzo_destinazione:ind, cap_destinazione:cap,
       citta_destinazione:cit, provincia_destinazione:prv,
+      riferimenti_destinazione:document.getElementById('ndoc-rif-dest')?.value?.trim()||null,
       trasporto,
       resa: document.getElementById('ndoc-resa')?.value || 'Franco fabbrica',
       riferimento_cliente: document.getElementById('ndoc-rif-cliente')?.value?.trim() || null,
@@ -4399,14 +4415,15 @@ async function approvaOrdine(id, tipo){
 // ══════════════════════════════════════════════════════
 
 const ADMIN_SECTIONS = [
-  {id:'catalogo',    label:'Catalogo',          icon:'M4 4h8v8H4zM10 2h4v4h-4zM2 10h4v4H2z'},
-  {id:'prezzi',      label:'Prezzi e listini',  icon:'M8 1l2 5h5l-4 3 1.5 5L8 11l-4.5 3L5 9 1 6h5z'},
-  {id:'telaio',      label:'Telaio e componenti',icon:'M2 8h12M8 2v12'},
-  {id:'distinte',    label:'Distinte base',     icon:'M3 3h10v2H3zM3 7h10v2H3zM3 11h6v2H3z'},
-  {id:'compatibilita',label:'Compatibilità',    icon:'M2 8h5M9 8h5M8 2v5M8 9v5'},
-  {id:'lavorazioni', label:'Lavorazioni extra', icon:'M4 2h8l2 4-10 0zM2 6h12v10H2zM6 10h4'},
-  {id:'agenti',      label:'Agenti',            icon:'M8 5a3 3 0 100 6 3 3 0 000-6zM2 14c0-3 2-5 6-5s6 2 6 5'},
-  {id:'impostazioni',label:'Impostazioni',      icon:'M8 5a3 3 0 100 6M8 1v2M8 13v2M1 8h2M13 8h2'},
+  {id:'agenti',        label:'Agenti',             icon:'M8 5a3 3 0 100 6 3 3 0 000-6zM2 14c0-3 2-5 6-5s6 2 6 5'},
+  {id:'catalogo',      label:'Catalogo',           icon:'M4 4h8v8H4zM10 2h4v4h-4zM2 10h4v4H2z'},
+  {id:'compatibilita', label:'Compatibilità', icon:'M2 8h5M9 8h5M8 2v5M8 9v5'},
+  {id:'distinte',      label:'Distinte base',      icon:'M3 3h10v2H3zM3 7h10v2H3zM3 11h6v2H3z'},
+  {id:'impostazioni',  label:'Impostazioni',       icon:'M8 5a3 3 0 100 6M8 1v2M8 13v2M1 8h2M13 8h2'},
+  {id:'lavorazioni',   label:'Lavorazioni extra',  icon:'M4 2h8l2 4-10 0zM2 6h12v10H2zM6 10h4'},
+  {id:'magazzino_admin',label:'Magazzino',         icon:'M2 4h12v10H2zM2 4l6-3 6 3M6 14v-4h4v4'},
+  {id:'prezzi',        label:'Prezzi e listini',   icon:'M8 1l2 5h5l-4 3 1.5 5L8 11l-4.5 3L5 9 1 6h5z'},
+  {id:'telaio',        label:'Telaio e componenti',icon:'M2 8h12M8 2v12'},
 ];
 
 const ADMIN_SUB = {
@@ -4416,6 +4433,7 @@ const ADMIN_SUB = {
   distinte:   ['db_modelli'],
   agenti:     ['agenti_lista'],
   impostazioni:['generale','utenti'],
+  magazzino_admin:['categorie'],
 };
 
 let adminSection = 'catalogo';
@@ -4460,6 +4478,7 @@ function loadAdminSection(){
   else if(adminSection==='lavorazioni') adminLavorazioni();
   else if(adminSection==='agenti') adminAgenti();
   else if(adminSection==='impostazioni') adminImpostazioni();
+  else if(adminSection==='magazzino_admin') adminMagazzino();
 }
 
 // ── HELPER UI ──────────────────────────────────────────
@@ -5742,6 +5761,73 @@ async function adminLavorazioni(){
     \`)}\`;
 }
 
+async function adminMagazzino(){
+  document.getElementById(\'admin-main\').innerHTML=
+    adminSubTabs([{id:\'categorie\',label:\'Categorie\'}],\'categorie\',\'switchMagSub\')+
+    \'<div id="admin-sub"></div>\';
+  adminCategorieMag();
+}
+
+function switchMagSub(sub){
+  adminSub=sub;adminMagazzino();
+}
+
+async function adminCategorieMag(){
+  const {data,error}=await sb.from(\'categorie_magazzino\').select(\'*\').order(\'nome\');
+  if(error){document.getElementById(\'admin-sub\').innerHTML=\'<p style="color:var(--red)">Errore caricamento.</p>\';return;}
+  const rows=(data||[]).map(function(c){
+    return \'<tr>\'+
+      \'<td><input type="text" value="\'+c.nome+\'" data-id="\'+c.id+\'" data-campo="nome"\'+
+      \' style="border:none;background:transparent;width:180px;font-size:13px" onchange="adminSalvaCatMag(this)"></td>\'+
+      \'<td><input type="text" value="\'+c.codice+\'" data-id="\'+c.id+\'" data-campo="codice"\'+
+      \' style="border:none;background:transparent;width:140px;font-size:13px;font-family:monospace" onchange="adminSalvaCatMag(this)"></td>\'+
+      \'<td><input type="text" value="\'+( c.descrizione||\'\')+\'" data-id="\'+c.id+\'" data-campo="descrizione"\'+
+      \' placeholder="Descrizione opzionale" style="border:none;background:transparent;width:100%;font-size:13px" onchange="adminSalvaCatMag(this)"></td>\'+
+      \'<td style="text-align:right"><button class="btn btn-sm" style="color:var(--red)" data-cid="\'+c.id+\'" onclick="eliminaCategoriaMag(this.dataset.cid)">×</button></td>\'+
+      \'</tr>\';
+  }).join(\'\');
+  const html=\'<table style="width:100%"><thead><tr>\'+
+    \'<th style="width:200px">Nome</th><th style="width:160px">Codice</th><th>Descrizione</th><th></th></tr></thead>\'+
+    \'<tbody>\'+rows+\'</tbody></table>\';
+  document.getElementById(\'admin-sub\').innerHTML=adminCard(\'Categorie magazzino\',html,
+    \'<button class="btn btn-sm btn-red" onclick="aggiungiCategoriaMag()">+ Nuova categoria</button>\');
+}
+
+async function adminSalvaCatMag(el){
+  const id=el.dataset.id,campo=el.dataset.campo,valore=el.value.trim();
+  if(!id||!campo) return;
+  const {error}=await sb.from(\'categorie_magazzino\').update({[campo]:valore}).eq(\'id\',id);
+  if(error){toast(\'Errore: \'+error.message,\'err\');el.style.background=\'var(--red-bg)\';return;}
+  toast(\'Salvato\',\'ok\');
+  el.style.background=\'var(--green-bg)\';
+  setTimeout(function(){el.style.background=\'transparent\';},1500);
+}
+
+async function aggiungiCategoriaMag(){
+  const nome=prompt(\'Nome categoria (es. Pannello blindato):\');
+  if(!nome||!nome.trim()) return;
+  const codice=(prompt(\'Codice (es. pannello_blindato):\')||nome.trim().toLowerCase().replace(/ /g,\'_\')).trim();
+  if(!codice) return;
+  const {error}=await sb.from(\'categorie_magazzino\').insert([{nome:nome.trim(),codice}]);
+  if(error){toast(\'Errore: \'+error.message,\'err\');return;}
+  toast(\'Categoria aggiunta\',\'ok\');
+  adminCategorieMag();
+}
+
+async function eliminaCategoriaMag(id){
+  if(!confirm(\'Eliminare questa categoria?\')) return;
+  const {error}=await sb.from(\'categorie_magazzino\').delete().eq(\'id\',id);
+  if(error){toast(\'Errore: \'+error.message,\'err\');return;}
+  toast(\'Eliminata\',\'ok\');
+  adminCategorieMag();
+}
+
+async function salvaLavorazione(chiave,campo,valore){
+  const {error}=await sb.from('impostazioni').update({[campo]:valore}).eq('chiave',chiave);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Salvato','ok');
+}
+
 async function aggiungiLavorazione(){
   const desc = document.getElementById('lav-desc')?.value.trim();
   const prezzo = document.getElementById('lav-prezzo')?.value;
@@ -6251,6 +6337,10 @@ async function esportaPDF(tipo, id) {
         <div class="form-field"><label>CAP</label><input type="text" id="ndoc-cap" maxlength="5"></div>
         <div class="form-field"><label>Città</label><input type="text" id="ndoc-cit"></div>
         <div class="form-field"><label>Prov.</label><input type="text" id="ndoc-prv" maxlength="2" style="text-transform:uppercase"></div>
+      </div>
+      <div class="form-field" style="margin-bottom:10px">
+        <label>Riferimenti destinazione</label>
+        <input type="text" id="ndoc-rif-dest" placeholder="Es. Referente: Mario Rossi">
       </div>
       <!-- Note -->
       <div class="form-field" style="margin-bottom:16px">
