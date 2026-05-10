@@ -1502,7 +1502,7 @@ async function renderMagazzino(){
   const pannelli=items.filter(function(m){return m.categoria===\'pannello_blindato\';}).length;
   const rows=items.map(function(m){
     const s=Number(m.giacenza||0)<=Number(m.scorta_minima||0);
-    const dim=(m.altezza_mm||m.larghezza_mm)?(m.altezza_mm||\'?\')+\'\xc3\x97\'+(m.larghezza_mm||\'?\')+\' mm\':\'\xe2\x80\x94\';
+    const dim=(m.altezza_mm||m.larghezza_mm)?(m.altezza_mm||\'?\')+\' x \'+(m.larghezza_mm||\'?\')+\' mm\':\'\xe2\x80\x94\';
     const catNome=(cats||[]).find(function(c){return c.codice===m.categoria;})?.nome||m.categoria||\'\xe2\x80\x94\';
     return \'<tr class="data-row" onclick="apriDettaglioMagazzino(this.dataset.id)" data-id="\'+m.id+\'" style="cursor:pointer">\'+
       \'<td><strong>\'+(m.codice_mp||\'\xe2\x80\x94\')+\'</strong></td>\'+
@@ -1589,6 +1589,12 @@ function aggiornaFinMag(sel){
 function aggiornaCodiceMP(force){
   const mp=document.getElementById(\'mag-codice_mp\');
   if(!mp) return;
+  // Auto-compila descrizione dalla categoria se vuota
+  const catSel2=document.getElementById(\'mag-categoria\');
+  const descEl=document.getElementById(\'mag-descrizione\');
+  if(catSel2&&descEl&&!descEl.value&&catSel2.value){
+    descEl.value=catSel2.options[catSel2.selectedIndex]?.text||\'\';
+  }
   if(mp.value&&!force) return; // non sovrascrivere se già compilato
   const catSel=document.getElementById(\'mag-categoria\');
   const cat=(catSel&&catSel.value)?catSel.value.toUpperCase().replace(\'_\',\'-\').slice(0,6):\'\';
@@ -1626,7 +1632,7 @@ async function salvaMagazzino(){
   else{const r=await sb.from(\'magazzino\').insert([d]);er=r.error;}
   if(er){toast(\'Errore: \'+er.message,\'err\');return;}
   toast(_magEditId?\'Aggiornato\':\'Aggiunto\',\'ok\');
-  if(!_magEditId) closeForm(\'modal-magazzino\');
+  closeForm(\'modal-magazzino\');
   renderMagazzino();
 }
 
