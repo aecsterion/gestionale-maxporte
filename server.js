@@ -3699,13 +3699,15 @@ async function aggiungiRigaAlDocumento(){
     await sb.from(tabella).insert([{...riga,[fk]:CFG_TARGET_ID,riga_numero:nextNum}]);
     // Aggiungi righe ZOC automatiche se pannello con zoccoli
     if((CFG._zoccoliAuto||0)>0){
-      const {data:zocAcc} = await sb.from('modelli').select('*').eq('codice_serie','ACC').eq('codice_modello','ZOC').maybeSingle();
-      const lst = listino().toLowerCase();
-      const pZoc = zocAcc?(zocAcc['prezzo_'+lst]||0):0;
+      const {data:zocMod} = await sb.from('modelli').select('*').eq('codice','ZOC').eq('codice_serie','ACC').maybeSingle();
+      const lst = listino().toUpperCase();
+      const {data:zocPrezzo} = await sb.from('prezzi_modello').select('prezzo_base').eq('codice_modello','ZOC').eq('listino',lst).maybeSingle();
+      const pZoc = zocPrezzo?.prezzo_base||0;
+      const zocAcc = zocMod;
       await sb.from(tabella).insert([{
         [fk]:CFG_TARGET_ID, riga_numero:nextNum+1,
         codice_serie:CFG.serie, nome_serie:CFG.nome_serie,
-        codice_serie:'ACC', codice_modello:'ZOC', nome_modello:zocAcc?.nome_modello||'Zoccolo Altezza 80mm',
+        codice_serie:'ACC', codice_modello:'ZOC', nome_modello:zocMod?.nome||'Zoccolo Altezza 80mm',
         codice_finitura:CFG.finitura, nome_finitura:CFG.nome_finitura,
         quantita:CFG._zoccoliAuto,
         prezzo_base:pZoc, prezzo_unitario:pZoc,
@@ -3725,7 +3727,7 @@ async function aggiungiRigaAlDocumento(){
     if((CFG._zoccoliAuto||0)>0){
       CFG_RIGHE.push({
         codice_serie:CFG.serie, nome_serie:CFG.nome_serie,
-        codice_serie:'ACC', codice_modello:'ZOC', nome_modello:zocAcc?.nome_modello||'Zoccolo Altezza 80mm',
+        codice_serie:'ACC', codice_modello:'ZOC', nome_modello:zocMod?.nome||'Zoccolo Altezza 80mm',
         codice_finitura:CFG.finitura, nome_finitura:CFG.nome_finitura,
         quantita:CFG._zoccoliAuto,
         prezzo_base:0, prezzo_unitario:0, prezzo_totale_riga:0,
