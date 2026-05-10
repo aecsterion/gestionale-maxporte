@@ -5770,18 +5770,30 @@ function switchMagSub(sub){
 
 async function adminCategorieMag(){
   const {data,error}=await sb.from(\'categorie_magazzino\').select(\'*\').order(\'nome\');
-  if(error){document.getElementById(\'admin-sub\').innerHTML=\'<p style="color:var(--red)">Errore caricamento.</p>\';return;}
+  if(error){document.getElementById(\'admin-sub\').innerHTML=\'<p style="color:var(--red)">Errore.</p>\';return;}
   const rows=(data||[]).map(function(c){
     return \'<tr>\'+
-      \'<td>\'+inlineInput(c.nome,\'adminSalvaCategoriaMag(\'\'+c.id+\'\',\'\''+'nome'+\'\',this.value)\',\'160px\')+\'</td>\'+
-      \'<td>\'+inlineInput(c.codice,\'adminSalvaCategoriaMag(\'\'+c.id+\'\',\'\''+'codice'+\'\',this.value)\',\'120px\')+\'</td>\'+
-      \'<td>\'+inlineInput(c.descrizione||\'\',\'adminSalvaCategoriaMag(\'\'+c.id+\'\',\'\''+'descrizione'+\'\',this.value)\',\'220px\',\'text\',\'Descrizione opzionale\')+\'</td>\'+
-      \'<td><button class="btn btn-sm" style="color:var(--red)" onclick="eliminaCategoriaMag(\'\'+c.id+\'\')">×</button></td>\'+
+      \' data-id="\'+c.id+\'" data-campo="nome" style="border:none;background:transparent;width:160px;font-size:13px" onchange="adminSalvaCatMag(this)"></td>\'+
+      \'<td><input type="text" value="\'+c.codice+\'" data-id="\'+c.id+\'" data-campo="codice" style="border:none;background:transparent;width:120px;font-size:13px;font-family:monospace" onchange="adminSalvaCatMag(this)"></td>\'+
+      \'<td><input type="text" value="\'+( c.descrizione||\'\')+\'" data-id="\'+c.id+\'" data-campo="descrizione" placeholder="Descrizione" style="border:none;background:transparent;width:220px;font-size:13px" onchange="adminSalvaCatMag(this)"></td>\'+
+      \'<td><button class="btn btn-sm" style="color:var(--red)" data-cid="\'+c.id+\'" onclick="eliminaCategoriaMag(this.dataset.cid)">×</button></td>\'+
       \'</tr>\';
   }).join(\'\');
-  document.getElementById(\'admin-sub\').innerHTML=adminCard(\'Categorie magazzino\',\'\n    <table><thead><tr><th>Nome</th><th>Codice</th><th>Descrizione</th><th></th></tr></thead>\'+
-    \'<tbody>\'+rows+\'</tbody></table>\',
+  var html=\'<table style="width:100%"><thead><tr><th>Nome</th><th>Codice</th><th>Descrizione</th><th></th></tr></thead>\'+
+    \'<tbody>\'+rows+\'</tbody></table>\';
+  document.getElementById(\'admin-sub\').innerHTML=adminCard(\'Categorie magazzino\',html,
     \'<button class="btn btn-sm btn-red" onclick="aggiungiCategoriaMag()">+ Nuova categoria</button>\');
+}
+
+async function adminSalvaCatMag(el){
+  const id=el.dataset.id;
+  const campo=el.dataset.campo;
+  const valore=el.value.trim();
+  if(!id||!campo) return;
+  const {error}=await sb.from(\'categorie_magazzino\').update({[campo]:valore}).eq(\'id\',id);
+  if(error){toast(\'Errore: \'+error.message,\'err\');el.style.background=\'var(--red-bg)\';return;}
+  toast(\'Salvato\',\'ok\');el.style.background=\'var(--green-bg)\';
+  setTimeout(function(){el.style.background=\'transparent\';},1500);
 }
 
 async function adminSalvaCategoriaMag(id,campo,valore){
