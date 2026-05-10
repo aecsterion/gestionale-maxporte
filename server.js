@@ -5392,6 +5392,69 @@ async function eliminaDistinta(id){
 // ══════════════════════════════════════════════════════
 // AGENTI
 // ══════════════════════════════════════════════════════
+async function adminMagazzino(){
+  document.getElementById(\'admin-main\').innerHTML=
+    adminSubTabs([{id:\'categorie\',label:\'Categorie\'}],\'categorie\',\'switchMagSub\')+
+    \'<div id="admin-sub"></div>\';
+  adminCategorieMag();
+}
+
+function switchMagSub(sub){
+  adminSub=sub;adminMagazzino();
+}
+
+async function adminCategorieMag(){
+  const {data,error}=await sb.from(\'categorie_magazzino\').select(\'*\').order(\'nome\');
+  if(error){document.getElementById(\'admin-sub\').innerHTML=\'<p style="color:var(--red)">Errore caricamento.</p>\';return;}
+  const tipiColori=[\'nessuno\',\'laminato\',\'laccato\',\'ferramenta\'];
+  const rows=(data||[]).map(function(c){
+    var optsColori=tipiColori.map(function(t){return \'<option value="\'+t+\'"\'+( c.tipo_colori===t?\' selected\':\'\')+\'>\'+t+\'</option>\';}).join(\'\');
+    return \'<tr>\'+
+      \'<td><input type="text" value="\'+c.nome+\'" data-id="\'+c.id+\'" data-campo="nome"\'+
+      \' style="border:none;background:transparent;width:180px;font-size:13px" onchange="adminSalvaCatMag(this)"></td>\'+
+      \'<td><input type="text" value="\'+c.codice+\'" data-id="\'+c.id+\'" data-campo="codice"\'+
+      \' style="border:none;background:transparent;width:140px;font-size:13px;font-family:monospace" onchange="adminSalvaCatMag(this)"></td>\'+
+      \'<td><select data-id="\'+c.id+\'" data-campo="tipo_colori" onchange="adminSalvaCatMag(this)"\'+
+      \' style="border:none;background:transparent;font-size:13px">\'+optsColori+\'</select></td>\'+
+      \'<td><input type="text" value="\'+( c.descrizione||\'\')+\'" data-id="\'+c.id+\'" data-campo="descrizione"\'+
+      \' placeholder="Descrizione" style="border:none;background:transparent;width:200px;font-size:13px" onchange="adminSalvaCatMag(this)"></td>\'+
+      \'<td style="text-align:right"><button class="btn btn-sm" style="color:var(--red)" data-cid="\'+c.id+\'" onclick="eliminaCategoriaMag(this.dataset.cid)">×</button></td>\'+
+      \'</tr>\';
+  }).join(\'\');
+  var html=\'<table style="width:100%"><thead><tr><th>Nome</th><th>Codice</th><th>Tipo colori</th><th>Descrizione</th><th></th></tr></thead>\'+
+    \'<tbody>\'+rows+\'</tbody></table>\';
+  document.getElementById(\'admin-sub\').innerHTML=adminCard(\'Categorie magazzino\',html,
+    \'<button class="btn btn-sm btn-red" onclick="aggiungiCategoriaMag()">+ Nuova categoria</button>\');
+}
+
+async function adminSalvaCatMag(el){
+  const id=el.dataset.id,campo=el.dataset.campo,valore=el.value.trim();
+  if(!id||!campo) return;
+  const {error}=await sb.from(\'categorie_magazzino\').update({[campo]:valore}).eq(\'id\',id);
+  if(error){toast(\'Errore: \'+error.message,\'err\');return;}
+  toast(\'Salvato\',\'ok\');
+  if(el.tagName!==\'SELECT\'){el.style.background=\'var(--green-bg)\';setTimeout(function(){el.style.background=\'transparent\';},1500);}
+}
+
+async function aggiungiCategoriaMag(){
+  const nome=prompt(\'Nome categoria (es. Pannello blindato):\');
+  if(!nome||!nome.trim()) return;
+  const codice=(prompt(\'Codice (es. PAN-BL):\')||nome.trim().toLowerCase().replace(/ /g,\'-\')).trim();
+  if(!codice) return;
+  const {error}=await sb.from(\'categorie_magazzino\').insert([{nome:nome.trim(),codice,tipo_colori:\'nessuno\'}]);
+  if(error){toast(\'Errore: \'+error.message,\'err\');return;}
+  toast(\'Categoria aggiunta\',\'ok\');
+  adminCategorieMag();
+}
+
+async function eliminaCategoriaMag(id){
+  if(!confirm(\'Eliminare questa categoria?\')) return;
+  const {error}=await sb.from(\'categorie_magazzino\').delete().eq(\'id\',id);
+  if(error){toast(\'Errore: \'+error.message,\'err\');return;}
+  toast(\'Eliminata\',\'ok\');
+  adminCategorieMag();
+}
+
 async function adminAgenti(){
   const [{data:agenti},{data:scala}] = await Promise.all([
     sb.from('agenti').select('*').order('cognome'),
