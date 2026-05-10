@@ -3516,7 +3516,7 @@ function aggiornaZoccoliPreview(hStr){
   }
   if(h<=hMag){
     el.innerHTML=\'<div style="background:var(--green-bg);border-radius:var(--radius);padding:10px 12px;font-size:12px;color:var(--green-tx)">\'+
-      \'✓ Taglio diretto: pannello H \'+hMag+\' mm → <strong>\'+h+\' mm</strong></div>\';
+      \'&#10003; Taglio diretto: pannello H \'+hMag+\' mm &rarr; <strong>\'+h+\' mm</strong></div>\';
   } else {
     let z=0;
     while(hMag+z*80<h) z++;
@@ -3525,7 +3525,7 @@ function aggiornaZoccoliPreview(hStr){
       el.innerHTML=\'<div style="background:var(--red-bg);border-radius:var(--radius);padding:10px 12px;font-size:12px;color:var(--red)">Altezza non raggiungibile.</div>\';
     } else {
       el.innerHTML=\'<div style="background:var(--amber-bg);border-radius:var(--radius);padding:10px 12px;font-size:12px;color:var(--amber-tx)">\'+
-        \'<strong>\'+z+\' zoccolo\'+( z>1?\'li\':\'\')+\'</strong> da 80 mm — \'+
+        \'<strong>\'+z+\' zoccolo\'+( z>1?\'li\':\'\')+\'</strong> da 80 mm &mdash; \'+
         \'pannello tagliato a <strong>\'+hT+\' mm</strong> + \'+z+\' x 80 mm = \'+h+\' mm</div>\';
     }
   }
