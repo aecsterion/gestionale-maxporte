@@ -3573,24 +3573,2829 @@ async function selAccPannello(){
   const hMag=panMag?.altezza_mm||0;
   const lMax=panMag?.larghezza_mm||0;
   if(lMax>0&&l>lMax){toast(\'Larghezza massima: \'+lMax+\' mm\',\'err\');return;}
-  CFG.senso=senso;
-  CFG.larghezza=l;
-  CFG.altezza=a;
-  CFG.misura_custom=true;
+  CFG.senso=senso;CFG.larghezza=l;CFG.altezza=a;CFG.misura_custom=true;
   CFG.p_extra=CFG._suppTaglioPannello||0;
-  // Calcola zoccoli
-  CFG._zoccoliAuto=0;
-  CFG._hTaglioPannello=a;
-  CFG._hMagPannello=hMag;
+  CFG._zoccoliAuto=0;CFG._hTaglioPannello=a;CFG._hMagPannello=hMag;
   if(hMag>0&&a>hMag){
-    let z=0;
-    while(hMag+z*80<a) z++;
+    let z=0; while(hMag+z*80<a) z++;
     const hT=a-z*80;
-    if(hT<=0){toast(\'Altezza non raggiungibile con i pannelli disponibili\',\'err\');return;}
-    CFG._zoccoliAuto=z;
-    CFG._hTaglioPannello=hT;
+    if(hT<=0){toast(\'Altezza non raggiungibile\',\'err\');return;}
+    CFG._zoccoliAuto=z;CFG._hTaglioPannello=hT;
   }
-  cfgUpdatePrice();
-  cfgRiepilogo();
+  cfgUpdatePrice();cfgRiepilogo();
 }
-;
+
+async function cfgRiepilogo(){
+  const tot = cfgTotale();
+  const desc = [
+    CFG.nome_serie, CFG.nome_modello, CFG.nome_finitura,
+    CFG.pannello_bugna?CFG.pannello_bugna:'',
+    CFG.nome_colore_alu||'', CFG.nome_colore_pietra||'',
+    CFG.nome_tipo_vetro||'',
+    CFG.nome_apertura, CFG.senso,
+    CFG.larghezza+'×'+CFG.altezza+' mm',
+    'sp.'+CFG.spessore+' mm',
+    CFG.nome_ferramenta||'',
+    CFG.nome_maniglia||''
+  ].filter(Boolean).join(' | ');
+
+  // Calcola valori effettivi per riepilogo
+  const p_fin_eff = (CFG._finitura_pct||0)>0 ? Math.round((CFG.p_base||0)*CFG._finitura_pct/100*100)/100 : (CFG.p_finitura||0);
+  const sub_eff = (CFG.p_base||0)+p_fin_eff+(CFG.p_apertura||0)+(CFG.p_telaio||0);
+  const p_misura_eff = (CFG._pct_misura||0)>0 ? Math.round(sub_eff*(CFG._pct_misura/100)*100)/100 : (CFG._p_misura||0);
+  const p_fh_eff = CFG._isFuoriH ? (CFG._fuori_h_pct ? Math.round(sub_eff*CFG._fuori_h_pct/100*100)/100 : CFG._p_fuori_h||0) : 0;
+  const p_fl_eff = CFG._isFuoriL ? Math.round((sub_eff+p_fh_eff)*CFG._fuori_l_pct/100*100)/100 : 0;
+  const p_doppia_eff = CFG._isDoppiaAnta ? ((CFG.p_base||0)+p_fin_eff+(CFG.p_telaio||0)+(CFG.apertura==='CS2A'?124:0)) : 0;
+
+  const righe_prezzo = [
+    {label:'Prezzo base porta',val:CFG.p_base},
+    CFG.p_vetro>0&&{label:'Vetro ('+CFG.nome_tipo_vetro+')',val:CFG.p_vetro},
+    p_fin_eff>0&&{label:'Finitura ('+(CFG._finitura_pct>0?'+'+CFG._finitura_pct+'%':'')+CFG.nome_finitura+')',val:p_fin_eff},
+    CFG.p_bugna>0&&{label:'Bugna',val:CFG.p_bugna},
+    CFG.p_inserto>0&&{label:'Inserto '+(CFG.nome_colore_alu||CFG.nome_colore_pietra),val:CFG.p_inserto},
+    CFG.p_apertura>0&&{label:'Supplemento apertura ('+CFG.nome_apertura+')',val:CFG.p_apertura},
+    (p_misura_eff)>0&&{label:'Supplemento misura'+(CFG._pct_misura>0?\` (+\${CFG._pct_misura}%)\`:''),val:p_misura_eff},
+    CFG.p_telaio>0&&{label:'Telaio / Spalla ('+CFG.spalla+')',val:CFG.p_telaio},
+    CFG.p_acc_telaio>0&&{label:'Accessorio telaio ('+CFG.accessorio_telaio+')',val:CFG.p_acc_telaio},
+    p_doppia_eff>0&&{label:'Supplemento doppia anta'+(CFG.apertura==='CS2A'?' incl. €124':''),val:p_doppia_eff},
+    p_fh_eff>0&&{label:'Supplemento fuori misura H'+(CFG._fuori_h_pct?\` (+\${CFG._fuori_h_pct}%)\`:''),val:p_fh_eff},
+    p_fl_eff>0&&{label:'Supplemento fuori misura L (+'+CFG._fuori_l_pct+'%)',val:p_fl_eff},
+    CFG._p_varsavia>0&&{label:'Staffe Varsavia (obbligatorie)',val:CFG._p_varsavia},
+    CFG.p_ferramenta>0&&{label:'Ferramenta ('+CFG.nome_ferramenta+')',val:CFG.p_ferramenta},
+    CFG.p_maniglia>0&&{label:'Maniglia ('+CFG.nome_maniglia+')',val:CFG.p_maniglia},
+    CFG.p_serratura>0&&{label:'Serratura ('+CFG.nome_serratura+')',val:CFG.p_serratura},
+    CFG.p_cilindro>0&&{label:'Cilindro ('+CFG.nome_cilindro+')',val:CFG.p_cilindro},
+    CFG.p_pomolino>0&&{label:'Pomolino WC',val:CFG.p_pomolino},
+    CFG.p_extra_incisioni>0&&{label:'Extra incisioni',val:CFG.p_extra_incisioni},
+  ].filter(Boolean);
+
+  document.getElementById('cfg-body').innerHTML=\`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:500">Riepilogo configurazione</div>
+      <button class="btn btn-sm" onclick="renderCfgStep('ferramenta')">← Modifica</button>
+    </div>
+    \${CFG.misura_custom?\`<div style="background:var(--red-bg);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--red-tx);margin-bottom:10px">⚠ Misura custom — questo ordine richiederà approvazione del responsabile tecnico</div>\`:''}
+    <div style="background:var(--beige);border-radius:var(--radius);padding:12px;margin-bottom:12px;font-size:12px;color:var(--mid);line-height:1.6">\${desc}</div>
+    <table style="width:100%;font-size:13px;margin-bottom:12px">
+      \${righe_prezzo.map(r=>\`<tr><td style="padding:3px 0;color:var(--mid)">\${r.label}</td><td style="text-align:right;font-weight:500">€ \${(r.val||0).toLocaleString('it-IT',{minimumFractionDigits:2})}</td></tr>\`).join('')}
+      <tr style="border-top:0.5px solid var(--border)"><td style="padding:8px 0;font-weight:500">Totale unitario</td><td style="text-align:right;font-size:16px;font-weight:500;color:var(--red)">€ \${tot.toLocaleString('it-IT',{minimumFractionDigits:2})}</td></tr>
+    </table>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+      <div>
+        <div style="font-size:11px;color:var(--mid);margin-bottom:4px">Quantità</div>
+        <input type="number" id="cfg-qty" value="\${CFG.quantita||1}" min="1" style="width:100%;padding:7px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit" oninput="CFG.quantita=parseInt(this.value)||1;cfgUpdatePrice()">
+      </div>
+      <div>
+        <div style="font-size:11px;color:var(--mid);margin-bottom:4px">Note riga</div>
+        <input type="text" id="cfg-note-riga" value="\${CFG.note_riga||''}" placeholder="Note specifiche su questa porta..." style="width:100%;padding:7px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit" oninput="CFG.note_riga=this.value">
+      </div>
+    </div>
+    <div style="margin-bottom:12px">
+      <div style="font-size:11px;color:var(--mid);margin-bottom:4px">Stanza <span style="font-weight:400;color:var(--mid)">(opzionale)</span></div>
+      <input type="text" id="cfg-stanza" value="\${CFG.stanza||''}" placeholder="es. Ingresso, Camera da letto..." style="width:100%;padding:7px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit" oninput="CFG.stanza=this.value">
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div style="font-size:11px;color:var(--mid)">Totale riga</div>
+        <div id="cfg-prezzo-totale" style="font-size:20px;font-weight:500;color:var(--red)">€ \${(tot*(CFG.quantita||1)).toLocaleString('it-IT',{minimumFractionDigits:2})}</div>
+      </div>
+      <button class="btn btn-red" onclick="aggiungiRigaAlDocumento()">+ Aggiungi al documento</button>
+    </div>\`;
+  cfgUpdatePrice();
+}
+
+async function aggiungiRigaAlDocumento(){
+  CFG.quantita = parseInt(document.getElementById('cfg-qty')?.value||1)||1;
+  CFG.note_riga = document.getElementById('cfg-note-riga')?.value||'';
+  CFG.stanza = document.getElementById('cfg-stanza')?.value||'';
+  const tot = cfgTotale();
+  const riga = {
+    codice_serie:CFG.serie, codice_modello:CFG.modello, nome_modello:CFG.nome_modello,
+    nome_serie:CFG.nome_serie,
+    codice_finitura:CFG.finitura, nome_finitura:CFG.nome_finitura,
+    pannello_bugna:CFG.pannello_bugna,
+    codice_colore_alu:CFG.colore_alu, nome_colore_alu:CFG.nome_colore_alu,
+    codice_colore_pietra:CFG.colore_pietra, nome_colore_pietra:CFG.nome_colore_pietra,
+    codice_tipo_vetro:CFG.tipo_vetro, nome_tipo_vetro:CFG.nome_tipo_vetro,
+    codice_apertura:CFG.apertura, nome_apertura:CFG.nome_apertura,
+    senso_apertura:CFG.senso,
+    larghezza_mm:CFG.larghezza, altezza_mm:CFG.altezza,
+    misura_custom:CFG.misura_custom, spessore_muro_cm:CFG.spessore,
+    codice_spalla:CFG.spalla, tipo_accessorio_telaio:CFG.accessorio_telaio,
+    codice_ferramenta:CFG.ferramenta, nome_ferramenta:CFG.nome_ferramenta,
+    codice_maniglia:CFG.maniglia, nome_maniglia:CFG.nome_maniglia,
+    codice_colore_maniglia:CFG.colore_maniglia, nome_colore_maniglia:CFG.nome_colore_maniglia||'',
+    prezzo_base:CFG.p_base, prezzo_vetro:CFG.p_vetro,
+    prezzo_finitura:CFG.p_finitura, prezzo_bugna:CFG.p_bugna,
+    prezzo_inserto:CFG.p_inserto, prezzo_apertura:CFG.p_apertura,
+    prezzo_telaio:CFG.p_telaio, prezzo_accessorio_telaio:CFG.p_acc_telaio,
+    prezzo_ferramenta:CFG.p_ferramenta, prezzo_maniglia:CFG.p_maniglia,
+    prezzo_extra_incisioni:CFG.p_extra_incisioni,
+    prezzo_unitario:tot, quantita:CFG.quantita,
+    prezzo_totale_riga:tot*CFG.quantita,
+    note_riga:CFG.note_riga,
+    stanza:CFG.stanza||null
+  };
+
+  if(CFG_TARGET_ID){
+    // Salvataggio diretto su documento esistente
+    const tabella = CFG_MODE==='preventivo'?'righe_preventivo':'righe_ordine';
+    const fk = CFG_MODE==='preventivo'?'preventivo_id':'ordine_id';
+    const {data:esistenti} = await sb.from(tabella).select('riga_numero').eq(fk,CFG_TARGET_ID).order('riga_numero',{ascending:false}).limit(1);
+    const nextNum = (esistenti?.[0]?.riga_numero||0)+1;
+    await sb.from(tabella).insert([{...riga,[fk]:CFG_TARGET_ID,riga_numero:nextNum}]);
+    // Aggiungi righe ZOC automatiche se pannello con zoccoli
+    if((CFG._zoccoliAuto||0)>0){
+      const {data:zocAcc} = await sb.from('modelli_accessori').select('*').eq('codice','ZOC').maybeSingle();
+      const lst = listino().toLowerCase();
+      const pZoc = zocAcc?(zocAcc['prezzo_'+lst]||0):0;
+      await sb.from(tabella).insert([{
+        [fk]:CFG_TARGET_ID, riga_numero:nextNum+1,
+        codice_serie:CFG.serie, nome_serie:CFG.nome_serie,
+        codice_modello:'ZOC', nome_modello:'Zoccolo pannello blindato',
+        codice_finitura:CFG.finitura, nome_finitura:CFG.nome_finitura,
+        quantita:CFG._zoccoliAuto,
+        prezzo_base:pZoc, prezzo_unitario:pZoc,
+        prezzo_totale_riga:pZoc*CFG._zoccoliAuto,
+        note_riga:'Zoccolo automatico (pannello H '+CFG._hMagPannello+' mm, H finita '+CFG.altezza+' mm)'
+      }]);
+    }
+    // Aggiorna totale documento
+    await ricalcolaTotale(CFG_TARGET_ID, CFG_MODE);
+    toast('Porta aggiunta','ok');
+    closeCfg();
+    if(CFG_MODE==='preventivo') renderPreventivoDetail(CFG_TARGET_ID);
+    else renderOrdineDetail(CFG_TARGET_ID);
+  } else {
+    // Accumulo locale (documento non ancora salvato)
+    CFG_RIGHE.push(riga);
+    if((CFG._zoccoliAuto||0)>0){
+      CFG_RIGHE.push({
+        codice_serie:CFG.serie, nome_serie:CFG.nome_serie,
+        codice_modello:'ZOC', nome_modello:'Zoccolo pannello blindato',
+        codice_finitura:CFG.finitura, nome_finitura:CFG.nome_finitura,
+        quantita:CFG._zoccoliAuto,
+        prezzo_base:0, prezzo_unitario:0, prezzo_totale_riga:0,
+        note_riga:'Zoccolo automatico (pannello H '+CFG._hMagPannello+' mm, H finita '+CFG.altezza+' mm)'
+      });
+    }
+    toast('Porta aggiunta — salva il documento per confermare','ok');
+    closeCfg();
+    renderNuovoDocBozza();
+  }
+  resetCFG();
+}
+
+async function ricalcolaTotale(docId, mode){
+  const tabRighe = mode==='preventivo'?'righe_preventivo':'righe_ordine';
+  const fk = mode==='preventivo'?'preventivo_id':'ordine_id';
+  const tabDoc = mode==='preventivo'?'preventivi':'ordini_vendita';
+  const {data:righe} = await sb.from(tabRighe).select('prezzo_totale_riga').eq(fk,docId);
+  const totImponibile = (righe||[]).reduce((s,r)=>s+(r.prezzo_totale_riga||0),0);
+  await sb.from(tabDoc).update({totale_imponibile:totImponibile}).eq('id',docId);
+}
+
+// ══════════════════════════════════════════════════════
+// PREVENTIVI
+// ══════════════════════════════════════════════════════
+async function renderPreventivi(){
+  try {
+    const {data,error} = await sb.from('preventivi')
+      .select('*,anagrafiche(ragione_sociale),agenti(nome,cognome)')
+      .order('created_at',{ascending:false});
+    if(error) throw error;
+    window._prevData = data||[];
+    const stats={bozza:0,inviato:0,firmato:0,rifiutato:0,confermato:0,non_concluso:0};
+    window._prevData.forEach(function(p){ if(stats[p.stato]!==undefined) stats[p.stato]++; });
+    document.getElementById('main-content').innerHTML=
+      '<div class="grid-4" style="margin-bottom:16px">'+
+      '<div class="metric"><div class="metric-label">Bozze</div><div class="metric-value">'+stats.bozza+'</div></div>'+
+      '<div class="metric"><div class="metric-label">Inviati</div><div class="metric-value">'+stats.inviato+'</div></div>'+
+      '<div class="metric"><div class="metric-label">Firmati</div><div class="metric-value" style="color:var(--green-tx)">'+stats.firmato+'</div></div>'+
+      '<div class="metric"><div class="metric-label">Confermati</div><div class="metric-value" style="color:var(--red)">'+stats.confermato+'</div></div>'+
+      '</div>'+
+      '<div class="card">'+
+        '<div class="card-header">'+
+          '<span class="card-title">Preventivi</span>'+
+          '<div style="display:flex;gap:8px;align-items:center">'+
+            '<input type="text" id="prev-cerca" placeholder="Cerca numero, cliente, riferimento... (piu parole = AND)" '+
+              'style="padding:6px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;width:340px" '+
+              'oninput="filtraPrev(this.value)">'+
+            '<button class="btn btn-red btn-sm" onclick="nuovoPreventivo()">+ Nuovo preventivo</button>'+
+          '</div>'+
+        '</div>'+
+        '<table>'+
+          '<thead><tr><th>N°</th><th>Cliente</th><th>Rif. cliente</th><th>Agente</th><th>Data</th><th>Scadenza</th><th>Listino</th><th>Totale netto</th><th>Stato</th></tr></thead>'+
+          '<tbody id="prev-tbody"></tbody>'+
+        '</table>'+
+      '</div>';
+    filtraPrev('');
+  } catch(e) {
+    console.error('renderPreventivi error:',e);
+    document.getElementById('main-content').innerHTML='<div class="card"><div style="padding:20px">'+
+      '<p style="color:var(--red);margin-bottom:12px">Errore: '+e.message+'</p>'+
+      '<button class="btn btn-red btn-sm" onclick="nuovoPreventivo()">+ Nuovo preventivo</button>'+
+      '</div></div>';
+  }
+}
+
+function filtraPrev(filtro){
+  var termini=(filtro||'').toLowerCase().split(/[\s,;]+/).filter(Boolean);
+  var data=window._prevData||[];
+  var filtered=termini.length?data.filter(function(p){
+    var h=[p.numero||'',p.anagrafiche&&p.anagrafiche.ragione_sociale||'',
+           p.riferimento_cliente||'',p.agenti?p.agenti.nome+' '+p.agenti.cognome:''].join(' ').toLowerCase();
+    return termini.every(function(t){return h.includes(t);});
+  }):data;
+  var tbody=document.getElementById('prev-tbody');
+  if(!tbody)return;
+  if(!filtered.length){
+    tbody.innerHTML='<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--mid);font-style:italic">'+(termini.length?'Nessun risultato':'Nessun preventivo')+'</td></tr>';
+    return;
+  }
+  tbody.innerHTML=filtered.map(function(p){
+    return '<tr class="data-row" onclick="renderPreventivoDetail(this.dataset.id)" data-id="'+p.id+'">'+
+      '<td><strong>'+(p.numero||'')+'</strong></td>'+
+      '<td>'+(p.anagrafiche&&p.anagrafiche.ragione_sociale||'&#8212;')+'</td>'+
+      '<td>'+(p.riferimento_cliente||'&#8212;')+'</td>'+
+      '<td>'+(p.agenti?p.agenti.nome+' '+p.agenti.cognome:'&#8212;')+'</td>'+
+      '<td>'+fmtData(p.data_creazione)+'</td>'+
+      '<td>'+fmtData(p.data_scadenza)+'</td>'+
+      '<td><span class="tag">'+(p.listino||'')+'</span></td>'+
+      '<td>'+fmtEuro(p.totale_netto||p.totale_imponibile)+'</td>'+
+      '<td>'+badgeStato(p.stato)+'</td>'+
+      '</tr>';
+  }).join('');
+}
+
+async function apriModificaPreventivo(id){
+  const {data:prev}=await sb.from('preventivi').select('*').eq('id',id).single();
+  if(!prev){toast('Preventivo non trovato','err');return;}
+  if(prev.stato==='confermato'){toast('Preventivo confermato: non modificabile','err');return;}
+  const [{data:clienti},{data:agenti}]=await Promise.all([
+    sb.from('anagrafiche').select('*').order('ragione_sociale'),
+    sb.from('agenti').select('*').eq('attivo',true).order('cognome'),
+  ]);
+  CFG_RIGHE=[];
+  const modal=ensureModalInBody('modal-nuovo-doc');
+  modal.dataset.mode='preventivo';
+  modal.dataset.editId=id;
+  document.getElementById('ndoc-title').textContent='Modifica preventivo';
+  document.getElementById('ndoc-clienti').innerHTML='<option value="">Seleziona...</option>'+(clienti||[]).map(function(c){
+    return '<option value="'+c.id+'"'+(c.id===prev.anagrafica_id?' selected':'')+
+      ' data-listino="'+(c.listino||'A')+'" data-sa="'+(c.sconto_dedicato_A||0)+
+      '" data-sp="'+(c.sconto_dedicato_P||0)+'" data-ind="'+(c.indirizzo||'')+
+      '" data-cap="'+(c.cap||'')+'" data-cit="'+(c.citta||'')+'" data-prv="'+(c.provincia||'')+'">'+
+      c.ragione_sociale+'</option>';
+  }).join('');
+  document.getElementById('ndoc-agenti').innerHTML='<option value="">Nessun agente</option>'+(agenti||[]).map(function(a){
+    return '<option value="'+a.id+'"'+(a.id===prev.agente_id?' selected':'')+'>'+a.cognome+' '+a.nome+'</option>';
+  }).join('');
+  document.getElementById('ndoc-listino').value=prev.listino||'A';
+  document.getElementById('ndoc-sconto1').value=prev.sconto1||0;
+  var s2=document.getElementById('ndoc-sconto2');if(s2)s2.value=prev.sconto2||0;
+  var tr=document.getElementById('ndoc-trasporto');if(tr)tr.value=prev.trasporto||'Max Porte';
+  var re=document.getElementById('ndoc-resa');if(re)re.value=prev.resa||'Franco fabbrica';
+  var rif=document.getElementById('ndoc-rif-cliente');if(rif)rif.value=prev.riferimento_cliente||'';
+  document.getElementById('ndoc-ind').value=prev.indirizzo_destinazione||'';
+  document.getElementById('ndoc-cap').value=prev.cap_destinazione||'';
+  document.getElementById('ndoc-cit').value=prev.citta_destinazione||'';
+  document.getElementById('ndoc-prv').value=prev.provincia_destinazione||'';
+  var no=document.getElementById('ndoc-note');if(no)no.value=prev.note||'';
+  const {data:righe}=await sb.from('righe_preventivo').select('*').eq('preventivo_id',id).order('riga_numero',{ascending:true});
+  CFG_RIGHE=(righe||[]).map(function(r){return Object.assign({},r);});
+  aggiornaTotaleNdoc();
+  modal.classList.add('open');
+}
+
+
+async function nuovoPreventivo(){
+  try {
+    const [{data:clienti},{data:agenti}] = await Promise.all([
+      sb.from('anagrafiche').select('*').order('ragione_sociale'),
+      sb.from('agenti').select('*').eq('attivo',true).order('cognome'),
+    ]);
+    CFG_RIGHE=[];
+    const modal = ensureModalInBody('modal-nuovo-doc');
+    if(!modal){ toast('Errore: modal non trovato','err'); return; }
+    modal.dataset.mode='preventivo';
+    document.getElementById('ndoc-title').textContent='Nuovo preventivo';
+    document.getElementById('ndoc-clienti').innerHTML='<option value="">Seleziona cliente...</option>'+(clienti||[]).map(c=>\`<option value="\${c.id}" data-listino="\${c.listino||'A'}" data-sa="\${c.sconto_dedicato_A||0}" data-sp="\${c.sconto_dedicato_P||0}" data-ind="\${c.indirizzo||''}" data-cap="\${c.cap||''}" data-cit="\${c.citta||''}" data-prv="\${c.provincia||''}">\${c.ragione_sociale}</option>\`).join('');
+    document.getElementById('ndoc-agenti').innerHTML='<option value="">Nessun agente</option>'+(agenti||[]).map(a=>\`<option value="\${a.id}">\${a.cognome} \${a.nome}</option>\`).join('');
+    document.getElementById('ndoc-righe-list').innerHTML='<div style="text-align:center;padding:20px;color:var(--mid);font-size:13px;font-style:italic">Nessuna porta aggiunta ancora — clicca "+ Aggiungi porta"</div>';
+    document.getElementById('ndoc-totale').textContent='€ 0,00';
+    modal.classList.add('open');
+  } catch(e) {
+    console.error('nuovoPreventivo error:', e);
+    toast('Errore apertura preventivo: '+e.message,'err');
+  }
+}
+
+async function ndocClienteChange(sel){
+  const opt = sel.options[sel.selectedIndex];
+  if(!opt.value) return;
+
+  // Carica dati completi del cliente da Supabase
+  const {data:cliente} = await sb.from('anagrafiche').select('*').eq('id',opt.value).single();
+  if(!cliente) return;
+
+  // Listino e sconti
+  const listino = cliente.listino||'A';
+  document.getElementById('ndoc-listino').value = listino;
+  const sconto = listino==='A' ? (cliente.sconto_dedicato_A||0) : (cliente.sconto_dedicato_P||0);
+  document.getElementById('ndoc-sconto1').value = sconto;
+
+  // Indirizzo destinazione
+  document.getElementById('ndoc-ind').value = cliente.indirizzo||'';
+  document.getElementById('ndoc-cap').value = cliente.cap||'';
+  document.getElementById('ndoc-cit').value = cliente.citta||'';
+  document.getElementById('ndoc-prv').value = cliente.provincia||'';
+
+  // Agente collegato al cliente
+  if(cliente.agente_id){
+    const agenteSel = document.getElementById('ndoc-agenti');
+    if(agenteSel){
+      // Seleziona l'agente se presente nella lista
+      const opt = Array.from(agenteSel.options).find(o=>o.value===cliente.agente_id);
+      if(opt) agenteSel.value = cliente.agente_id;
+    }
+  }
+
+  // Feedback visivo — mostra tooltip con dati compilati
+  const info = [];
+  if(listino) info.push(\`Listino \${listino}\`);
+  if(sconto>0) info.push(\`Sconto \${sconto}%\`);
+  if(cliente.condizioni_pagamento) info.push(cliente.condizioni_pagamento);
+  if(info.length>0) toast('Cliente: '+info.join(' · '),'ok');
+
+  aggiornaTotaleNdoc();
+}
+
+function aggiornaTotaleNdoc(){
+  const sc1=parseFloat(document.getElementById('ndoc-sconto1')?.value||0)/100;
+  const sc2=parseFloat(document.getElementById('ndoc-sconto2')?.value||0)/100;
+  const imponibile=CFG_RIGHE.reduce((s,r)=>s+(r.prezzo_totale_riga||0),0);
+  const dopoSc1=imponibile*(1-sc1);
+  const netto=dopoSc1*(1-sc2);
+  const scTot=((1-(1-sc1)*(1-sc2))*100).toFixed(2);
+  document.getElementById('ndoc-totale').textContent=fmtEuro(netto);
+  // mostra dettaglio sconti se applicati
+  const detEl=document.getElementById('ndoc-sconto-detail');
+  if(detEl){
+    if(sc1>0||sc2>0){
+      detEl.innerHTML=\`<span style="font-size:11px;color:var(--mid)">Imponibile \${fmtEuro(imponibile)} → sconto effettivo \${scTot}%</span>\`;
+    } else {
+      detEl.innerHTML='';
+    }
+  }
+  // aggiorna lista righe
+  const list=document.getElementById('ndoc-righe-list');
+  if(CFG_RIGHE.length===0){
+    list.innerHTML='<div style="text-align:center;padding:20px;color:var(--mid);font-size:13px;font-style:italic">Nessuna porta aggiunta ancora</div>';
+    return;
+  }
+  list.innerHTML=CFG_RIGHE.map((r,i)=>\`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid var(--border)">
+      <div>
+        <div style="font-size:13px;font-weight:500">\${r.nome_serie||''} \${r.nome_modello||''} — \${r.nome_finitura||''}</div>
+        <div style="font-size:11px;color:var(--mid)">\${[r.nome_apertura,r.senso_apertura,r.larghezza_mm&&r.larghezza_mm+'×'+r.altezza_mm+' mm','sp.'+(r.spessore_muro_mm||'?')+' mm'].filter(Boolean).join(' | ')}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="text-align:right">
+          <div style="font-size:11px;color:var(--mid)">×\${r.quantita} — list. \${fmtEuro(r.prezzo_totale_riga)}</div>
+          <div style="font-size:14px;font-weight:500;color:var(--red)">\${fmtEuro(r.prezzo_totale_riga*(1-sc1)*(1-sc2))}</div>
+        </div>
+        <button onclick="rimuoviRigaNdoc(\${i})" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:18px;padding:0 4px;line-height:1">×</button>
+      </div>
+    </div>\`).join('');
+}
+
+function rimuoviRigaNdoc(i){ CFG_RIGHE.splice(i,1); aggiornaTotaleNdoc(); }
+
+function ndocAggiungiPorta(){
+  const listino = document.getElementById('ndoc-listino')?.value||'A';
+  window._prevListino=listino;
+  CFG_TARGET_ID=null;
+  CFG_MODE=document.getElementById('modal-nuovo-doc').dataset.mode;
+  resetCFG();
+  renderCfgStep('serie');
+  ensureModalInBody('modal-cfg').classList.add('open');
+}
+
+function renderNuovoDocBozza(){ aggiornaTotaleNdoc(); }
+
+async function salvaNuovoDoc(){
+  try {
+    const mode = document.getElementById('modal-nuovo-doc').dataset.mode;
+    const clienteId=document.getElementById('ndoc-clienti').value;
+    if(!clienteId){ toast('Seleziona un cliente','err'); return; }
+    if(CFG_RIGHE.length===0){ toast('Aggiungi almeno una porta','err'); return; }
+
+    const listino=document.getElementById('ndoc-listino').value||'A';
+    const sc1=parseFloat(document.getElementById('ndoc-sconto1').value||0);
+    const sc2=parseFloat(document.getElementById('ndoc-sconto2').value||0);
+    const agenteId=document.getElementById('ndoc-agenti').value||null;
+    const trasporto=document.getElementById('ndoc-trasporto').value||'Max Porte';
+    const note=document.getElementById('ndoc-note').value||null;
+    const ind=document.getElementById('ndoc-ind').value||null;
+    const cap=document.getElementById('ndoc-cap').value||null;
+    const cit=document.getElementById('ndoc-cit').value||null;
+    const prv=document.getElementById('ndoc-prv').value||null;
+
+    const imponibile=CFG_RIGHE.reduce((s,r)=>s+(r.prezzo_totale_riga||0),0);
+    const netto=imponibile*(1-(sc1/100))*(1-(sc2/100));
+    const haCustom=CFG_RIGHE.some(r=>r.misura_custom);
+
+    // Provvigione agente
+    const scontoEff=((1-(1-sc1/100)*(1-sc2/100))*100);
+    let provvPct=0, provvEuro=0;
+    if(agenteId){
+      try {
+        provvPct = await calcolaProvvigione(agenteId, scontoEff);
+        provvEuro = Math.round(netto*(provvPct/100)*100)/100;
+      } catch(e){ provvPct=0; provvEuro=0; }
+    }
+
+    const tabDoc = mode==='preventivo'?'preventivi':'ordini_vendita';
+    const editId = document.getElementById('modal-nuovo-doc').dataset.editId || null;
+
+    const docData = {
+      anagrafica_id:clienteId, agente_id:agenteId||null,
+      listino, sconto1:sc1, sconto2:sc2,
+      indirizzo_destinazione:ind, cap_destinazione:cap,
+      citta_destinazione:cit, provincia_destinazione:prv,
+      trasporto,
+      resa: document.getElementById('ndoc-resa')?.value || 'Franco fabbrica',
+      riferimento_cliente: document.getElementById('ndoc-rif-cliente')?.value?.trim() || null,
+      note,
+      totale_imponibile:imponibile, totale_netto:netto,
+      provvigione_pct:provvPct, provvigione_euro:provvEuro,
+      ...(mode==='ordine'?{richiede_approvazione_tecnica:haCustom}:{})
+    };
+
+    let docId, docNumero;
+    const RIGHE_FIELDS = ['codice_serie','nome_serie','codice_modello','nome_modello','codice_finitura','nome_finitura','pannello_bugna','codice_colore_alu','nome_colore_alu','codice_colore_pietra','nome_colore_pietra','codice_tipo_vetro','nome_tipo_vetro','codice_apertura','nome_apertura','senso_apertura','larghezza_mm','altezza_mm','misura_custom','spessore_muro_cm','spessore_muro_mm','codice_spalla','tipo_accessorio_telaio','codice_ferramenta','nome_ferramenta','codice_maniglia','nome_maniglia','codice_colore_maniglia','nome_colore_maniglia','prezzo_base','prezzo_vetro','prezzo_finitura','prezzo_bugna','prezzo_inserto','prezzo_apertura','prezzo_telaio','prezzo_accessorio_telaio','prezzo_ferramenta','prezzo_maniglia','prezzo_extra_incisioni','prezzo_unitario','quantita','sconto_riga','prezzo_totale_riga','note_riga','stanza'];
+
+    if(editId){
+      // MODIFICA — update del documento esistente (senza toccare numero/creato_da)
+      docData.data_ultima_modifica = new Date().toISOString();
+      // Se il preventivo era già stato inviato, torna a bozza — va reinviato
+      if(mode==='preventivo') docData.stato = 'bozza';
+      const {data:updated, error} = await sb.from(tabDoc).update(docData).eq('id',editId).select().single();
+      if(error){ toast('Errore aggiornamento: '+error.message,'err'); return; }
+      docId = editId;
+      docNumero = updated.numero;
+
+      // Elimina le righe vecchie e reinserisce quelle aggiornate
+      const tabRighe = mode==='preventivo'?'righe_preventivo':'righe_ordine';
+      const fk = mode==='preventivo'?'preventivo_id':'ordine_id';
+      await sb.from(tabRighe).delete().eq(fk, editId);
+      const righe = CFG_RIGHE.map((r,i)=>{const o={[fk]:editId,riga_numero:i+1};RIGHE_FIELDS.forEach(k=>{if(r[k]!==undefined)o[k]=r[k];});return o;});
+      const {error:errRighe} = await sb.from(tabRighe).insert(righe);
+      if(errRighe){ toast('Errore salvataggio righe: '+errRighe.message,'err'); return; }
+
+    } else {
+      // CREAZIONE — insert nuovo documento
+      const anno = new Date().getFullYear();
+      const seq = String(Date.now()).slice(-5);
+      const prefisso = mode==='preventivo'?'PRV':'ORD';
+      docData.numero = \`\${prefisso}-\${anno}-\${seq}\`;
+      docData.creato_da = currentUser?.id;
+      docData.nome_compilatore = currentNomeUtente||currentUser?.email||'—';
+
+      const {data:doc, error} = await sb.from(tabDoc).insert([docData]).select().single();
+      if(error){ toast('Errore salvataggio: '+error.message,'err'); return; }
+      docId = doc.id;
+      docNumero = doc.numero;
+
+      const tabRighe = mode==='preventivo'?'righe_preventivo':'righe_ordine';
+      const fk = mode==='preventivo'?'preventivo_id':'ordine_id';
+      const righe = CFG_RIGHE.map((r,i)=>{const o={[fk]:docId,riga_numero:i+1};RIGHE_FIELDS.forEach(k=>{if(r[k]!==undefined)o[k]=r[k];});return o;});
+      const {error:errRighe} = await sb.from(tabRighe).insert(righe);
+      if(errRighe){ toast('Errore salvataggio righe: '+errRighe.message,'err'); return; }
+    }
+
+    toast(docNumero+(editId?' aggiornato':' salvato')+' con successo','ok');
+    document.getElementById('modal-nuovo-doc').classList.remove('open');
+    delete document.getElementById('modal-nuovo-doc').dataset.editId;
+    CFG_RIGHE=[];
+    if(mode==='preventivo') editId ? renderPreventivoDetail(docId) : renderPreventivi();
+    else editId ? renderOrdineDetail(docId) : renderOrdiniDiretti();
+
+  } catch(e) {
+    console.error('salvaNuovoDoc error:', e);
+    toast('Errore imprevisto: '+e.message,'err');
+  }
+}
+
+async function renderPreventivoDetail(id){
+  const [{data:prev},{data:righe}] = await Promise.all([
+    sb.from('preventivi').select('*,anagrafiche(ragione_sociale,partita_iva),agenti(nome,cognome)').eq('id',id).single(),
+    sb.from('righe_preventivo').select('*').eq('preventivo_id',id).order('riga_numero'),
+  ]);
+  if(!prev) return;
+  CFG_TARGET_ID=id; CFG_MODE='preventivo';
+  window._prevListino=prev.listino;
+
+  const sc1=prev.sconto1||0; const sc2=prev.sconto2||0;
+  const netto=prev.totale_imponibile*(1-sc1/100)*(1-sc2/100);
+
+  const rowsRighe=(righe||[]).map(r=>\`
+    <tr>
+      <td style="font-size:12px;font-weight:500">\${r.riga_numero}</td>
+      <td>
+        <div style="font-size:13px;font-weight:500">\${r.nome_modello||''}</div>
+        <div style="font-size:11px;color:var(--mid)">\${[r.nome_finitura,r.pannello_bugna,r.nome_apertura,r.senso_apertura,r.larghezza_mm&&r.larghezza_mm+'×'+r.altezza_mm+' mm','sp.'+(r.spessore_muro_mm||'?')+' mm',r.nome_ferramenta,r.nome_maniglia].filter(Boolean).join(' | ')}</div>
+        \${r.misura_custom?'<span style="font-size:10px;background:var(--red-bg);color:var(--red-tx);padding:1px 5px;border-radius:3px">Custom</span>':''}
+      </td>
+      <td style="text-align:center">\${r.quantita}</td>
+      <td style="text-align:right">\${fmtEuro(r.prezzo_unitario)}</td>
+      <td style="text-align:right;font-weight:500">\${fmtEuro(r.prezzo_totale_riga)}</td>
+      <td><button class="btn btn-sm" style="color:var(--red)" onclick="eliminaRiga('righe_preventivo','\${r.id}','\${id}','preventivo')">×</button></td>
+    </tr>\`).join('');
+
+  document.getElementById('main-content').innerHTML=\`
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+    <div>
+      <button class="btn btn-sm" onclick="renderPreventivi()">← Tutti i preventivi</button>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-sm" onclick="openConfiguratore('preventivo','\${id}','\${prev.listino}')">+ Aggiungi porta</button>
+      <button class="btn btn-sm" onclick="esportaPDF('preventivo','\${id}')">📄 Esporta PDF</button>
+      \${prev.stato==='bozza'?\`<button class="btn btn-sm" onclick="apriModalInvioPreventivo('\${id}')" style="display:inline-flex;align-items:center;gap:5px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>Invia</button>\`:''}
+      \${prev.stato==='inviato'?\`<button class="btn btn-red btn-sm" onclick="firmaPreventivo('\${id}')">Firma e converti in ordine</button>\`:''}
+      \${prev.stato!=='confermato'?\`<button class="btn btn-sm" onclick="apriModificaPreventivo('\${id}')" style="display:inline-flex;align-items:center;gap:5px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Modifica</button>\`:''}
+      \${prev.stato==='bozza'||prev.stato==='inviato'?\`<button class="btn btn-sm" style="color:var(--red);display:inline-flex;align-items:center;gap:5px" onclick="cambiaStatoPreventivo('\${id}','non_concluso')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>Non concluso</button>\`:''}
+      \${prev.stato!=='confermato'?\`<button class="btn btn-sm" style="color:var(--red);display:inline-flex;align-items:center;gap:5px" onclick="eliminaPreventivo('\${id}')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>Elimina</button>\`:''}
+
+    </div>
+  </div>
+  <div class="grid-2" style="margin-bottom:14px">
+    <div class="card">
+      <div class="card-title">Intestazione preventivo</div>
+      <table style="font-size:13px">
+        <tr><td style="color:var(--mid);padding:3px 0;width:130px">N° Preventivo</td><td><strong>\${prev.numero}</strong></td></tr>
+        <tr><td style="color:var(--mid);padding:3px 0">Cliente</td><td>\${prev.anagrafiche?.ragione_sociale||'—'}</td></tr>
+        <tr><td style="color:var(--mid);padding:3px 0">Agente</td><td>\${prev.agenti?prev.agenti.nome+' '+prev.agenti.cognome:'—'}</td></tr>
+        <tr><td style="color:var(--mid);padding:3px 0">Data</td><td>\${fmtData(prev.data_creazione)}</td></tr>
+        \${prev.data_ultima_modifica?\`<tr><td style="color:var(--mid);padding:3px 0">Ultima modifica</td><td>\${fmtData(prev.data_ultima_modifica)}</td></tr>\`:''}
+        <tr><td style="color:var(--mid);padding:3px 0">Listino</td><td><span class="tag">\${prev.listino}</span></td></tr>
+        <tr><td style="color:var(--mid);padding:3px 0">Trasporto</td><td>\${prev.trasporto||'—'}</td></tr>
+        <tr><td style="color:var(--mid);padding:3px 0;width:130px">Stato</td><td>\${badgeStato(prev.stato)}</td></tr>
+        \${prev.nome_compilatore?\`<tr><td style="color:var(--mid);padding:3px 0">Compilato da</td><td style="font-size:12px">\${prev.nome_compilatore}</td></tr>\`:''}
+      </table>
+    </div>
+    <div class="card">
+      <div class="card-title">Riepilogo economico</div>
+      <table style="font-size:13px">
+        <tr><td style="color:var(--mid);padding:3px 0;width:130px">Imponibile</td><td style="text-align:right">\${fmtEuro(prev.totale_imponibile)}</td></tr>
+        <tr><td style="color:var(--mid);padding:3px 0">Sconto 1</td><td style="text-align:right">\${sc1}%</td></tr>
+        <tr><td style="color:var(--mid);padding:3px 0">Sconto 2</td><td style="text-align:right">\${sc2||0}%</td></tr>
+        <tr style="border-top:0.5px solid var(--border)"><td style="padding:6px 0;font-weight:500">Totale netto</td><td style="text-align:right;font-size:18px;font-weight:500;color:var(--red)">\${fmtEuro(netto)}</td></tr>
+      </table>
+      \${prev.note?\`<div style="margin-top:10px;font-size:12px;color:var(--mid)">\${prev.note}</div>\`:''}
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header"><span class="card-title">Righe preventivo (\${righe?.length||0} porte)</span></div>
+    <table>
+      <thead><tr><th>#</th><th>Descrizione</th><th style="text-align:center">Q.tà</th><th style="text-align:right">Unitario</th><th style="text-align:right">Totale riga</th><th></th></tr></thead>
+      <tbody>\${rowsRighe||'<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--mid);font-style:italic">Nessuna porta — clicca "+ Aggiungi porta"</td></tr>'}</tbody>
+    </table>
+  </div>\`;
+}
+
+async function eliminaRiga(tabella, rigaId, docId, mode){
+  if(!confirm('Eliminare questa riga?')) return;
+  await sb.from(tabella).delete().eq('id',rigaId);
+  // Rinumera le righe rimanenti in sequenza
+  const fk = mode==='preventivo' ? 'preventivo_id' : 'ordine_id';
+  const {data:rimanenti} = await sb.from(tabella).select('id,riga_numero').eq(fk,docId).order('riga_numero',{ascending:true});
+  if(rimanenti && rimanenti.length){
+    for(let i=0;i<rimanenti.length;i++){
+      if(rimanenti[i].riga_numero !== i+1){
+        await sb.from(tabella).update({riga_numero:i+1}).eq('id',rimanenti[i].id);
+      }
+    }
+  }
+  await ricalcolaTotale(docId, mode);
+  if(mode==='preventivo') renderPreventivoDetail(docId);
+  else renderOrdineDetail(docId);
+  toast('Riga eliminata','ok');
+}
+
+async function cambiaStato(tabella, id, stato, callback){
+  await sb.from(tabella).update({stato}).eq('id',id);
+  toast('Stato aggiornato: '+stato,'ok');
+  if(callback==='renderPreventivoDetail') renderPreventivoDetail(id);
+  else if(callback==='renderOrdineDetail') renderOrdineDetail(id);
+}
+
+async function cambiaStatoPreventivo(id,nuovoStato){
+  if(!confirm("Segnare come "+nuovoStato.replace("_"," ")+"?"))return;
+  const {error}=await sb.from("preventivi").update({stato:nuovoStato}).eq("id",id);
+  if(error){toast("Errore: "+error.message,"err");return;}
+  toast("Stato aggiornato","ok");renderPreventivoDetail(id);
+}
+
+async function eliminaPreventivo(id){
+  if(!confirm("Eliminare definitivamente questo preventivo?"))return;
+  await sb.from("righe_preventivo").delete().eq("preventivo_id",id);
+  const {error}=await sb.from("preventivi").delete().eq("id",id);
+  if(error){toast("Errore: "+error.message,"err");return;}
+  toast("Preventivo eliminato","ok");renderPreventivi();
+}
+
+async function firmaPreventivo(prevId){
+  if(!confirm('Convertire questo preventivo in ordine?')) return;
+  const {data:prev} = await sb.from('preventivi').select('*').eq('id',prevId).single();
+  const {data:righe} = await sb.from('righe_preventivo').select('*').eq('preventivo_id',prevId);
+  const haCustom=(righe||[]).some(r=>r.misura_custom);
+  const numero='ORD-'+new Date().getFullYear()+'-'+String(Date.now()).slice(-4);
+  const {data:ord} = await sb.from('ordini_vendita').insert([{
+    numero, preventivo_id:prevId,
+    anagrafica_id:prev.anagrafica_id, agente_id:prev.agente_id,
+    listino:prev.listino, sconto1:prev.sconto1, sconto2:prev.sconto2,
+    indirizzo_destinazione:prev.indirizzo_destinazione,
+    cap_destinazione:prev.cap_destinazione,
+    citta_destinazione:prev.citta_destinazione,
+    provincia_destinazione:prev.provincia_destinazione,
+    trasporto:prev.trasporto, note:prev.note,
+    totale_imponibile:prev.totale_imponibile,
+    totale_netto:prev.totale_netto||prev.totale_imponibile,
+    richiede_approvazione_tecnica:haCustom,
+    stato:'in_attesa', creato_da:currentUser?.id, nome_compilatore:currentNomeUtente||currentUser?.email||'—'
+  }]).select().single();
+
+  if(ord?.data||ord){
+    const ordId = ord.data?.id||ord.id;
+    const righeOrd=(righe||[]).map(r=>({
+      ...r, id:undefined, ordine_id:ordId,
+      riga_preventivo_id:r.id, preventivo_id:undefined
+    }));
+    await sb.from('righe_ordine').insert(righeOrd);
+    await sb.from('preventivi').update({stato:'firmato'}).eq('id',prevId);
+    toast(numero+' creato — in attesa di approvazione','ok');
+    renderPreventivi();
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// ORDINI DIRETTI
+// ══════════════════════════════════════════════════════
+async function renderOrdiniDiretti(){
+  try {
+    const {data,error} = await sb.from('ordini_vendita')
+      .select('*,anagrafiche(ragione_sociale),agenti(nome,cognome)')
+      .order('created_at',{ascending:false});
+    if(error) throw error;
+
+  const rows=(data||[]).map(o=>\`<tr class="data-row" onclick="renderOrdineDetail('\${o.id}')">
+    <td><strong>\${o.numero}</strong></td>
+    <td>\${o.anagrafiche?.ragione_sociale||'—'}</td>
+    <td>\${o.agenti?o.agenti.nome+' '+o.agenti.cognome:'—'}</td>
+    <td>\${o.preventivo_id?'<span class="badge bb">Da prev.</span>':'<span class="badge bgr">Diretto</span>'}</td>
+    <td>\${fmtData(o.data_ordine)}</td>
+    <td>\${fmtEuro(o.totale_netto||o.totale_imponibile)}</td>
+    <td>\${badgeStato(o.stato)}</td>
+    <td>\${o.richiede_approvazione_tecnica?'<span class="badge br">Tecnica</span>':'<span class="badge bg">Standard</span>'}</td>
+  </tr>\`).join('');
+
+  document.getElementById('main-content').innerHTML=\`
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Ordini</span>
+      <button class="btn btn-red btn-sm" onclick="nuovoOrdineDiretto()">+ Nuova conferma d'ordine</button>
+    </div>
+    <table>
+      <thead><tr><th>N°</th><th>Cliente</th><th>Agente</th><th>Origine</th><th>Data</th><th>Totale netto</th><th>Stato</th><th>Approvazione</th></tr></thead>
+      <tbody>\${rows||'<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--mid);font-style:italic">Nessun ordine ancora</td></tr>'}</tbody>
+    </table>
+  </div>\`;
+  } catch(e) {
+    console.error('renderOrdiniDiretti error:',e);
+    document.getElementById('main-content').innerHTML=\`<div class="card">
+      <div style="padding:20px">
+        <p style="color:var(--red);margin-bottom:12px">Errore caricamento ordini: \${e.message}</p>
+        <button class="btn btn-red btn-sm" onclick="nuovoOrdineDiretto()">+ Nuova conferma d'ordine</button>
+      </div>
+    </div>\`;
+  }
+}
+
+async function nuovoOrdineDiretto(){
+  try {
+    const [{data:clienti},{data:agenti}] = await Promise.all([
+      sb.from('anagrafiche').select('*').order('ragione_sociale'),
+      sb.from('agenti').select('*').eq('attivo',true).order('cognome'),
+    ]);
+    CFG_RIGHE=[];
+    const modal=ensureModalInBody('modal-nuovo-doc');
+    if(!modal){ toast('Errore: modal non trovato','err'); return; }
+    modal.dataset.mode='ordine';
+    document.getElementById('ndoc-title').textContent="Nuova conferma d'ordine";
+    document.getElementById('ndoc-clienti').innerHTML='<option value="">Seleziona cliente...</option>'+(clienti||[]).map(c=>\`<option value="\${c.id}" data-listino="\${c.listino||'A'}" data-sa="\${c.sconto_dedicato_A||0}" data-sp="\${c.sconto_dedicato_P||0}" data-ind="\${c.indirizzo||''}" data-cap="\${c.cap||''}" data-cit="\${c.citta||''}" data-prv="\${c.provincia||''}">\${c.ragione_sociale}</option>\`).join('');
+    document.getElementById('ndoc-agenti').innerHTML='<option value="">Nessun agente</option>'+(agenti||[]).map(a=>\`<option value="\${a.id}">\${a.cognome} \${a.nome}</option>\`).join('');
+    document.getElementById('ndoc-righe-list').innerHTML='<div style="text-align:center;padding:20px;color:var(--mid);font-size:13px;font-style:italic">Nessuna porta ancora</div>';
+    document.getElementById('ndoc-totale').textContent='€ 0,00';
+    modal.classList.add('open');
+  } catch(e) {
+    console.error('nuovoOrdineDiretto error:', e);
+    toast('Errore apertura ordine: '+e.message,'err');
+  }
+}
+
+async function renderOrdineDetail(id){
+  const [{data:ord},{data:righe}] = await Promise.all([
+    sb.from('ordini_vendita').select('*,anagrafiche(ragione_sociale),agenti(nome,cognome)').eq('id',id).single(),
+    sb.from('righe_ordine').select('*').eq('ordine_id',id).order('riga_numero'),
+  ]);
+  if(!ord) return;
+  CFG_TARGET_ID=id; CFG_MODE='ordine';
+  window._prevListino=ord.listino;
+
+  const possoApprovareComm = isRespComm();
+  const possoApprovaTec = isRespTec();
+
+  const rowsRighe=(righe||[]).map(r=>\`
+    <tr>
+      <td style="font-size:12px;font-weight:500">\${r.riga_numero}</td>
+      <td>
+        <div style="font-size:13px;font-weight:500">\${r.nome_modello||''}</div>
+        <div style="font-size:11px;color:var(--mid)">\${[r.nome_finitura,r.pannello_bugna,r.nome_apertura,r.senso_apertura,r.larghezza_mm&&r.larghezza_mm+'×'+r.altezza_mm+' mm','sp.'+(r.spessore_muro_mm||'?')+' mm',r.nome_ferramenta,r.nome_maniglia].filter(Boolean).join(' | ')}</div>
+        \${r.misura_custom?'<span style="font-size:10px;background:var(--red-bg);color:var(--red-tx);padding:1px 5px;border-radius:3px">Custom</span>':''}
+      </td>
+      <td style="text-align:center">\${r.quantita}</td>
+      <td style="text-align:right">\${fmtEuro(r.prezzo_unitario)}</td>
+      <td style="text-align:right;font-weight:500">\${fmtEuro(r.prezzo_totale_riga)}</td>
+    </tr>\`).join('');
+
+  let bottoniApprovazione='';
+  if(ord.stato==='in_attesa'&&possoApprovareComm){
+    bottoniApprovazione=\`<button class="btn btn-red btn-sm" onclick="approvaOrdine('\${id}','comm')">Approva (commerciale)</button>
+    <button class="btn btn-sm" onclick="cambiaStato('ordini_vendita','\${id}','bloccato','renderOrdineDetail')">Blocca</button>\`;
+  }
+  if(ord.stato==='approvato_comm'&&ord.richiede_approvazione_tecnica&&possoApprovaTec){
+    bottoniApprovazione+=\`<button class="btn btn-red btn-sm" onclick="approvaOrdine('\${id}','tec')">Approva (tecnico)</button>\`;
+  }
+  if((ord.stato==='approvato_comm'&&!ord.richiede_approvazione_tecnica)||(ord.stato==='approvato_tec')){
+    bottoniApprovazione+=\`<button class="btn btn-red btn-sm" onclick="cambiaStato('ordini_vendita','\${id}','in_produzione','renderOrdineDetail')">Lancia in produzione</button>\`;
+  }
+
+  document.getElementById('main-content').innerHTML=\`
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+    <button class="btn btn-sm" onclick="renderOrdiniDiretti()">← Tutti gli ordini</button>
+    <div style="display:flex;gap:8px">
+      \${ord.stato==='in_attesa'?\`<button class="btn btn-sm" onclick="openConfiguratore('ordine','\${id}','\${ord.listino}')">+ Aggiungi porta</button>
+      <button class="btn btn-sm" onclick="esportaPDF('ordine','\${id}')">📄 Esporta PDF</button>\`:''}
+      \${bottoniApprovazione}
+    </div>
+  </div>
+  <div class="grid-2" style="margin-bottom:14px">
+    <div class="card">
+      <div class="card-title">Intestazione ordine</div>
+      <table style="font-size:13px">
+        <tr><td style="color:var(--mid);padding:3px 0;width:140px">N° Ordine</td><td><strong>\${ord.numero}</strong></td></tr>
+        <tr><td style="color:var(--mid);padding:3px 0">Cliente</td><td>\${ord.anagrafiche?.ragione_sociale||'—'}</td></tr>
+        <tr><td style="color:var(--mid);padding:3px 0">Agente</td><td>\${ord.agenti?ord.agenti.nome+' '+ord.agenti.cognome:'—'}</td></tr>
+        <tr><td style="color:var(--mid);padding:3px 0">Listino</td><td><span class="tag">\${ord.listino}</span></td></tr>
+        <tr><td style="color:var(--mid);padding:3px 0">Trasporto</td><td>\${ord.trasporto||'—'}</td></tr>
+        <tr><td style="color:var(--mid);padding:3px 0">Approvazione</td><td>\${ord.richiede_approvazione_tecnica?'<span class="badge br">Tecnica richiesta</span>':'<span class="badge bg">Solo commerciale</span>'}</td></tr>
+        <tr><td style="color:var(--mid);padding:3px 0">Stato</td><td>\${badgeStato(ord.stato)}</td></tr>
+        \${ord.nome_compilatore?\`<tr><td style="color:var(--mid);padding:3px 0">Compilato da</td><td style="font-size:12px">\${ord.nome_compilatore}</td></tr>\`:''}
+      </table>
+    </div>
+    <div class="card">
+      <div class="card-title">Riepilogo economico</div>
+      <table style="font-size:13px">
+        <tr><td style="color:var(--mid);padding:3px 0;width:140px">Imponibile</td><td style="text-align:right">\${fmtEuro(ord.totale_imponibile)}</td></tr>
+        <tr><td style="color:var(--mid);padding:3px 0">Sconto 1</td><td style="text-align:right">\${ord.sconto1||0}%</td></tr>
+        <tr><td style="color:var(--mid);padding:3px 0">Sconto 2</td><td style="text-align:right">\${ord.sconto2||0}%</td></tr>
+        <tr style="border-top:0.5px solid var(--border)"><td style="padding:6px 0;font-weight:500">Totale netto</td><td style="text-align:right;font-size:18px;font-weight:500;color:var(--red)">\${fmtEuro(ord.totale_netto||ord.totale_imponibile)}</td></tr>
+      </table>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header"><span class="card-title">Righe ordine (\${righe?.length||0} porte)</span></div>
+    <table>
+      <thead><tr><th>#</th><th>Descrizione porta</th><th style="text-align:center">Q.tà</th><th style="text-align:right">Unitario</th><th style="text-align:right">Totale riga</th></tr></thead>
+      <tbody>\${rowsRighe||'<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--mid)">Nessuna porta</td></tr>'}</tbody>
+    </table>
+  </div>\`;
+}
+
+async function approvaOrdine(id, tipo){
+  const stato = tipo==='comm'?'approvato_comm':'approvato_tec';
+  const campoData = tipo==='comm'?'data_approvazione_comm':'data_approvazione_tec';
+  const campoUser = tipo==='comm'?'approvato_da_comm':'approvato_da_tec';
+  await sb.from('ordini_vendita').update({stato,[campoData]:new Date().toISOString(),[campoUser]:currentUser?.id}).eq('id',id);
+  await sb.from('log_approvazioni').insert([{ordine_id:id,user_id:currentUser?.id,azione:stato}]);
+  toast('Ordine approvato','ok');
+  renderOrdineDetail(id);
+}
+
+// ══════════════════════════════════════════════════════
+// PANNELLO SUPER-ADMIN — navigazione e struttura
+// ══════════════════════════════════════════════════════
+
+const ADMIN_SECTIONS = [
+  {id:'catalogo',    label:'Catalogo',          icon:'M4 4h8v8H4zM10 2h4v4h-4zM2 10h4v4H2z'},
+  {id:'prezzi',      label:'Prezzi e listini',  icon:'M8 1l2 5h5l-4 3 1.5 5L8 11l-4.5 3L5 9 1 6h5z'},
+  {id:'telaio',      label:'Telaio e componenti',icon:'M2 8h12M8 2v12'},
+  {id:'distinte',    label:'Distinte base',     icon:'M3 3h10v2H3zM3 7h10v2H3zM3 11h6v2H3z'},
+  {id:'compatibilita',label:'Compatibilità',    icon:'M2 8h5M9 8h5M8 2v5M8 9v5'},
+  {id:'lavorazioni', label:'Lavorazioni extra', icon:'M4 2h8l2 4-10 0zM2 6h12v10H2zM6 10h4'},
+  {id:'agenti',      label:'Agenti',            icon:'M8 5a3 3 0 100 6 3 3 0 000-6zM2 14c0-3 2-5 6-5s6 2 6 5'},
+  {id:'impostazioni',label:'Impostazioni',      icon:'M8 5a3 3 0 100 6M8 1v2M8 13v2M1 8h2M13 8h2'},
+];
+
+const ADMIN_SUB = {
+  catalogo:   ['serie','modelli','finiture','aperture','ferramenta','maniglie'],
+  prezzi:     ['listini','sovrapprezzi','scontistiche'],
+  telaio:     ['spalle','regole','scorrevoli_int','scorrevoli_ext','colori'],
+  distinte:   ['db_modelli'],
+  agenti:     ['agenti_lista'],
+  impostazioni:['generale','utenti'],
+};
+
+let adminSection = 'catalogo';
+let adminSub = 'serie';
+
+async function renderAdmin(){
+  if(!isAdmin()){
+    document.getElementById('main-content').innerHTML='<div class="card"><p style="color:var(--red)">Accesso non autorizzato.</p></div>';
+    return;
+  }
+  const navHtml = ADMIN_SECTIONS.map(s=>\`
+    <div onclick="switchAdminSection('\${s.id}')" style="display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;border-radius:var(--radius);font-size:13px;
+      background:\${adminSection===s.id?'rgba(208,32,26,0.08)':'transparent'};
+      color:\${adminSection===s.id?'var(--red)':'var(--mid)'};font-weight:\${adminSection===s.id?'500':'400'}">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="\${s.icon}"/></svg>
+      \${s.label}
+    </div>\`).join('');
+
+  document.getElementById('main-content').innerHTML=\`
+  <div style="display:flex;gap:0;height:calc(100vh - 50px);overflow:hidden">
+    <div style="width:180px;min-width:180px;border-right:0.5px solid var(--border);padding:12px 8px;overflow-y:auto;background:var(--white)">
+      <div style="font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:var(--mid);padding:0 4px 8px">Configurazione</div>
+      \${navHtml}
+    </div>
+    <div style="flex:1;overflow-y:auto;padding:20px" id="admin-main"></div>
+  </div>\`;
+  loadAdminSection();
+}
+
+function switchAdminSection(sec){
+  adminSection=sec;
+  adminSub=ADMIN_SUB[sec]?.[0]||'';
+  renderAdmin();
+}
+
+function loadAdminSection(){
+  if(adminSection==='catalogo') adminCatalogo();
+  else if(adminSection==='prezzi') adminPrezzi();
+  else if(adminSection==='telaio') adminTelaioPanel();
+  else if(adminSection==='distinte') adminDistinte();
+  else if(adminSection==='compatibilita') adminCompatibilita();
+  else if(adminSection==='lavorazioni') adminLavorazioni();
+  else if(adminSection==='agenti') adminAgenti();
+  else if(adminSection==='impostazioni') adminImpostazioni();
+}
+
+// ── HELPER UI ──────────────────────────────────────────
+function adminSubTabs(tabs, active, onclick){
+  return \`<div style="display:flex;gap:0;margin-bottom:16px;border-bottom:0.5px solid var(--border)">
+    \${tabs.map(t=>\`<div onclick="\${onclick}('\${t.id}')" style="padding:8px 16px;cursor:pointer;font-size:13px;border-bottom:\${active===t.id?'2px solid var(--red)':'2px solid transparent'};color:\${active===t.id?'var(--red)':'var(--mid)'};font-weight:\${active===t.id?'500':'400'};margin-bottom:-0.5px">\${t.label}</div>\`).join('')}
+  </div>\`;
+}
+
+function adminCard(title, content, actions=''){
+  return \`<div class="card" style="margin-bottom:14px">
+    <div class="card-header">\${title?\`<span class="card-title">\${title}</span>\`:''}\${actions}</div>
+    \${content}
+  </div>\`;
+}
+
+function inlineInput(val, onchange, width='80px', type='number', placeholder=''){
+  return \`<input type="\${type}" value="\${val??''}" placeholder="\${placeholder}" step="0.01"
+    style="width:\${width};padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit"
+    onchange="\${onchange}">\`;
+}
+
+function adminToggle(attivo, onclick){
+  return \`<span class="badge \${attivo?'bg':'br'}" style="cursor:pointer" onclick="\${onclick}">\${attivo?'Attivo':'Inattivo'}</span>\`;
+}
+
+// ══════════════════════════════════════════════════════
+// CATALOGO
+// ══════════════════════════════════════════════════════
+function adminCatalogo(){
+  const tabs=[
+    {id:'serie',label:'Serie'},{id:'modelli',label:'Modelli'},
+    {id:'finiture',label:'Finiture'},{id:'aperture',label:'Aperture e sensi'},
+    {id:'misure',label:'Misure std'},{id:'supplementi',label:'Suppl. COM/FM'},
+    {id:'ferramenta',label:'Ferramenta'},{id:'maniglie',label:'Maniglie'},
+    {id:'serrature',label:'Serrature'},{id:'cilindri',label:'Cilindri'},
+    {id:'colori_maniglia',label:'Colori maniglia'},{id:'pomolini',label:'Pomolini WC'},
+  ];
+  const el=document.getElementById('admin-main');
+  el.innerHTML=adminSubTabs(tabs,adminSub,'switchAdminCat')+'<div id="admin-sub"></div>';
+  switchAdminCat(adminSub||'serie');
+}
+
+function switchAdminCat(sub){
+  adminSub=sub;
+  document.querySelectorAll('#admin-main [onclick^="switchAdminCat"]').forEach(t=>{
+    const isActive=t.getAttribute('onclick').includes(\`'\${sub}'\`);
+    t.style.borderBottom=isActive?'2px solid var(--red)':'2px solid transparent';
+    t.style.color=isActive?'var(--red)':'var(--mid)';
+    t.style.fontWeight=isActive?'500':'400';
+  });
+  if(sub==='serie') adminSerie();
+  else if(sub==='modelli') adminModelli();
+  else if(sub==='finiture') adminFiniture();
+  else if(sub==='aperture') adminAperture();
+  else if(sub==='misure') adminMisure();
+  else if(sub==='supplementi') adminSupplementiComFm();
+  else if(sub==='ferramenta') adminFerramenta();
+  else if(sub==='maniglie') adminManiglie();
+  else if(sub==='serrature') adminSerrature();
+  else if(sub==='cilindri') adminCilindri();
+  else if(sub==='colori_maniglia') adminColoriManiglia();
+  else if(sub==='pomolini') adminPomolini();
+}
+
+// SERIE
+async function adminSerie(){
+  const {data} = await sb.from('serie').select('*').order('nome');
+  const rows=(data||[]).map(s=>\`<tr>
+    <td>\${inlineInput(s.codice,\`adminSalva('serie','\${s.id}','codice',this.value)\`,'70px','text')}</td>
+    <td>\${inlineInput(s.nome,\`adminSalva('serie','\${s.id}','nome',this.value)\`,'140px','text')}</td>
+    <td>\${inlineInput(s.descrizione||'',\`adminSalva('serie','\${s.id}','descrizione',this.value)\`,'220px','text','Descrizione')}</td>
+    <td>
+      \${s.immagine_url?\`<img src="\${s.immagine_url}" style="width:40px;height:40px;object-fit:cover;border-radius:4px;margin-right:6px">\`:'<span style="font-size:11px;color:var(--mid)">Nessuna</span>'}
+      <label style="cursor:pointer"><input type="file" accept="image/*" style="display:none" onchange="uploadImmagine('serie','\${s.id}',this)"><span class="btn btn-sm" style="font-size:11px">📷 Carica</span></label>
+    </td>
+    <td>\${adminToggle(s.attiva,\`toggleCampo('serie','\${s.id}','attiva',\${s.attiva})\`)}</td>
+    <td><button onclick="eliminaRigaAdmin('serie','\${s.id}','adminSerie')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px" title="Elimina">×</button></td>
+  </tr>\`).join('');
+  document.getElementById('admin-sub').innerHTML=adminCard('Serie',\`
+    <table><thead><tr><th>Codice</th><th>Nome</th><th>Descrizione</th><th>Immagine</th><th>Stato</th><th></th></tr></thead>
+    <tbody>\${rows}</tbody></table>\`,
+    \`<button class="btn btn-red btn-sm" onclick="nuovaRiga('serie',{codice:'NUOVA',nome:'Nuova serie',attiva:true},'adminSerie')">+ Aggiungi serie</button>\`);
+}
+
+// MODELLI
+async function adminModelli(){
+  const {data:serie} = await sb.from('serie').select('codice,nome').order('nome');
+  
+  // Filtro serie corrente
+  const serieFilter = window._adminModelliSerie || document.getElementById('admin-modelli-serie-filter')?.value || serie?.[0]?.codice || '';
+  window._adminModelliSerie = serieFilter;
+  
+  const {data:modelli} = await sb.from('modelli')
+    .select('*,prezzi_modello(listino,prezzo_base,prezzo_vetro,vetro_incluso,ha_extra_incisioni,prezzo_extra_incisioni)')
+    .eq('codice_serie', serieFilter)
+    .order('nome');
+
+  const rows=(modelli||[]).map(m=>{
+    const pa=m.prezzi_modello?.find(p=>p.listino==='A');
+    const pp=m.prezzi_modello?.find(p=>p.listino==='P');
+    const flags=['ha_vetro','ha_pannello_o_bugna','ha_inserto_alluminio','ha_inserto_pietra','ha_pantografatura'];
+    const flagLabels={ha_vetro:'V',ha_pannello_o_bugna:'P',ha_inserto_alluminio:'A',ha_inserto_pietra:'I',ha_pantografatura:'T'};
+    const flagHtml=flags.map(f=>\`<span title="\${f.replace(/_/g,' ')}" style="display:inline-block;width:16px;height:16px;border-radius:3px;margin-right:2px;cursor:pointer;
+      background:\${m[f]?'var(--green-bg)':'var(--border)'};border:0.5px solid \${m[f]?'var(--green-tx)':'var(--mid)'};
+      color:\${m[f]?'var(--green-tx)':'var(--mid)'};font-size:9px;text-align:center;line-height:16px;font-weight:500"
+      onclick="toggleCampo('modelli','\${m.id}','\${f}',\${m[f]})">\${flagLabels[f]}</span>\`).join('');
+    return \`<tr>
+      <td>\${inlineInput(m.codice,\`adminSalva('modelli','\${m.id}','codice',this.value)\`,'70px','text')}</td>
+      <td>\${inlineInput(m.nome,\`adminSalva('modelli','\${m.id}','nome',this.value)\`,'150px','text')}</td>
+      <td><select onchange="adminSalva('modelli','\${m.id}','codice_serie',this.value)" style="padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px">
+        \${(serie||[]).map(s=>\`<option value="\${s.codice}" \${s.codice===m.codice_serie?'selected':''}>\${s.codice}</option>\`).join('')}
+      </select></td>
+      <td><select onchange="adminSalva('modelli','\${m.id}','tipo_variante',this.value)" style="padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:11px">
+        <option value="" \${!m.tipo_variante?'selected':''}>—</option>
+        <option value="PERSONALIZZATA" \${m.tipo_variante==='PERSONALIZZATA'?'selected':''}>Personalizzata</option>
+        <option value="STANDARD" \${m.tipo_variante==='STANDARD'?'selected':''}>Standard</option>
+      </select></td>
+      <td>\${flagHtml}</td>
+      <td>\${inlineInput(pa?.prezzo_base||'',\`salvaPrezzo('\${m.codice}','A','prezzo_base',this.value)\`,'70px')}</td>
+      <td>\${inlineInput(pp?.prezzo_base||'',\`salvaPrezzo('\${m.codice}','P','prezzo_base',this.value)\`,'70px')}</td>
+      <td>\${m.ha_vetro?\`
+        <div style="display:flex;align-items:center;gap:4px">
+          \${inlineInput(pa?.vetro_incluso?'INCL':pa?.prezzo_vetro||'',\`salvaPrezzo('\${m.codice}','A','prezzo_vetro',this.value)\`,'60px')}
+          <span title="Vetro incluso nel prezzo porta" style="cursor:pointer;font-size:10px;color:\${pa?.vetro_incluso?'var(--green-tx)':'var(--mid)'}" onclick="toggleVetroIncluso('\${m.codice}',\${!!pa?.vetro_incluso})">\${pa?.vetro_incluso?'✓incl':'libero'}</span>
+        </div>\`:'—'}</td>
+      <td>\${pa?.ha_extra_incisioni?inlineInput(pa?.prezzo_extra_incisioni||'',\`salvaPrezzo('\${m.codice}','A','prezzo_extra_incisioni',this.value)\`,'65px'):'<span style="font-size:11px;color:var(--mid)">No</span>'}</td>
+      <td>\${inlineInput(m.supplemento_staffe_a??0,\`adminSalva('modelli','\${m.id}','supplemento_staffe_a',this.value)\`,'65px','number','€ A')}</td>
+      <td>\${inlineInput(m.supplemento_staffe_p??0,\`adminSalva('modelli','\${m.id}','supplemento_staffe_p',this.value)\`,'65px','number','€ P')}</td>
+      <td>
+        \${m.immagine_url?\`<img src="\${m.immagine_url}" style="width:32px;height:32px;object-fit:cover;border-radius:4px;margin-right:4px">\`:''}
+        <label style="cursor:pointer"><input type="file" accept="image/*" style="display:none" onchange="uploadImmagine('modelli','\${m.id}',this)"><span style="font-size:11px;cursor:pointer;color:var(--red)">📷</span></label>
+      </td>
+      <td>\${adminToggle(m.attivo,\`toggleCampo('modelli','\${m.id}','attivo',\${m.attivo})\`)}</td>
+      <td><button onclick="eliminaRigaAdmin('modelli','\${m.id}','adminModelli')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px" title="Elimina">×</button></td>
+    </tr>\`;
+  }).join('');
+
+  const serieOpts = (serie||[]).map(s=>\`<option value="\${s.codice}" \${s.codice===serieFilter?'selected':''}>\${s.codice} — \${s.nome}</option>\`).join('');
+
+  document.getElementById('admin-sub').innerHTML=\`
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+    <label style="font-size:12px;color:var(--mid)">Serie:</label>
+    <select id="admin-modelli-serie-filter" onchange="window._adminModelliSerie=this.value;adminModelli()" style="padding:5px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit">\${serieOpts}</select>
+    <span style="font-size:12px;color:var(--mid)">\${(modelli||[]).length} modelli</span>
+    <button class="btn btn-red btn-sm" onclick="nuovoModello('\${serieFilter}')">+ Aggiungi modello</button>
+  </div>
+  \${adminCard(\`Modelli — \${serieFilter}\`,\`
+    <div style="font-size:11px;color:var(--mid);margin-bottom:8px">Flag cliccabili: <b>V</b>=vetro <b>P</b>=pannello/bugna <b>A</b>=inserto alluminio <b>I</b>=inserto pietra <b>T</b>=pantografatura</div>
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>Codice</th><th>Nome</th><th>Serie</th><th>Variante</th><th>Flag</th><th>Prezzo A</th><th>Prezzo P</th><th>Vetro A</th><th>Extra incis.</th><th>Staffe A</th><th>Staffe P</th><th>Img</th><th>Stato</th><th></th></tr></thead>
+      <tbody>\${rows}</tbody>
+    </table></div>\`)}\`;
+}
+
+async function toggleVetroIncluso(codModello, attualeIncluso){
+  await sb.from('prezzi_modello').update({vetro_incluso:!attualeIncluso}).eq('codice_modello',codModello);
+  toast(!attualeIncluso?'Vetro ora incluso nel prezzo':'Vetro ora separato','ok');
+  adminModelli();
+}
+
+async function nuovoModello(seriePreselezionata){
+  const {data:serie} = await sb.from('serie').select('codice,nome').order('nome');
+  const cod=prompt('Codice modello (es. TAM-048):'); if(!cod) return;
+  const nome=prompt('Nome modello:'); if(!nome) return;
+  const serie_cod = seriePreselezionata || prompt('Codice serie ('+( serie||[]).map(s=>s.codice).join('/')+'):');
+  if(!serie_cod) return;
+  const {error}=await sb.from('modelli').insert([{codice:cod.toUpperCase(),nome,codice_serie:serie_cod.toUpperCase(),attivo:true}]);
+  if(error){toast(msgErrore(error,cod),'err');return;}
+  toast('Modello '+cod+' aggiunto','ok'); adminModelli();
+}
+
+// FINITURE
+async function adminFiniture(){
+  const {data:serie} = await sb.from('serie').select('codice').order('codice');
+  const serieFilter = window._adminFinSerie || document.getElementById('admin-serie-filter')?.value || 'TAM';
+  window._adminFinSerie = serieFilter;
+
+  const {data} = await sb.from('finiture').select('*').eq('codice_serie',serieFilter).order('fascia').order('nome_finitura');
+  const serieOpts=(serie||[]).map(s=>\`<option value="\${s.codice}" \${s.codice===serieFilter?'selected':''}>\${s.codice}</option>\`).join('');
+
+  // Serie laccate che usano fascia e pct
+  const isLaccata = ['LAC','GEO','GL','JAD','ACC','PAN-BL'].includes(serieFilter);
+
+  const rows=(data||[]).map(f=>\`<tr>
+    <td>\${inlineInput(f.codice_finitura,\`adminSalva('finiture','\${f.id}','codice_finitura',this.value)\`,'60px','text')}</td>
+    <td>\${inlineInput(f.nome_finitura,\`adminSalva('finiture','\${f.id}','nome_finitura',this.value)\`,'150px','text')}</td>
+    <td>\${inlineInput(f.codice_modello||'',\`adminSalva('finiture','\${f.id}','codice_modello',this.value)\`,'70px','text','Tutti')}</td>
+    \${isLaccata?\`<td>
+      <select onchange="adminSalva('finiture','\${f.id}','fascia',this.value);window._adminFinSerie='\${serieFilter}';adminFiniture();"
+        style="padding:3px 6px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:11px;font-family:inherit">
+        <option value="" \${!f.fascia?'selected':''}>— nessuna —</option>
+        <option value="MP CLASSIC" \${f.fascia==='MP CLASSIC'?'selected':''}>MP CLASSIC</option>
+        <option value="MP LIGHT" \${f.fascia==='MP LIGHT'?'selected':''}>MP LIGHT</option>
+        <option value="MP PREMIUM" \${f.fascia==='MP PREMIUM'?'selected':''}>MP PREMIUM</option>
+      </select>
+    </td>
+    <td>\${inlineInput(f.sovrapprezzo_a??0,\`adminSalva('finiture','\${f.id}','sovrapprezzo_a',this.value)\`,'60px','number','€ fisso A')}</td>
+    <td>\${inlineInput(f.sovrapprezzo_p??0,\`adminSalva('finiture','\${f.id}','sovrapprezzo_p',this.value)\`,'60px','number','€ fisso P')}</td>
+    <td>\${inlineInput(f.sovrapprezzo_pct_a??0,\`adminSalva('finiture','\${f.id}','sovrapprezzo_pct_a',this.value)\`,'55px','number','% A')}</td>
+    <td>\${inlineInput(f.sovrapprezzo_pct_p??0,\`adminSalva('finiture','\${f.id}','sovrapprezzo_pct_p',this.value)\`,'55px','number','% P')}</td>\`
+    :\`<td>\${inlineInput(f.sovrapprezzo_a??0,\`adminSalva('finiture','\${f.id}','sovrapprezzo_a',this.value)\`,'65px','number')}</td>
+    <td>\${inlineInput(f.sovrapprezzo_p??0,\`adminSalva('finiture','\${f.id}','sovrapprezzo_p',this.value)\`,'65px','number')}</td>\`}
+    <td><span class="badge \${f.consente_bugna?'bg':'br'}" style="cursor:pointer" onclick="toggleCampo('finiture','\${f.id}','consente_bugna',\${f.consente_bugna})">\${f.consente_bugna?'Sì':'No'}</span></td>
+    <td>\${inlineInput(f.sovrapprezzo_bugna_a??0,\`adminSalva('finiture','\${f.id}','sovrapprezzo_bugna_a',this.value)\`,'55px','number')}</td>
+    <td>\${inlineInput(f.sovrapprezzo_bugna_p??0,\`adminSalva('finiture','\${f.id}','sovrapprezzo_bugna_p',this.value)\`,'55px','number')}</td>
+    <td>\${adminToggle(f.attiva,\`toggleCampo('finiture','\${f.id}','attiva',\${f.attiva})\`)}</td>
+    <td><button onclick="eliminaRigaAdmin('finiture','\${f.id}','adminFiniture')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px" title="Elimina">×</button></td>
+  </tr>\`).join('');
+
+  const theadLaccata = isLaccata
+    ? '<th>Fascia</th><th>Sovr.€ A</th><th>Sovr.€ P</th><th>Sovr.% A</th><th>Sovr.% P</th>'
+    : '<th>Sovr.A</th><th>Sovr.P</th>';
+
+  document.getElementById('admin-sub').innerHTML=\`
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+    <label style="font-size:12px;color:var(--mid)">Serie:</label>
+    <select id="admin-serie-filter" onchange="window._adminFinSerie=this.value;adminFiniture()" style="padding:5px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit">\${serieOpts}</select>
+    <span style="font-size:12px;color:var(--mid)">\${(data||[]).length} finiture</span>
+    <button class="btn btn-red btn-sm" onclick="nuovaFinitura('\${serieFilter}')">+ Aggiungi finitura</button>
+  </div>
+  \${adminCard(\`Finiture — \${serieFilter}\`,\`<div style="overflow-x:auto"><table>
+    <thead><tr><th>Codice</th><th>Nome</th><th>Modello</th>\${theadLaccata}<th>Bugna</th><th>Bugna A</th><th>Bugna P</th><th>Stato</th><th></th></tr></thead>
+    <tbody>\${rows}</tbody>
+  </table></div>\`)}\`;
+}
+
+async function nuovaFinitura(serieFilter){
+  const cod=prompt('Codice finitura:'); if(!cod) return;
+  const nome=prompt('Nome finitura:'); if(!nome) return;
+  const {error}=await sb.from('finiture').insert([{codice_serie:serieFilter,codice_finitura:cod.toUpperCase(),nome_finitura:nome,attiva:true}]);
+  if(error){toast(msgErrore(error,cod),'err');return;}
+  toast('Finitura aggiunta','ok'); adminFiniture();
+}
+
+// MISURE STANDARD
+// Famiglie sempre presenti nel select misure (anche se vuote)
+const MISURE_FAMIGLIE_EXTRA = ['SOP','PAS','PAN-BL'];
+const MISURE_FAM_LABELS = {}; // codici mostrati as-is nel select e nella tabella
+
+async function adminMisure(){
+  const {data:famiglie} = await sb.from('misure_standard').select('famiglia_apertura').order('famiglia_apertura');
+  const famSetDb = [...new Set((famiglie||[]).map(f=>f.famiglia_apertura))];
+  const famSet = [...new Set([...famSetDb, ...MISURE_FAMIGLIE_EXTRA])].sort();
+  const famFilter = window._adminMisureFam || famSet[0] || 'BAT';
+  window._adminMisureFam = famFilter;
+
+  const {data} = await sb.from('misure_standard').select('*').eq('famiglia_apertura',famFilter).order('larghezza_mm').order('altezza_mm');
+
+  const famOpts = famSet.map(f=>\`<option value="\${f}" \${f===famFilter?'selected':''}>\${MISURE_FAM_LABELS[f]||f}</option>\`).join('');
+
+  const rows=(data||[]).map(m=>\`<tr>
+    <td>\${inlineInput(m.larghezza_mm,\`adminSalva('misure_standard','\${m.id}','larghezza_mm',this.value)\`,'70px','number')} mm</td>
+    <td>\${inlineInput(m.altezza_mm,\`adminSalva('misure_standard','\${m.id}','altezza_mm',this.value)\`,'70px','number')} mm</td>
+    <td style="font-size:12px;color:var(--mid)">\${m.famiglia_apertura}</td>
+    <td>\${inlineInput(m.sovrapprezzo_a??0,\`adminSalva('misure_standard','\${m.id}','sovrapprezzo_a',this.value)\`,'65px','number','€ A')}</td>
+    <td>\${inlineInput(m.sovrapprezzo_p??0,\`adminSalva('misure_standard','\${m.id}','sovrapprezzo_p',this.value)\`,'65px','number','€ P')}</td>
+    <td>\${inlineInput(m.sovrapprezzo_pct_a??0,\`adminSalva('misure_standard','\${m.id}','sovrapprezzo_pct_a',this.value)\`,'55px','number','% A')}</td>
+    <td>\${inlineInput(m.sovrapprezzo_pct_p??0,\`adminSalva('misure_standard','\${m.id}','sovrapprezzo_pct_p',this.value)\`,'55px','number','% P')}</td>
+    <td><button onclick="eliminaRigaAdmin('misure_standard','\${m.id}','adminMisure')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
+  </tr>\`).join('');
+
+  document.getElementById('admin-sub').innerHTML=\`
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+      <label style="font-size:12px;color:var(--mid)">Famiglia:</label>
+      <select onchange="window._adminMisureFam=this.value;adminMisure()" style="padding:5px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit">\${famOpts}</select>
+    </div>
+    \${adminCard(\`Misure standard — \${famFilter}\`,\`
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;padding-bottom:12px;border-bottom:0.5px solid var(--border);flex-wrap:wrap">
+        <input type="number" id="nm-l" placeholder="Larghezza mm" style="padding:6px 8px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;width:130px">
+        <input type="number" id="nm-a" placeholder="Altezza mm (0=libera)" style="padding:6px 8px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;width:160px">
+        <button class="btn btn-red btn-sm" onclick="nuovaMisura('\${famFilter}')">+ Aggiungi</button>
+      </div>
+      <table><thead><tr><th>Larghezza (mm)</th><th>Altezza (mm)</th><th>Famiglia</th><th>Sovr.€ A</th><th>Sovr.€ P</th><th>Sovr.% A</th><th>Sovr.% P</th><th></th></tr></thead>
+      <tbody>\${rows||'<tr><td colspan="8" style="text-align:center;color:var(--mid);padding:16px;font-style:italic">Nessuna misura — aggiungine una qui sopra</td></tr>'}</tbody>
+    </table>\`)}\`;
+}
+
+async function nuovaMisura(fam){
+  const l = document.getElementById('nm-l')?.value;
+  const a = document.getElementById('nm-a')?.value;
+  if(!l){toast('Inserisci la larghezza','err');return;}
+  if(a===''||a===null||a===undefined){toast("Inserisci l'altezza (0 per libera)",'err');return;}
+  const {error}=await sb.from('misure_standard').insert([{famiglia_apertura:fam,larghezza_mm:parseFloat(l),altezza_mm:parseFloat(a)}]);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Misura aggiunta','ok'); adminMisure();
+}
+
+// SUPPLEMENTI COM/FM
+async function adminSupplementiComFm(){
+  const {data:aperture} = await sb.from('tipologie_apertura').select('codice,nome')
+    .in('famiglia',['COM','FM']).order('codice');
+  const {data} = await sb.from('supplementi_apertura').select('*').order('codice_apertura').order('famiglia_serie');
+
+  const famiglie = ['TAM_MAS','LACCATA','GREZZA'];
+  const famLabel = {'TAM_MAS':'Tamburate + Massellate','LACCATA':'Laccate','GREZZA':'Grezze'};
+
+  // Raggruppa per codice_apertura
+  const byAp = {};
+  (data||[]).forEach(r=>{ if(!byAp[r.codice_apertura]) byAp[r.codice_apertura]={}; byAp[r.codice_apertura][r.famiglia_serie]=r; });
+
+  const rows=(aperture||[]).map(ap=>{
+    return famiglie.map(fam=>{
+      const r=byAp[ap.codice]?.[fam];
+      return \`<tr>
+        <td style="font-size:12px;font-weight:500">\${ap.codice}</td>
+        <td style="font-size:12px;color:var(--mid)">\${ap.nome||''}</td>
+        <td><span class="badge" style="background:var(--beige2);color:var(--dark);font-size:10px">\${famLabel[fam]}</span></td>
+        <td>\${r?inlineInput(r.supplemento_a??0,\`adminSalvaSuppl('\${ap.codice}','\${fam}',\${r?\`'\${r.id}'\`:'null'},'supplemento_a',this.value)\`,'75px','number','€ A'):'<button class="btn btn-sm" onclick="creaSuppl(\\''+ap.codice+'\\',\\''+fam+'\\')">+ Crea</button>'}</td>
+        <td>\${r?inlineInput(r.supplemento_p??0,\`adminSalvaSuppl('\${ap.codice}','\${fam}',\${r?\`'\${r.id}'\`:'null'},'supplemento_p',this.value)\`,'75px','number','€ P'):''}</td>
+        <td style="font-size:11px;color:var(--mid)">\${r?.note||''}</td>
+        \${r?\`<td><button onclick="eliminaRigaAdmin('supplementi_apertura','\${r.id}','adminSupplementiComFm')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>\`:'<td></td>'}
+      </tr>\`;
+    }).join('');
+  }).join('');
+
+  document.getElementById('admin-sub').innerHTML=adminCard('Supplementi COM/FM per famiglia serie',\`
+    <div style="font-size:12px;color:var(--mid);margin-bottom:10px">
+      Il supplemento viene applicato in base alla serie della porta configurata (TAM+MAS, Laccata o Grezza).
+    </div>
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>Codice</th><th>Nome</th><th>Famiglia</th><th>Suppl. A (€)</th><th>Suppl. P (€)</th><th>Note</th><th></th></tr></thead>
+      <tbody>\${rows||'<tr><td colspan="7" style="text-align:center;color:var(--mid);padding:16px">Nessun supplemento configurato</td></tr>'}</tbody>
+    </table></div>\`);
+}
+
+async function creaSuppl(codAp, famSerie){
+  const {error}=await sb.from('supplementi_apertura').insert([{codice_apertura:codAp,famiglia_serie:famSerie,supplemento_a:0,supplemento_p:0}]);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Riga creata — modifica i prezzi direttamente','ok'); adminSupplementiComFm();
+}
+
+async function adminSalvaSuppl(codAp, famSerie, id, campo, valore){
+  const val=parseFloat(valore); if(isNaN(val)) return;
+  if(id&&id!=='null'){
+    await sb.from('supplementi_apertura').update({[campo]:val}).eq('id',id);
+  } else {
+    await sb.from('supplementi_apertura').insert([{codice_apertura:codAp,famiglia_serie:famSerie,[campo]:val}]);
+  }
+  toast('Salvato','ok');
+}
+
+// APERTURE E SENSI
+async function adminAperture(){
+  const [{data:ap},{data:sensi}] = await Promise.all([
+    sb.from('tipologie_apertura').select('*').order('famiglia').order('codice'),
+    sb.from('sensi_apertura').select('*').order('codice_apertura').order('ordine'),
+  ]);
+
+  const rows=(ap||[]).map(a=>{
+    const sensiAp=(sensi||[]).filter(s=>s.codice_apertura===a.codice);
+    const sensiHtml=sensiAp.map(s=>\`
+      <span style="display:inline-flex;align-items:center;gap:2px;padding:1px 6px;border-radius:3px;font-size:10px;background:var(--blue-bg);color:var(--blue-tx);margin:1px">
+        \${s.codice_senso}
+        <span onclick="eliminaSenso('\${s.id}','\${a.codice}')" style="cursor:pointer;color:var(--mid);margin-left:2px;font-size:11px" title="Rimuovi">×</span>
+      </span>\`).join('');
+    const sp = a.logica_prezzo==='fisso'?inlineInput(a.sovrapprezzo_a??'',\`adminSalva('tipologie_apertura','\${a.id}','sovrapprezzo_a',this.value)\`,'65px'):
+              a.logica_prezzo==='percentuale'?inlineInput(a.maggiorazione_pct??'',\`adminSalva('tipologie_apertura','\${a.id}','maggiorazione_pct',this.value)\`,'55px')+'%':'variabile';
+    const spP = a.logica_prezzo==='fisso'?inlineInput(a.sovrapprezzo_p??'',\`adminSalva('tipologie_apertura','\${a.id}','sovrapprezzo_p',this.value)\`,'65px'):'—';
+    return \`<tr>
+      <td>\${inlineInput(a.codice,\`adminSalva('tipologie_apertura','\${a.id}','codice',this.value)\`,'80px','text')}</td>
+      <td>\${inlineInput(a.nome||'',\`adminSalva('tipologie_apertura','\${a.id}','nome',this.value)\`,'180px','text')}</td>
+      <td><select onchange="adminSalva('tipologie_apertura','\${a.id}','famiglia',this.value)" style="padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:11px">
+        \${['BAT','CS','SI','SE','FM','COM','ROTO','LIBRO','SALOON','ROTOTRASLANTI','SPECIALI','PASSATE'].map(f=>\`<option value="\${f}" \${f===a.famiglia?'selected':''}>\${f}</option>\`).join('')}
+      </select></td>
+      <td><select onchange="adminSalva('tipologie_apertura','\${a.id}','logica_prezzo',this.value)" style="padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:11px">
+        \${['fisso','spessore','percentuale','doppio'].map(l=>\`<option value="\${l}" \${l===a.logica_prezzo?'selected':''}>\${l}</option>\`).join('')}
+      </select></td>
+      <td>\${sp}</td><td>\${spP}</td>
+      <td style="max-width:160px">
+        \${sensiHtml||'<span style="font-size:11px;color:var(--mid)">Nessuno</span>'}
+        <button onclick="aggiungiSenso('\${a.codice}')" style="background:none;border:0.5px solid var(--border);border-radius:3px;color:var(--red);cursor:pointer;font-size:10px;padding:1px 5px;margin-left:3px">+</button>
+      </td>
+      <td>\${adminToggle(a.attiva,\`toggleCampo('tipologie_apertura','\${a.id}','attiva',\${a.attiva})\`)}</td>
+      <td><button onclick="eliminaRigaAdmin('tipologie_apertura','\${a.id}','adminAperture')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
+    </tr>\`;
+  }).join('');
+
+  document.getElementById('admin-sub').innerHTML=adminCard('Tipologie apertura e sensi',\`
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>Codice</th><th>Nome completo</th><th>Famiglia</th><th>Logica prezzo</th><th>Sovr.A</th><th>Sovr.P</th><th>Sensi (× per rimuovere, + per aggiungere)</th><th>Stato</th><th></th></tr></thead>
+      <tbody>\${rows}</tbody>
+    </table></div>\`,
+    \`<button class="btn btn-red btn-sm" onclick="nuovaApertura()">+ Aggiungi tipologia</button>\`);
+}
+
+async function aggiungiSenso(codApertura){
+  const cod=prompt(\`Codice senso per \${codApertura} (DX, SX, T.DX, T.SX, BIDIREZIONALE, X, NESSUNO):\`);
+  if(!cod) return;
+  const desc=prompt('Descrizione (es. Apertura SPINGERE DX):');
+  const {error}=await sb.from('sensi_apertura').insert([{
+    codice_apertura:codApertura, codice_senso:cod.toUpperCase(),
+    famiglia:'BAT', descrizione_senso:desc||'', attivo:true, ordine:99
+  }]);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Senso aggiunto','ok'); adminAperture();
+}
+
+async function eliminaSenso(id, codApertura){
+  if(!confirm('Rimuovere questo senso?')) return;
+  await sb.from('sensi_apertura').delete().eq('id',id);
+  toast('Senso rimosso','ok'); adminAperture();
+}
+
+async function nuovaApertura(){
+  const cod=prompt('Codice apertura (es. BAT-NEW):'); if(!cod) return;
+  const nome=prompt('Nome completo:'); if(!nome) return;
+  const famiglia=prompt('Famiglia (BAT/SI/SE/FM/COM/ROTO/LIBRO/SALOON):'); if(!famiglia) return;
+  const {error}=await sb.from('tipologie_apertura').insert([{codice:cod,nome,famiglia,logica_prezzo:'fisso',attiva:true}]);
+  if(error){toast(msgErrore(error,cod),'err');return;}
+  toast('Apertura aggiunta','ok'); adminAperture();
+}
+
+// FERRAMENTA
+async function adminFerramenta(){
+  const {data} = await sb.from('ferramenta').select('*').order('nome');
+  const rows=(data||[]).map(f=>\`<tr>
+    <td>\${inlineInput(f.codice,\`adminSalva('ferramenta','\${f.id}','codice',this.value)\`,'70px','text')}</td>
+    <td>\${inlineInput(f.nome,\`adminSalva('ferramenta','\${f.id}','nome',this.value)\`,'160px','text')}</td>
+    <td style="display:flex;align-items:center;gap:6px">
+      \${f.colore_hex?\`<div style="width:24px;height:24px;border-radius:4px;background:#\${f.colore_hex};border:0.5px solid var(--border);flex-shrink:0"></div>\`:''}
+      \${inlineInput(f.colore_hex||'',\`adminSalvaFerramenta('\${f.id}','colore_hex',this.value,this)\`,'80px','text','es. C0C0C0')}
+    </td>
+    <td>\${inlineInput(f.sovrapprezzo_a??0,\`adminSalva('ferramenta','\${f.id}','sovrapprezzo_a',this.value)\`,'65px')}</td>
+    <td>\${inlineInput(f.sovrapprezzo_p??0,\`adminSalva('ferramenta','\${f.id}','sovrapprezzo_p',this.value)\`,'65px')}</td>
+    <td>\${adminToggle(f.attivo,\`toggleCampo('ferramenta','\${f.id}','attivo',\${f.attivo})\`)}</td>
+    <td><button onclick="eliminaRigaAdmin('ferramenta','\${f.id}','adminFerramenta')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
+  </tr>\`).join('');
+  document.getElementById('admin-sub').innerHTML=adminCard('Ferramenta',\`
+    <table><thead><tr><th>Codice</th><th>Nome</th><th>Colore hex</th><th>Sovr.A (€)</th><th>Sovr.P (€)</th><th>Stato</th><th></th></tr></thead>
+    <tbody>\${rows}</tbody></table>\`,
+    \`<button class="btn btn-red btn-sm" onclick="nuovaConCodiceNome('ferramenta','Codice colore (es. NER-L):','Nome colore:',{attivo:true,sovrapprezzo_a:0,sovrapprezzo_p:0},'adminFerramenta')">+ Aggiungi colore</button>\`);
+}
+
+async function adminSalvaFerramenta(id, campo, valore, el){
+  await adminSalva('ferramenta', id, campo, valore);
+  // Aggiorna il pallino colore inline senza ricaricare tutta la tabella
+  const preview = el.parentElement.querySelector('div[style*="border-radius:4px"]');
+  if(preview && valore) preview.style.background='#'+valore;
+}
+
+// MANIGLIE
+async function adminManiglie(){
+  const {data} = await sb.from('maniglie').select('*').order('nome');
+  const rows=(data||[]).map(m=>\`<tr>
+    <td>\${inlineInput(m.codice,\`adminSalva('maniglie','\${m.id}','codice',this.value)\`,'70px','text')}</td>
+    <td>\${inlineInput(m.nome,\`adminSalva('maniglie','\${m.id}','nome',this.value)\`,'160px','text')}</td>
+    <td>\${inlineInput(m.serie_compatibili||'',\`adminSalva('maniglie','\${m.id}','serie_compatibili',this.value)\`,'100px','text','Tutte')}</td>
+    <td style="max-width:180px">
+      <div style="font-size:10px;color:var(--mid);margin-bottom:2px">Escludi aperture (cod. separati da virgola)</div>
+      \${inlineInput(m.aperture_escluse||'',\`adminSalva('maniglie','\${m.id}','aperture_escluse',this.value)\`,'160px','text','es. LIBRO,SI')}
+    </td>
+    <td>\${inlineInput(m.descrizione||'',\`adminSalva('maniglie','\${m.id}','descrizione',this.value)\`,'150px','text','Descrizione')}</td>
+    <td>\${inlineInput(m.prezzo_a??0,\`adminSalva('maniglie','\${m.id}','prezzo_a',this.value)\`,'65px')}</td>
+    <td>\${inlineInput(m.prezzo_p??0,\`adminSalva('maniglie','\${m.id}','prezzo_p',this.value)\`,'65px')}</td>
+    <td>
+      \${m.immagine_url?\`<img src="\${m.immagine_url}" style="width:32px;height:32px;object-fit:cover;border-radius:4px;margin-right:4px">\`:''}
+      <label style="cursor:pointer"><input type="file" accept="image/*" style="display:none" onchange="uploadImmagine('maniglie','\${m.id}',this)"><span style="font-size:11px;cursor:pointer;color:var(--red)">📷</span></label>
+    </td>
+    <td>\${adminToggle(m.attivo,\`toggleCampo('maniglie','\${m.id}','attivo',\${m.attivo})\`)}</td>
+    <td><button onclick="eliminaRigaAdmin('maniglie','\${m.id}','adminManiglie')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
+  </tr>\`).join('');
+  document.getElementById('admin-sub').innerHTML=adminCard('Maniglie',\`
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>Codice</th><th>Nome</th><th>Serie compatibili</th><th>Aperture escluse</th><th>Descrizione</th><th>Prezzo A</th><th>Prezzo P</th><th>Immagine</th><th>Stato</th><th></th></tr></thead>
+      <tbody>\${rows}</tbody></table></div>\`,
+    \`<button class="btn btn-red btn-sm" onclick="nuovaConCodiceNome('maniglie','Codice maniglia (es. ASC-CH):','Nome maniglia:',{attivo:true,prezzo_a:0,prezzo_p:0},'adminManiglie')">+ Aggiungi maniglia</button>\`);
+}
+
+// ── SERRATURE ADMIN ───────────────────────────────────
+async function adminSerrature(){
+  const {data} = await sb.from('tipi_serratura').select('*').order('famiglie_apertura').order('codice');
+  const rows=(data||[]).map(s=>\`<tr>
+    <td>\${inlineInput(s.codice,\`adminSalva('tipi_serratura','\${s.id}','codice',this.value)\`,'70px','text')}</td>
+    <td>\${inlineInput(s.nome,\`adminSalva('tipi_serratura','\${s.id}','nome',this.value)\`,'180px','text')}</td>
+    <td>\${inlineInput(s.famiglie_apertura||'',\`adminSalva('tipi_serratura','\${s.id}','famiglie_apertura',this.value)\`,'160px','text','es. BAT,CS,LIBRO')}</td>
+    <td>\${inlineInput(s.descrizione||'',\`adminSalva('tipi_serratura','\${s.id}','descrizione',this.value)\`,'160px','text')}</td>
+    <td><span style="cursor:pointer" onclick="toggleCampo('tipi_serratura','\${s.id}','richiede_cilindro',\${s.richiede_cilindro})">\${s.richiede_cilindro?'<span class="badge bg">Sì</span>':'<span class="badge br">No</span>'}</span></td>
+    <td><span style="cursor:pointer" onclick="toggleCampo('tipi_serratura','\${s.id}','richiede_pomolino',\${s.richiede_pomolino})">\${s.richiede_pomolino?'<span class="badge bg">Sì</span>':'<span class="badge br">No</span>'}</span></td>
+    <td><span style="cursor:pointer" onclick="toggleCampo('tipi_serratura','\${s.id}','is_automatica',\${s.is_automatica})">\${s.is_automatica?'<span class="badge bg">Sì</span>':'<span class="badge br">No</span>'}</span></td>
+    <td>\${inlineInput(s.sovrapprezzo_a??0,\`adminSalva('tipi_serratura','\${s.id}','sovrapprezzo_a',this.value)\`,'65px')}</td>
+    <td>\${inlineInput(s.sovrapprezzo_p??0,\`adminSalva('tipi_serratura','\${s.id}','sovrapprezzo_p',this.value)\`,'65px')}</td>
+    <td>\${adminToggle(s.attiva,\`toggleCampo('tipi_serratura','\${s.id}','attiva',\${s.attiva})\`)}</td>
+    <td><button onclick="eliminaRigaAdmin('tipi_serratura','\${s.id}','adminSerrature')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
+  </tr>\`).join('');
+  document.getElementById('admin-sub').innerHTML=adminCard('Serrature',\`
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>Codice</th><th>Nome</th><th>Famiglie apertura</th><th>Descrizione</th><th>Richiede cilindro</th><th>Richiede pomolino</th><th>Automatica</th><th>Sovr.A</th><th>Sovr.P</th><th>Stato</th><th></th></tr></thead>
+      <tbody>\${rows}</tbody>
+    </table></div>\`,
+    \`<button class="btn btn-red btn-sm" onclick="nuovaSerratura()">+ Aggiungi serratura</button>\`);
+}
+
+// ── CILINDRI ADMIN ────────────────────────────────────
+async function adminCilindri(){
+  const {data} = await sb.from('tipi_cilindro').select('*').order('misura_mm');
+  const rows=(data||[]).map(c=>\`<tr>
+    <td>\${inlineInput(c.codice,\`adminSalva('tipi_cilindro','\${c.id}','codice',this.value)\`,'80px','text')}</td>
+    <td>\${inlineInput(c.nome,\`adminSalva('tipi_cilindro','\${c.id}','nome',this.value)\`,'160px','text')}</td>
+    <td>\${inlineInput(c.misura_mm||'',\`adminSalva('tipi_cilindro','\${c.id}','misura_mm',this.value)\`,'60px','number')} mm</td>
+    <td>\${inlineInput(c.famiglie_apertura||'',\`adminSalva('tipi_cilindro','\${c.id}','famiglie_apertura',this.value)\`,'140px','text','es. BAT,CS')}</td>
+    <td>\${inlineInput(c.fornitore||'',\`adminSalva('tipi_cilindro','\${c.id}','fornitore',this.value)\`,'100px','text')}</td>
+    <td>\${inlineInput(c.sovrapprezzo_a??0,\`adminSalva('tipi_cilindro','\${c.id}','sovrapprezzo_a',this.value)\`,'65px')}</td>
+    <td>\${inlineInput(c.sovrapprezzo_p??0,\`adminSalva('tipi_cilindro','\${c.id}','sovrapprezzo_p',this.value)\`,'65px')}</td>
+    <td>\${adminToggle(c.attivo,\`toggleCampo('tipi_cilindro','\${c.id}','attivo',\${c.attivo})\`)}</td>
+    <td><button onclick="eliminaRigaAdmin('tipi_cilindro','\${c.id}','adminCilindri')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
+  </tr>\`).join('');
+  document.getElementById('admin-sub').innerHTML=adminCard('Cilindri',\`
+    <table><thead><tr><th>Codice</th><th>Nome</th><th>Misura</th><th>Famiglie apertura</th><th>Fornitore</th><th>Sovr.A</th><th>Sovr.P</th><th>Stato</th><th></th></tr></thead>
+    <tbody>\${rows}</tbody></table>\`,
+    \`<button class="btn btn-red btn-sm" onclick="nuovaConCodiceNome('tipi_cilindro','Codice cilindro (es. CIL-3535):','Nome cilindro:',{attivo:true,sovrapprezzo_a:0,sovrapprezzo_p:0},'adminCilindri')">+ Aggiungi cilindro</button>\`);
+}
+
+// ── COLORI MANIGLIA ADMIN ─────────────────────────────
+async function adminColoriManiglia(){
+  const {data:maniglie} = await sb.from('maniglie').select('codice,nome').eq('attivo',true).order('nome');
+  const filtroMan = document.getElementById('admin-man-filter')?.value || maniglie?.[0]?.codice || '';
+  const {data} = await sb.from('colori_maniglia').select('*').eq('codice_maniglia',filtroMan).order('nome_colore');
+
+  const manOpts = (maniglie||[]).map(m=>\`<option value="\${m.codice}" \${m.codice===filtroMan?'selected':''}>\${m.codice} — \${m.nome}</option>\`).join('');
+
+  const rows=(data||[]).map(c=>\`<tr>
+    <td style="font-size:12px;color:var(--mid)">\${c.codice_maniglia}</td>
+    <td>\${inlineInput(c.codice_colore,\`adminSalva('colori_maniglia','\${c.id}','codice_colore',this.value)\`,'80px','text')}</td>
+    <td>\${inlineInput(c.nome_colore,\`adminSalva('colori_maniglia','\${c.id}','nome_colore',this.value)\`,'160px','text')}</td>
+    <td style="display:flex;align-items:center;gap:6px">
+      \${c.colore_hex?\`<div style="width:22px;height:22px;border-radius:4px;background:#\${c.colore_hex};border:0.5px solid var(--border)"></div>\`:''}
+      \${inlineInput(c.colore_hex||'',\`adminSalva('colori_maniglia','\${c.id}','colore_hex',this.value)\`,'80px','text','es. C0C0C0')}
+    </td>
+    <td>\${inlineInput(c.prezzo_maniglia??0,\`adminSalva('colori_maniglia','\${c.id}','prezzo_maniglia',this.value)\`,'70px')}</td>
+    <td>\${adminToggle(c.attivo,\`toggleCampo('colori_maniglia','\${c.id}','attivo',\${c.attivo})\`)}</td>
+    <td><button onclick="eliminaRigaAdmin('colori_maniglia','\${c.id}','adminColoriManiglia')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
+  </tr>\`).join('');
+
+  document.getElementById('admin-sub').innerHTML=\`
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+      <label style="font-size:12px;color:var(--mid)">Maniglia:</label>
+      <select id="admin-man-filter" onchange="adminColoriManiglia()" style="padding:5px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit">\${manOpts}</select>
+      <button class="btn btn-red btn-sm" onclick="nuovoColoreManiglia('\${filtroMan}')">+ Aggiungi colore</button>
+    </div>
+    \${adminCard('Colori maniglia',\`
+      <table><thead><tr><th>Maniglia</th><th>Cod. colore</th><th>Nome colore</th><th>Colore hex</th><th>Prezzo</th><th>Stato</th><th></th></tr></thead>
+      <tbody>\${rows||'<tr><td colspan="7" style="text-align:center;color:var(--mid);padding:16px">Nessun colore</td></tr>'}</tbody>
+    </table>\`)}\`;
+}
+
+async function nuovoColoreManiglia(codManiglia){
+  const cod=prompt('Codice colore (es. CRS, CRL):'); if(!cod) return;
+  const nome=prompt('Nome colore:'); if(!nome) return;
+  const {error}=await sb.from('colori_maniglia').insert([{codice_maniglia:codManiglia,codice_colore:cod.toUpperCase(),nome_colore:nome,prezzo_maniglia:0,attivo:true}]);
+  if(error){toast(msgErrore(error,cod),'err');return;}
+  toast('Colore aggiunto','ok'); adminColoriManiglia();
+}
+
+// ── POMOLINI WC ADMIN ─────────────────────────────────
+async function adminPomolini(){
+  const {data} = await sb.from('pomolini_wc').select('*').order('nome');
+  const rows=(data||[]).map(p=>\`<tr>
+    <td>\${inlineInput(p.codice,\`adminSalva('pomolini_wc','\${p.id}','codice',this.value)\`,'80px','text')}</td>
+    <td>\${inlineInput(p.nome,\`adminSalva('pomolini_wc','\${p.id}','nome',this.value)\`,'160px','text')}</td>
+    <td>\${inlineInput(p.descrizione||'',\`adminSalva('pomolini_wc','\${p.id}','descrizione',this.value)\`,'180px','text')}</td>
+    <td style="display:flex;align-items:center;gap:6px">
+      \${p.colore_hex?\`<div style="width:22px;height:22px;border-radius:4px;background:#\${p.colore_hex};border:0.5px solid var(--border)"></div>\`:''}
+      \${inlineInput(p.colore_hex||'',\`adminSalva('pomolini_wc','\${p.id}','colore_hex',this.value)\`,'80px','text')}
+    </td>
+    <td>\${inlineInput(p.prezzo_a??0,\`adminSalva('pomolini_wc','\${p.id}','prezzo_a',this.value)\`,'65px')}</td>
+    <td>\${inlineInput(p.prezzo_p??0,\`adminSalva('pomolini_wc','\${p.id}','prezzo_p',this.value)\`,'65px')}</td>
+    <td>\${adminToggle(p.attivo,\`toggleCampo('pomolini_wc','\${p.id}','attivo',\${p.attivo})\`)}</td>
+    <td><button onclick="eliminaRigaAdmin('pomolini_wc','\${p.id}','adminPomolini')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
+  </tr>\`).join('');
+  document.getElementById('admin-sub').innerHTML=adminCard('Pomolini WC',\`
+    <table><thead><tr><th>Codice</th><th>Nome</th><th>Descrizione</th><th>Colore hex</th><th>Prezzo A</th><th>Prezzo P</th><th>Stato</th><th></th></tr></thead>
+    <tbody>\${rows||'<tr><td colspan="8" style="text-align:center;color:var(--mid);padding:16px">Nessun pomolino</td></tr>'}</tbody></table>\`,
+    \`<button class="btn btn-red btn-sm" onclick="nuovaConCodiceNome('pomolini_wc','Codice pomolino (es. POM-WC-T):','Nome pomolino:',{attivo:true,prezzo_a:0,prezzo_p:0},'adminPomolini')">+ Aggiungi pomolino</button>\`);
+}
+
+
+async function nuovaConCodiceNome(tabella, promptCodice, promptNome, extraData, callback){
+  const codice = prompt(promptCodice);
+  if(!codice) return;
+  const nome = prompt(promptNome);
+  if(!nome) return;
+  // Inserisce solo codice e nome — gli altri campi si modificano inline
+  const {data, error} = await sb.from(tabella).insert([{codice:codice.trim(), nome}]).select();
+  if(error){
+    console.error('nuovaConCodiceNome error:', error);
+    toast('Errore: '+error.message,'err');
+    return;
+  }
+  toast('Aggiunto — modifica gli altri campi direttamente in tabella','ok');
+  if(callback && window[callback]) window[callback]();
+}
+
+async function nuovaSerratura(){
+  const codice = prompt('Codice serratura (es. PAT, YALE, WC, L-O):');
+  if(!codice) return;
+  const nome = prompt('Nome serratura:');
+  if(!nome) return;
+  const {data, error} = await sb.from('tipi_serratura').insert([{
+    codice:codice.toUpperCase().trim(), nome,
+    attiva:true, richiede_cilindro:false,
+    richiede_pomolino:false
+  }]).select();
+  if(error){
+    console.error('nuovaSerratura error:', error);
+    toast('Errore: '+error.message,'err');
+    return;
+  }
+  toast('Serratura aggiunta — modifica i campi direttamente in tabella','ok');
+  adminSerrature();
+}
+
+async function eliminaRigaAdmin(tabella, id, callback){
+  if(!confirm('Eliminare questa riga? L\\'operazione non è reversibile.')) return;
+  const {error} = await sb.from(tabella).delete().eq('id',id);
+  if(error){toast('Errore eliminazione: '+error.message,'err');return;}
+  toast('Eliminato','ok');
+  if(callback && window[callback]) window[callback]();
+}
+
+// ══════════════════════════════════════════════════════
+// PREZZI E LISTINI
+// ══════════════════════════════════════════════════════
+function adminPrezzi(){
+  const tabs=[{id:'listini',label:'Listini A e P'},{id:'colori_extra',label:'Vetro e inserti'},{id:'scontistiche',label:'Scontistiche'}];
+  document.getElementById('admin-main').innerHTML=adminSubTabs(tabs,'listini','switchAdminPrezzi')+'<div id="admin-sub"></div>';
+  switchAdminPrezzi('listini');
+}
+function switchAdminPrezzi(sub){
+  adminSub=sub;
+  document.querySelectorAll('#admin-main [onclick^="switchAdminPrezzi"]').forEach(t=>{
+    const isActive=t.getAttribute('onclick').includes(\`'\${sub}'\`);
+    t.style.borderBottom=isActive?'2px solid var(--red)':'2px solid transparent';
+    t.style.color=isActive?'var(--red)':'var(--mid)'; t.style.fontWeight=isActive?'500':'400';
+  });
+  if(sub==='listini') adminListini();
+  else if(sub==='colori_extra') adminColoriExtra();
+  else if(sub==='scontistiche') adminScontistiche();
+}
+
+async function adminListini(){
+  const {data:modelli} = await sb.from('modelli').select('*,prezzi_modello(listino,prezzo_base,prezzo_vetro,vetro_incluso,ha_extra_incisioni,prezzo_extra_incisioni)').order('codice_serie').order('nome');
+  const rows=(modelli||[]).map(m=>{
+    const pa=m.prezzi_modello?.find(p=>p.listino==='A');
+    const pp=m.prezzi_modello?.find(p=>p.listino==='P');
+    return \`<tr>
+      <td><span class="tag" style="font-size:10px">\${m.codice_serie}</span></td>
+      <td><strong style="font-size:12px">\${m.codice}</strong></td>
+      <td style="font-size:12px">\${m.nome}</td>
+      <td>\${inlineInput(pa?.prezzo_base||'',\`salvaPrezzo('\${m.codice}','A','prezzo_base',this.value)\`,'75px')}</td>
+      <td>\${inlineInput(pp?.prezzo_base||'',\`salvaPrezzo('\${m.codice}','P','prezzo_base',this.value)\`,'75px')}</td>
+      <td>\${m.ha_vetro&&!pa?.vetro_incluso?inlineInput(pa?.prezzo_vetro||'',\`salvaPrezzo('\${m.codice}','A','prezzo_vetro',this.value)\`,'70px'):m.ha_vetro?'<span class="badge bg" style="font-size:10px">Incl.</span>':'—'}</td>
+      <td>\${m.ha_vetro&&!pp?.vetro_incluso?inlineInput(pp?.prezzo_vetro||'',\`salvaPrezzo('\${m.codice}','P','prezzo_vetro',this.value)\`,'70px'):'—'}</td>
+      <td>\${pa?.ha_extra_incisioni?inlineInput(pa?.prezzo_extra_incisioni||'',\`salvaPrezzo('\${m.codice}','A','prezzo_extra_incisioni',this.value)\`,'70px'):'—'}</td>
+      <td>\${adminToggle(m.attivo,\`toggleCampo('modelli','\${m.id}','attivo',\${m.attivo})\`)}</td>
+    </tr>\`;
+  }).join('');
+  document.getElementById('admin-sub').innerHTML=adminCard('Listini A e P — prezzi base e vetro',\`
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>Serie</th><th>Codice</th><th>Modello</th><th>Base A (€)</th><th>Base P (€)</th><th>Vetro A</th><th>Vetro P</th><th>Incis. A</th><th>Stato</th></tr></thead>
+      <tbody>\${rows}</tbody>
+    </table></div>\`);
+}
+
+async function adminColoriExtra(){
+  const [{data:tv},{data:alu},{data:pietra}] = await Promise.all([
+    sb.from('tipi_vetro').select('*').order('nome'),
+    sb.from('colori_inserto_alluminio').select('*').order('nome'),
+    sb.from('colori_pietra').select('*').order('nome'),
+  ]);
+  const rowsV=(tv||[]).map(v=>\`<tr>
+    <td>\${inlineInput(v.codice,\`adminSalva('tipi_vetro','\${v.id}','codice',this.value)\`,'70px','text')}</td>
+    <td>\${inlineInput(v.nome,\`adminSalva('tipi_vetro','\${v.id}','nome',this.value)\`,'150px','text')}</td>
+    <td>\${inlineInput(v.sovrapprezzo_a??0,\`adminSalva('tipi_vetro','\${v.id}','sovrapprezzo_a',this.value)\`,'65px')}</td>
+    <td>\${inlineInput(v.sovrapprezzo_p??0,\`adminSalva('tipi_vetro','\${v.id}','sovrapprezzo_p',this.value)\`,'65px')}</td>
+    <td>\${adminToggle(v.attivo,\`toggleCampo('tipi_vetro','\${v.id}','attivo',\${v.attivo})\`)}</td>
+    <td><button onclick="eliminaRigaAdmin('tipi_vetro','\${v.id}','adminColoriExtra')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
+  </tr>\`).join('');
+  const rowsA=(alu||[]).map(a=>\`<tr>
+    <td>\${inlineInput(a.codice,\`adminSalva('colori_inserto_alluminio','\${a.id}','codice',this.value)\`,'70px','text')}</td>
+    <td>\${inlineInput(a.nome,\`adminSalva('colori_inserto_alluminio','\${a.id}','nome',this.value)\`,'150px','text')}</td>
+    <td><span class="badge \${a.incluso?'bg':'ba'}" style="cursor:pointer;font-size:10px" onclick="toggleCampo('colori_inserto_alluminio','\${a.id}','incluso',\${a.incluso})">\${a.incluso?'Incluso':'A pagamento'}</span></td>
+    <td>\${inlineInput(a.sovrapprezzo_a??'',\`adminSalva('colori_inserto_alluminio','\${a.id}','sovrapprezzo_a',this.value)\`,'65px','number','0')}</td>
+    <td>\${inlineInput(a.sovrapprezzo_p??'',\`adminSalva('colori_inserto_alluminio','\${a.id}','sovrapprezzo_p',this.value)\`,'65px','number','0')}</td>
+    <td><button onclick="eliminaRigaAdmin('colori_inserto_alluminio','\${a.id}','adminColoriExtra')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
+  </tr>\`).join('');
+  const rowsP=(pietra||[]).map(p=>\`<tr>
+    <td>\${inlineInput(p.codice,\`adminSalva('colori_pietra','\${p.id}','codice',this.value)\`,'70px','text')}</td>
+    <td>\${inlineInput(p.nome,\`adminSalva('colori_pietra','\${p.id}','nome',this.value)\`,'150px','text')}</td>
+    <td>\${inlineInput(p.sovrapprezzo_a??0,\`adminSalva('colori_pietra','\${p.id}','sovrapprezzo_a',this.value)\`,'65px')}</td>
+    <td>\${inlineInput(p.sovrapprezzo_p??0,\`adminSalva('colori_pietra','\${p.id}','sovrapprezzo_p',this.value)\`,'65px')}</td>
+    <td><button onclick="eliminaRigaAdmin('colori_pietra','\${p.id}','adminColoriExtra')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
+  </tr>\`).join('');
+  document.getElementById('admin-sub').innerHTML=\`
+  <div class="card" style="margin-bottom:12px">
+    <div class="card-header"><span class="card-title">Tipi vetro</span><button class="btn btn-red btn-sm" onclick="nuovaRigaUpsert('tipi_vetro',{codice:'VET'+Date.now().toString().slice(-3),nome:'Nuovo vetro',sovrapprezzo_a:0,sovrapprezzo_p:0,attivo:true},'adminColoriExtra')">+</button></div>
+    <table><thead><tr><th>Codice</th><th>Nome</th><th>Sovr.A</th><th>Sovr.P</th><th>Stato</th><th></th></tr></thead><tbody>\${rowsV||'<tr><td colspan="5" style="text-align:center;color:var(--mid);padding:12px">Nessuno</td></tr>'}</tbody></table>
+  </div>
+  <div class="card" style="margin-bottom:12px">
+    <div class="card-header"><span class="card-title">Colori inserto alluminio</span><button class="btn btn-red btn-sm" onclick="nuovaRiga('colori_inserto_alluminio',{codice:'ALU'+Date.now().toString().slice(-4),nome:'Nuovo colore',incluso:false},'adminColoriExtra')">+</button></div>
+    <table><thead><tr><th>Codice</th><th>Nome</th><th>Incluso</th><th>Sovr.A</th><th>Sovr.P</th><th></th></tr></thead><tbody>\${rowsA||'<tr><td colspan="5" style="text-align:center;color:var(--mid);padding:12px">Nessuno</td></tr>'}</tbody></table>
+  </div>
+  <div class="card">
+    <div class="card-header"><span class="card-title">Colori pietra</span><button class="btn btn-red btn-sm" onclick="nuovaRiga('colori_pietra',{codice:'PIE'+Date.now().toString().slice(-4),nome:'Nuovo colore',sovrapprezzo_a:0,sovrapprezzo_p:0},'adminColoriExtra')">+</button></div>
+    <table><thead><tr><th>Codice</th><th>Nome</th><th>Sovr.A</th><th>Sovr.P</th></tr></thead><tbody>\${rowsP||'<tr><td colspan="4" style="text-align:center;color:var(--mid);padding:12px">Nessun colore pietra — aggiungilo qui</td></tr>'}</tbody></table>
+  </div>\`;
+}
+
+async function adminScontistiche(){
+  const {data} = await sb.from('scontistiche').select('*').order('canale');
+  const canali=['rivenditore','architetto','impresa','privato'];
+  const rows=(data||[]).map(s=>\`<tr>
+    <td><select onchange="adminSalva('scontistiche','\${s.id}','canale',this.value)" style="padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px">
+      \${canali.map(c=>\`<option value="\${c}" \${c===s.canale?'selected':''}>\${c}</option>\`).join('')}
+    </select></td>
+    <td><span class="tag">\${s.listino||'—'}</span></td>
+    <td>\${inlineInput(s.sconto_base_pct??'',\`adminSalva('scontistiche','\${s.id}','sconto_base_pct',this.value)\`,'60px')} %</td>
+    <td>\${inlineInput(s.sconto_max_pct??'',\`adminSalva('scontistiche','\${s.id}','sconto_max_pct',this.value)\`,'60px')} %</td>
+    <td style="font-size:12px;color:var(--mid);max-width:200px">\${s.note||''}</td>
+    <td>\${adminToggle(s.attivo!==false,\`toggleCampo('scontistiche','\${s.id}','attivo',\${s.attivo!==false})\`)}</td>
+  </tr>\`).join('');
+  document.getElementById('admin-sub').innerHTML=adminCard('Scontistiche per canale',\`
+    <table><thead><tr><th>Canale</th><th>Listino</th><th>Sconto base %</th><th>Sconto max %</th><th>Note</th><th>Stato</th></tr></thead>
+    <tbody>\${rows||'<tr><td colspan="6" style="text-align:center;color:var(--mid);padding:12px">Nessuna scontistica</td></tr>'}</tbody></table>\`);
+}
+
+// ══════════════════════════════════════════════════════
+// TELAIO E COMPONENTI
+// ══════════════════════════════════════════════════════
+function adminTelaioPanel(){
+  const tabs=[{id:'spalle',label:'Spalle telaio'},{id:'regole',label:'Regole spessore'},
+    {id:'scorrevoli_ext',label:'Scorrevoli esterni'},{id:'scorrevoli_int',label:'Scorrevoli interni'}];
+  document.getElementById('admin-main').innerHTML=adminSubTabs(tabs,'spalle','switchAdminTelaio')+'<div id="admin-sub"></div>';
+  switchAdminTelaio('spalle');
+}
+function switchAdminTelaio(sub){
+  adminSub=sub;
+  document.querySelectorAll('#admin-main [onclick^="switchAdminTelaio"]').forEach(t=>{
+    const isActive=t.getAttribute('onclick').includes(\`'\${sub}'\`);
+    t.style.borderBottom=isActive?'2px solid var(--red)':'2px solid transparent';
+    t.style.color=isActive?'var(--red)':'var(--mid)'; t.style.fontWeight=isActive?'500':'400';
+  });
+  if(sub==='spalle') adminSpalle();
+  else if(sub==='regole') adminRegole();
+  else if(sub==='scorrevoli_ext') adminScorExt();
+  else if(sub==='scorrevoli_int') adminScorInt();
+}
+
+async function adminSpalle(){
+  const {data} = await sb.from('telai_spalle').select('*').order('famiglia_apertura').order('spalla_cm');
+  const rows=(data||[]).map(s=>\`<tr>
+    <td>\${inlineInput(s.codice,\`adminSalva('telai_spalle','\${s.id}','codice',this.value)\`,'90px','text')}</td>
+    <td>\${inlineInput(s.spalla_cm,\`adminSalva('telai_spalle','\${s.id}','spalla_cm',this.value)\`,'60px','number')} mm</td>
+    <td>\${inlineInput(s.famiglia_apertura||'',\`adminSalva('telai_spalle','\${s.id}','famiglia_apertura',this.value)\`,'70px','text')}</td>
+    <td>\${inlineInput(s.descrizione||'',\`adminSalva('telai_spalle','\${s.id}','descrizione',this.value)\`,'160px','text','—')}</td>
+    <td>\${inlineInput(s.prezzo_a??'',\`adminSalva('telai_spalle','\${s.id}','prezzo_a',this.value)\`,'70px','number','€')}</td>
+    <td>\${inlineInput(s.prezzo_p??'',\`adminSalva('telai_spalle','\${s.id}','prezzo_p',this.value)\`,'70px','number','€')}</td>
+    <td><button onclick="eliminaRigaAdmin('telai_spalle','\${s.id}','adminSpalle')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
+  </tr>\`).join('');
+  document.getElementById('admin-sub').innerHTML=adminCard('Spalle telaio a magazzino',\`
+    <div style="margin-bottom:10px"><button class="btn btn-red btn-sm" onclick="nuovaSpalla()">+ Aggiungi spalla</button></div>
+    <table><thead><tr><th>Codice</th><th>Spalla (mm)</th><th>Famiglia</th><th>Descrizione</th><th>Prezzo A (€)</th><th>Prezzo P (€)</th><th></th></tr></thead>
+    <tbody>\${rows}</tbody></table>\`);
+}
+
+async function nuovaSpalla(){
+  const cod=prompt('Codice spalla (es. 107_B32):'); if(!cod) return;
+  const mm=prompt('Misura mm:'); if(!mm) return;
+  const fam=prompt('Famiglia apertura (es. BAT):'); if(!fam) return;
+  const {error}=await sb.from('telai_spalle').insert([{codice:cod,spalla_cm:parseFloat(mm),famiglia_apertura:fam.toUpperCase()}]);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Spalla aggiunta','ok'); adminSpalle();
+}
+
+async function adminRegole(){
+  const {data} = await sb.from('regole_telaio').select('*').order('famiglia_apertura').order('spessore_da_cm');
+  const rows=(data||[]).map(r=>\`<tr>
+    <td>\${inlineInput(r.famiglia_apertura,\`adminSalva('regole_telaio','\${r.id}','famiglia_apertura',this.value)\`,'70px','text')}</td>
+    <td style="display:flex;gap:4px;align-items:center">
+      \${inlineInput(r.spessore_da_cm,\`adminSalva('regole_telaio','\${r.id}','spessore_da_cm',this.value)\`,'55px','number')}
+      <span style="font-size:11px;color:var(--mid)">–</span>
+      \${inlineInput(r.spessore_a_cm,\`adminSalva('regole_telaio','\${r.id}','spessore_a_cm',this.value)\`,'55px','number')}
+      <span style="font-size:11px;color:var(--mid)">mm</span>
+    </td>
+    <td>\${inlineInput(r.codice_spalla,\`adminSalva('regole_telaio','\${r.id}','codice_spalla',this.value)\`,'90px','text')}</td>
+    <td>\${inlineInput(r.tipo_accessorio||'',\`adminSalva('regole_telaio','\${r.id}','tipo_accessorio',this.value)\`,'90px','text','—')}</td>
+    <td>\${inlineInput(r.cm_accessorio||'',\`adminSalva('regole_telaio','\${r.id}','cm_accessorio',this.value)\`,'55px','number','—')}</td>
+    <td>\${inlineInput(r.prezzo_access_A??'',\`adminSalva('regole_telaio','\${r.id}','prezzo_access_A',this.value)\`,'70px','number','€')}</td>
+    <td>\${inlineInput(r.prezzo_access_P??'',\`adminSalva('regole_telaio','\${r.id}','prezzo_access_P',this.value)\`,'70px','number','€')}</td>
+    <td>\${inlineInput(r.note||'',\`adminSalva('regole_telaio','\${r.id}','note',this.value)\`,'120px','text','—')}</td>
+    <td><button onclick="eliminaRigaAdmin('regole_telaio','\${r.id}','adminRegole')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
+  </tr>\`).join('');
+  document.getElementById('admin-sub').innerHTML=adminCard('Regole abbinamento spessore → telaio',\`
+    <div style="margin-bottom:10px"><button class="btn btn-red btn-sm" onclick="nuovaRegola()">+ Aggiungi regola</button></div>
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>Famiglia</th><th>Spessore (mm)</th><th>Spalla</th><th>Accessorio</th><th>Mm</th><th>Costo A (€)</th><th>Costo P (€)</th><th>Note</th><th></th></tr></thead>
+      <tbody>\${rows}</tbody>
+    </table></div>\`);
+}
+
+async function nuovaRegola(){
+  const fam=prompt('Famiglia apertura (es. BAT):'); if(!fam) return;
+  const da=prompt('Spessore da (mm):'); if(!da) return;
+  const a=prompt('Spessore a (mm):'); if(!a) return;
+  const spalla=prompt('Codice spalla (es. 107_B32):'); if(!spalla) return;
+  const {error}=await sb.from('regole_telaio').insert([{famiglia_apertura:fam.toUpperCase(),spessore_da_cm:parseFloat(da),spessore_a_cm:parseFloat(a),codice_spalla:spalla}]);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Regola aggiunta','ok'); adminRegole();
+}
+
+async function adminScorExt(){
+  const {data} = await sb.from('scorrevoli_esterni').select('*').order('codice_apertura').order('spessore_da_cm');
+  const rows=(data||[]).map(s=>\`<tr>
+    <td>\${inlineInput(s.codice_apertura,\`adminSalva('scorrevoli_esterni','\${s.id}','codice_apertura',this.value)\`,'80px','text')}</td>
+    <td style="display:flex;gap:4px;align-items:center">
+      \${inlineInput(s.spessore_da_cm,\`adminSalva('scorrevoli_esterni','\${s.id}','spessore_da_cm',this.value)\`,'55px','number')}
+      <span style="font-size:11px;color:var(--mid)">–</span>
+      \${inlineInput(s.spessore_a_cm,\`adminSalva('scorrevoli_esterni','\${s.id}','spessore_a_cm',this.value)\`,'55px','number')}
+      <span style="font-size:11px;color:var(--mid)">mm</span>
+    </td>
+    <td>\${inlineInput(s.tipo_accessorio||'',\`adminSalva('scorrevoli_esterni','\${s.id}','tipo_accessorio',this.value)\`,'90px','text','—')}</td>
+    <td>\${inlineInput(s.cm_accessorio||'',\`adminSalva('scorrevoli_esterni','\${s.id}','cm_accessorio',this.value)\`,'55px','number','mm')}</td>
+    <td>\${inlineInput(s.prezzo_a??'',\`adminSalva('scorrevoli_esterni','\${s.id}','prezzo_a',this.value)\`,'75px','number','€')}</td>
+    <td>\${inlineInput(s.prezzo_p??'',\`adminSalva('scorrevoli_esterni','\${s.id}','prezzo_p',this.value)\`,'75px','number','€')}</td>
+    <td><button onclick="eliminaRigaAdmin('scorrevoli_esterni','\${s.id}','adminScorExt')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
+  </tr>\`).join('');
+  document.getElementById('admin-sub').innerHTML=adminCard('Scorrevoli esterni — prezzi per fascia spessore',\`
+    <div style="margin-bottom:10px"><button class="btn btn-red btn-sm" onclick="nuovoScorExt()">+ Aggiungi</button></div>
+    <table><thead><tr><th>Tipologia</th><th>Spessore muro (mm)</th><th>Accessorio</th><th>Mm</th><th>Prezzo A (€)</th><th>Prezzo P (€)</th><th></th></tr></thead>
+    <tbody>\${rows}</tbody></table>\`);
+}
+
+async function nuovoScorExt(){
+  const cod=prompt('Codice apertura (es. SE):'); if(!cod) return;
+  const da=prompt('Spessore da (mm):'); if(!da) return;
+  const a=prompt('Spessore a (mm):'); if(!a) return;
+  const {error}=await sb.from('scorrevoli_esterni').insert([{codice_apertura:cod.toUpperCase(),spessore_da_cm:parseFloat(da),spessore_a_cm:parseFloat(a)}]);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Riga aggiunta','ok'); adminScorExt();
+}
+
+async function adminScorInt(){
+  const {data} = await sb.from('scorrevoli_interni').select('*').order('codice_apertura').order('spalla_cassone_cm');
+  const rows=(data||[]).map(s=>\`<tr>
+    <td>\${inlineInput(s.codice_apertura,\`adminSalva('scorrevoli_interni','\${s.id}','codice_apertura',this.value)\`,'80px','text')}</td>
+    <td>\${inlineInput(s.codice_cassone||'',\`adminSalva('scorrevoli_interni','\${s.id}','codice_cassone',this.value)\`,'90px','text')}</td>
+    <td>\${inlineInput(s.spalla_cassone_cm,\`adminSalva('scorrevoli_interni','\${s.id}','spalla_cassone_cm',this.value)\`,'65px','number')} mm</td>
+    <td>\${inlineInput(s.kit_telaio_codice||'',\`adminSalva('scorrevoli_interni','\${s.id}','kit_telaio_codice',this.value)\`,'90px','text')}</td>
+    <td>\${inlineInput(s.prezzo_a??'',\`adminSalva('scorrevoli_interni','\${s.id}','prezzo_a',this.value)\`,'75px','number','€')}</td>
+    <td>\${inlineInput(s.prezzo_p??'',\`adminSalva('scorrevoli_interni','\${s.id}','prezzo_p',this.value)\`,'75px','number','€')}</td>
+    <td><button onclick="eliminaRigaAdmin('scorrevoli_interni','\${s.id}','adminScorInt')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
+  </tr>\`).join('');
+  document.getElementById('admin-sub').innerHTML=adminCard('Scorrevoli interni — kit cassone',\`
+    <div style="margin-bottom:10px"><button class="btn btn-red btn-sm" onclick="nuovoScorInt()">+ Aggiungi</button></div>
+    <table><thead><tr><th>Tipologia</th><th>Cassone</th><th>Spalla (mm)</th><th>Kit telaio</th><th>Prezzo A (€)</th><th>Prezzo P (€)</th><th></th></tr></thead>
+    <tbody>\${rows}</tbody></table>\`);
+}
+
+async function nuovoScorInt(){
+  const cod=prompt('Codice apertura (es. SI):'); if(!cod) return;
+  const {error}=await sb.from('scorrevoli_interni').insert([{codice_apertura:cod.toUpperCase()}]);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Riga aggiunta','ok'); adminScorInt();
+}
+
+// ══════════════════════════════════════════════════════
+// DISTINTE BASE
+// ══════════════════════════════════════════════════════
+async function adminDistinte(){
+  const [{data:modelli},{data:serie}] = await Promise.all([
+    sb.from('modelli').select('codice,nome,codice_serie').eq('attivo',true).order('codice_serie').order('nome'),
+    sb.from('serie').select('codice,nome').order('nome'),
+  ]);
+  const filtroSerie = document.getElementById('db-serie-filter')?.value||'TAM';
+  const filtroModello = document.getElementById('db-modello-filter')?.value||modelli?.[0]?.codice||'';
+  const serieOpts=(serie||[]).map(s=>\`<option value="\${s.codice}" \${s.codice===filtroSerie?'selected':''}>\${s.codice}</option>\`).join('');
+  const modelliSerie=(modelli||[]).filter(m=>m.codice_serie===filtroSerie);
+  const modelloOpts=modelliSerie.map(m=>\`<option value="\${m.codice}" \${m.codice===filtroModello?'selected':''}>\${m.codice} — \${m.nome}</option>\`).join('');
+
+  let rowsDB='';
+  if(filtroModello){
+    const {data:db} = await sb.from('distinte_base').select('*').eq('codice_modello',filtroModello).eq('attivo',true).order('categoria').order('descrizione_componente');
+    const catColors={legno:'bb',accessorio:'bg',ferramenta:'ba',vetro:'bb',imballaggio:'bgr'};
+    rowsDB=(db||[]).map(r=>\`<tr>
+      <td>\${inlineInput(r.codice_componente,\`adminSalva('distinte_base','\${r.id}','codice_componente',this.value)\`,'90px','text')}</td>
+      <td>\${inlineInput(r.descrizione_componente,\`adminSalva('distinte_base','\${r.id}','descrizione_componente',this.value)\`,'200px','text')}</td>
+      <td><select onchange="adminSalva('distinte_base','\${r.id}','categoria',this.value)" style="padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:11px">
+        \${['legno','accessorio','ferramenta','vetro','imballaggio'].map(c=>\`<option value="\${c}" \${c===r.categoria?'selected':''}>\${c}</option>\`).join('')}
+      </select></td>
+      <td>\${inlineInput(r.quantita??1,\`adminSalva('distinte_base','\${r.id}','quantita',this.value)\`,'55px')}</td>
+      <td>\${inlineInput(r.unita_misura||'pz',\`adminSalva('distinte_base','\${r.id}','unita_misura',this.value)\`,'50px','text')}</td>
+      <td>\${inlineInput(r.note||'',\`adminSalva('distinte_base','\${r.id}','note',this.value)\`,'120px','text','')}</td>
+      <td><button onclick="eliminaDistinta('\${r.id}')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
+    </tr>\`).join('');
+    if(!rowsDB) rowsDB='<tr><td colspan="7" style="text-align:center;color:var(--mid);padding:20px;font-style:italic">Nessun componente ancora — aggiungi il primo</td></tr>';
+  }
+
+  document.getElementById('admin-main').innerHTML=\`
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+    <label style="font-size:12px;color:var(--mid)">Serie:</label>
+    <select id="db-serie-filter" onchange="adminDistinte()" style="padding:5px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit">\${serieOpts}</select>
+    <label style="font-size:12px;color:var(--mid)">Modello:</label>
+    <select id="db-modello-filter" onchange="adminDistinte()" style="padding:5px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit;min-width:220px">\${modelloOpts}</select>
+    \${filtroModello?\`<button class="btn btn-red btn-sm" onclick="nuovoComponenteDB('\${filtroModello}')">+ Aggiungi componente</button>\`:''}
+  </div>
+  \${filtroModello?adminCard(\`Distinta base — \${filtroModello}\`,\`
+    <div style="background:var(--blue-bg);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--blue-tx);margin-bottom:10px">
+      Inserisci tutti i componenti necessari per produrre questo modello. Sarà la base per il magazzino e il ciclo produttivo.
+    </div>
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>Codice componente</th><th>Descrizione</th><th>Categoria</th><th>Q.tà</th><th>Unità</th><th>Note</th><th></th></tr></thead>
+      <tbody>\${rowsDB}</tbody>
+    </table></div>\`):'<div class="card"><p style="color:var(--mid);padding:20px;text-align:center">Seleziona una serie e un modello per gestire la distinta base</p></div>'}\`;
+}
+
+async function nuovoComponenteDB(codModello){
+  const {error}=await sb.from('distinte_base').insert([{codice_modello:codModello,codice_componente:'COD',descrizione_componente:'Nuovo componente',categoria:'accessorio',quantita:1,unita_misura:'pz'}]);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Componente aggiunto','ok'); adminDistinte();
+}
+
+async function eliminaDistinta(id){
+  if(!confirm('Eliminare questo componente dalla distinta?')) return;
+  await sb.from('distinte_base').update({attivo:false}).eq('id',id);
+  adminDistinte();
+}
+
+// ══════════════════════════════════════════════════════
+// AGENTI
+// ══════════════════════════════════════════════════════
+async function adminAgenti(){
+  const [{data:agenti},{data:scala}] = await Promise.all([
+    sb.from('agenti').select('*').order('cognome'),
+    sb.from('provvigioni_scala').select('*').eq('attivo',true).order('sconto_da_pct'),
+  ]);
+
+  const rowsAgenti=(agenti||[]).map(a=>\`<tr>
+    <td>\${inlineInput(a.nome,\`adminSalva('agenti','\${a.id}','nome',this.value)\`,'100px','text')}</td>
+    <td>\${inlineInput(a.cognome,\`adminSalva('agenti','\${a.id}','cognome',this.value)\`,'120px','text')}</td>
+    <td>\${inlineInput(a.email||'',\`adminSalva('agenti','\${a.id}','email',this.value)\`,'160px','text','email')}</td>
+    <td>\${inlineInput(a.telefono||'',\`adminSalva('agenti','\${a.id}','telefono',this.value)\`,'120px','text')}</td>
+    <td>\${inlineInput(a.zona||'',\`adminSalva('agenti','\${a.id}','zona',this.value)\`,'100px','text','es. Piemonte')}</td>
+    <td>
+      <button onclick="adminScalaAgente('\${a.id}','\${a.nome} \${a.cognome}')" class="btn btn-sm" style="font-size:11px">
+        Scala personalizzata
+      </button>
+    </td>
+    <td>\${adminToggle(a.attivo,\`toggleCampo('agenti','\${a.id}','attivo',\${a.attivo})\`)}</td>
+    <td><button onclick="eliminaRigaAdmin('agenti','\${a.id}','adminAgenti')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
+  </tr>\`).join('');
+
+  const rowsScala=(scala||[]).map(s=>\`<tr>
+    <td>\${inlineInput(s.sconto_da_pct,\`adminSalva('provvigioni_scala','\${s.id}','sconto_da_pct',this.value)\`,'55px')} %</td>
+    <td>\${inlineInput(s.sconto_a_pct,\`adminSalva('provvigioni_scala','\${s.id}','sconto_a_pct',this.value)\`,'55px')} %</td>
+    <td>\${inlineInput(s.provvigione_pct,\`adminSalva('provvigioni_scala','\${s.id}','provvigione_pct',this.value)\`,'55px')} %</td>
+    <td>\${inlineInput(s.note||'',\`adminSalva('provvigioni_scala','\${s.id}','note',this.value)\`,'200px','text','')}</td>
+    <td><button onclick="eliminaRigaAdmin('provvigioni_scala','\${s.id}','adminAgenti')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
+  </tr>\`).join('');
+
+  document.getElementById('admin-main').innerHTML=\`
+  <div class="grid-2" style="gap:14px">
+    \${adminCard('Agenti Max Porte',\`
+      <table><thead><tr><th>Nome</th><th>Cognome</th><th>Email</th><th>Telefono</th><th>Zona</th><th>Scala provv.</th><th>Stato</th><th></th></tr></thead>
+      <tbody>\${rowsAgenti||'<tr><td colspan="8" style="text-align:center;color:var(--mid);padding:20px">Nessun agente ancora</td></tr>'}</tbody></table>\`,
+      \`<button class="btn btn-red btn-sm" onclick="nuovoAgente()">+ Aggiungi agente</button>\`)}
+    \${adminCard('Scala provvigioni globale',\`
+      <div style="background:var(--blue-bg);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--blue-tx);margin-bottom:10px">
+        All'abbassarsi dello sconto applicato al cliente, la provvigione dell'agente aumenta.<br>
+        Se un agente ha una scala personalizzata, questa globale viene ignorata per quell'agente.
+      </div>
+      <table>
+        <thead><tr><th>Sconto da %</th><th>Sconto a %</th><th>Provvigione %</th><th>Note</th><th></th></tr></thead>
+        <tbody>\${rowsScala}</tbody>
+      </table>\`,
+      \`<button class="btn btn-red btn-sm" onclick="nuovaFasciaScala()">+ Aggiungi fascia</button>\`)}
+  </div>\`;
+}
+
+async function nuovoAgente(){
+  const nome=prompt('Nome:'); if(!nome) return;
+  const cognome=prompt('Cognome:'); if(!cognome) return;
+  const {error}=await sb.from('agenti').insert([{nome,cognome,attivo:true,percentuale_provvigione:0}]);
+  if(error){toast(msgErrore(error,nome+' '+cognome),'err');return;}
+  toast('Agente aggiunto','ok'); adminAgenti();
+}
+
+async function nuovaFasciaScala(){
+  const da=parseFloat(prompt('Sconto da % (incluso):')||'0');
+  const a=parseFloat(prompt('Sconto a % (incluso):')||'0');
+  const prov=parseFloat(prompt('Provvigione %:')||'0');
+  if(isNaN(da)||isNaN(a)||isNaN(prov)) return;
+  const {error}=await sb.from('provvigioni_scala').insert([{sconto_da_pct:da,sconto_a_pct:a,provvigione_pct:prov}]);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Fascia aggiunta','ok'); adminAgenti();
+}
+
+async function adminScalaAgente(agenteId, nomeAgente){
+  const {data:scala} = await sb.from('provvigioni_scala_agente').select('*').eq('agente_id',agenteId).order('sconto_da_pct');
+  const {data:globale} = await sb.from('provvigioni_scala').select('*').eq('attivo',true).order('sconto_da_pct');
+
+  const rows=(scala||[]).map(s=>\`<tr>
+    <td>\${inlineInput(s.sconto_da_pct,\`adminSalva('provvigioni_scala_agente','\${s.id}','sconto_da_pct',this.value)\`,'55px')} %</td>
+    <td>\${inlineInput(s.sconto_a_pct,\`adminSalva('provvigioni_scala_agente','\${s.id}','sconto_a_pct',this.value)\`,'55px')} %</td>
+    <td>\${inlineInput(s.provvigione_pct,\`adminSalva('provvigioni_scala_agente','\${s.id}','provvigione_pct',this.value)\`,'55px')} %</td>
+    <td><button onclick="eliminaRigaAdmin('provvigioni_scala_agente','\${s.id}','adminAgenti')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
+  </tr>\`).join('');
+
+  const globaleHtml=(globale||[]).map(s=>\`<span style="font-size:11px;color:var(--mid)">
+    \${s.sconto_da_pct}–\${s.sconto_a_pct}% → \${s.provvigione_pct}%
+  </span>\`).join(' | ');
+
+  document.getElementById('admin-main').innerHTML=\`
+  <div style="margin-bottom:14px">
+    <button class="btn btn-sm" onclick="adminAgenti()">← Torna agli agenti</button>
+  </div>
+  <div class="card">
+    <div class="card-header"><span class="card-title">Scala provvigioni personalizzata — \${nomeAgente}</span>
+      <button class="btn btn-red btn-sm" onclick="nuovaFasciaScalaAgente('\${agenteId}')">+ Aggiungi fascia</button>
+    </div>
+    \${rows?\`<table><thead><tr><th>Sconto da %</th><th>Sconto a %</th><th>Provvigione %</th><th></th></tr></thead><tbody>\${rows}</tbody></table>\`
+    :'<div style="padding:16px;text-align:center;color:var(--mid);font-size:13px">Nessuna scala personalizzata — viene usata la scala globale:<br><br>'+globaleHtml+'</div>'}
+    \${rows?\`<div style="margin-top:10px;font-size:12px;color:var(--mid)">Scala globale (ignorata): \${globaleHtml}</div>\`:''}
+  </div>\`;
+}
+
+async function nuovaFasciaScalaAgente(agenteId){
+  const da=parseFloat(prompt('Sconto da % (incluso):')||'0');
+  const a=parseFloat(prompt('Sconto a % (incluso):')||'0');
+  const prov=parseFloat(prompt('Provvigione %:')||'0');
+  if(isNaN(da)||isNaN(a)||isNaN(prov)) return;
+  const {error}=await sb.from('provvigioni_scala_agente').insert([{agente_id:agenteId,sconto_da_pct:da,sconto_a_pct:a,provvigione_pct:prov}]);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Fascia aggiunta','ok'); adminScalaAgente(agenteId,'');
+}
+
+// Calcola provvigione in base allo sconto effettivo
+async function calcolaProvvigione(agenteId, scontoEffettivoPct){
+  if(!agenteId) return 0;
+  try {
+    // Cerca scala personalizzata
+    const {data:pers} = await sb.from('provvigioni_scala_agente')
+      .select('provvigione_pct')
+      .eq('agente_id',agenteId)
+      .lte('sconto_da_pct',scontoEffettivoPct)
+      .gte('sconto_a_pct',scontoEffettivoPct)
+      .limit(1);
+    if(pers&&pers.length>0) return pers[0].provvigione_pct||0;
+    // Fallback scala globale
+    const {data:glob} = await sb.from('provvigioni_scala')
+      .select('provvigione_pct')
+      .eq('attivo',true)
+      .lte('sconto_da_pct',scontoEffettivoPct)
+      .gte('sconto_a_pct',scontoEffettivoPct)
+      .limit(1);
+    return (glob&&glob.length>0) ? glob[0].provvigione_pct||0 : 0;
+  } catch(e) { return 0; }
+}
+
+// ══════════════════════════════════════════════════════
+// COMPATIBILITÀ OPZIONI
+// ══════════════════════════════════════════════════════
+async function adminCompatibilita(){
+  // Carica tutte le entità disponibili per i menu
+  const [
+    {data:serie},{data:modelli},{data:finiture},{data:aperture},
+    {data:ferramenta},{data:vetri},{data:alu},{data:pietra},
+    {data:serratureC},{data:maniglie2},
+    {data:regole}
+  ] = await Promise.all([
+    sb.from('serie').select('codice,nome').eq('attiva',true).order('nome'),
+    sb.from('modelli').select('codice,nome').eq('attivo',true).order('nome'),
+    sb.from('finiture').select('codice_finitura,nome_finitura').order('nome_finitura'),
+    sb.from('tipologie_apertura').select('codice,nome').eq('attiva',true).order('codice'),
+    sb.from('ferramenta').select('codice,nome').eq('attivo',true).order('nome'),
+    sb.from('tipi_vetro').select('codice,nome').eq('attivo',true).order('nome'),
+    sb.from('colori_inserto_alluminio').select('codice,nome').order('nome'),
+    sb.from('colori_pietra').select('codice,nome').order('nome'),
+    sb.from('tipi_serratura').select('codice,nome').eq('attiva',true).eq('is_automatica',false).order('nome'),
+    sb.from('maniglie').select('codice,nome').eq('attivo',true).order('nome'),
+    sb.from('regole_compatibilita').select('*').order('entita_a_tipo').order('entita_a_codice'),
+  ]);
+
+  const ENTITA = {
+    serie:    {label:'Serie',      items:serie||[],   codKey:'codice',nameKey:'nome'},
+    modello:  {label:'Modello',    items:modelli||[],  codKey:'codice',nameKey:'nome'},
+    finitura: {label:'Finitura', items: (() => {
+      // Deduplica per codice_finitura
+      const seen = new Set();
+      return (finiture||[]).filter(f => {
+        if(seen.has(f.codice_finitura)) return false;
+        seen.add(f.codice_finitura); return true;
+      });
+    })(), codKey:'codice_finitura', nameKey:'nome_finitura'},
+    apertura: {label:'Apertura',   items:aperture||[], codKey:'codice',nameKey:'nome'},
+    ferramenta:{label:'Ferramenta',items:ferramenta||[],codKey:'codice',nameKey:'nome'},
+    vetro:    {label:'Vetro',      items:vetri||[],    codKey:'codice',nameKey:'nome'},
+    inserto_alu:{label:'Inserto alluminio',items:alu||[],codKey:'codice',nameKey:'nome'},
+    inserto_pietra:{label:'Inserto pietra',items:pietra||[],codKey:'codice',nameKey:'nome'},
+    serratura:{label:'Serratura',items:serratureC||[],codKey:'codice',nameKey:'nome'},
+    maniglia:{label:'Maniglia',items:maniglie2||[],codKey:'codice',nameKey:'nome'},
+  };
+
+  // Stato filtri correnti
+  const aTipo = document.getElementById('compat-a-tipo')?.value||'serie';
+  const aCodice = document.getElementById('compat-a-codice')?.value||'';
+  const bTipo = document.getElementById('compat-b-tipo')?.value||'finitura';
+
+  const aItems = ENTITA[aTipo]?.items||[];
+  const bItems = ENTITA[bTipo]?.items||[];
+
+  // Opzioni per i select
+  const tipiOpts = Object.entries(ENTITA).map(([k,v])=>\`<option value="\${k}">\${v.label}</option>\`).join('');
+
+  const aCodsOpts = aItems.map(i=>\`<option value="\${i.codice||i[ENTITA[aTipo].codKey]}" \${(i.codice||i[ENTITA[aTipo].codKey])===aCodice?'selected':''}>\${i.codice||i[ENTITA[aTipo].codKey]} — \${i.nome||i[ENTITA[aTipo].nameKey]}</option>\`).join('');
+
+  // Carica regole precise per A selezionato (query diretta, non filtraggio lato client)
+  let regoleFiltrate = [];
+  if(aCodice){
+    const {data:rf} = await sb.from('regole_compatibilita')
+      .select('*')
+      .eq('entita_a_tipo', aTipo)
+      .eq('entita_a_codice', aCodice);
+    regoleFiltrate = rf||[];
+  }
+  const esclusiB = new Set(regoleFiltrate.filter(r=>r.entita_b_tipo===bTipo).map(r=>r.entita_b_codice));
+
+  // Lista opzioni B con stato
+  const opzioniHtml = bItems.map(op=>{
+    const cod = op.codice||op[ENTITA[bTipo].codKey];
+    const nome = op.nome||op[ENTITA[bTipo].nameKey];
+    const escluso = esclusiB.has(cod);
+    const regola = regoleFiltrate.find(r=>r.entita_b_tipo===bTipo&&r.entita_b_codice===cod);
+    const aNome = aItems.find(i=>(i.codice||i[ENTITA[aTipo].codKey])===aCodice)?.nome||aCodice;
+    return \`<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border-bottom:0.5px solid var(--border);background:\${escluso?'var(--red-bg)':'transparent'}">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:13px">\${escluso?'🚫':'✓'}</span>
+        <span style="font-size:12px;font-weight:500;color:\${escluso?'var(--red-tx)':'var(--dark)'}">\${cod}</span>
+        <span style="font-size:12px;color:\${escluso?'var(--red-tx)':'var(--mid)'}">\${nome}</span>
+      </div>
+      \${aCodice
+        ? escluso
+          ? \`<button onclick="rimuoviRegola('\${regola?.id}')" style="padding:3px 12px;border-radius:4px;border:0.5px solid var(--green-tx);font-size:11px;cursor:pointer;background:var(--green-bg);color:var(--green-tx);font-family:inherit">↺ Riabilita</button>\`
+          : \`<button
+              data-a-tipo="\${aTipo}" data-a-codice="\${aCodice}" data-a-nome="\${aNome.replace(/"/g,'&quot;')}"
+              data-b-tipo="\${bTipo}" data-b-codice="\${cod}" data-b-nome="\${nome.replace(/"/g,'&quot;')}"
+              onclick="aggiungiRegolaBtn(this)"
+              style="padding:3px 12px;border-radius:4px;border:0.5px solid var(--border);font-size:11px;cursor:pointer;background:none;color:var(--mid);font-family:inherit">🚫 Escludi</button>\`
+        : '<span style="font-size:11px;color:var(--mid)">Seleziona un valore A</span>'
+      }
+    </div>\`;
+  }).join('');
+
+  // Lista tutte le regole esistenti
+  const tutteRegole = (regole||[]).map(r=>\`<tr style="font-size:12px">
+    <td style="padding:5px 8px"><span class="tag" style="font-size:10px">\${ENTITA[r.entita_a_tipo]?.label||r.entita_a_tipo}</span></td>
+    <td style="padding:5px 8px;font-weight:500">\${r.entita_a_codice}</td>
+    <td style="padding:5px 8px;color:var(--mid)">\${r.entita_a_nome||''}</td>
+    <td style="padding:5px 8px;color:var(--mid)">→ esclude</td>
+    <td style="padding:5px 8px"><span class="tag" style="font-size:10px;background:var(--red-bg);color:var(--red-tx)">\${ENTITA[r.entita_b_tipo]?.label||r.entita_b_tipo}</span></td>
+    <td style="padding:5px 8px;font-weight:500;color:var(--red-tx)">\${r.entita_b_codice}</td>
+    <td style="padding:5px 8px;color:var(--mid)">\${r.entita_b_nome||''}</td>
+    <td style="padding:5px 8px"><button onclick="rimuoviRegola('\${r.id}')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
+  </tr>\`).join('');
+
+  document.getElementById('admin-main').innerHTML=\`
+  <div style="display:flex;gap:14px;height:calc(100vh - 110px);overflow:hidden">
+
+    <!-- Pannello sinistro: crea nuove regole -->
+    <div style="width:420px;min-width:420px;display:flex;flex-direction:column;gap:10px">
+      \${adminCard('Aggiungi regola di esclusione',\`
+        <div style="background:var(--green-bg);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--green-tx);margin-bottom:12px">
+          Tutto è disponibile per default. Definisci solo le esclusioni: <em>"Se si sceglie A → escludi B"</em>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+          <div>
+            <div style="font-size:11px;color:var(--mid);margin-bottom:4px;font-weight:500">SE SI SCEGLIE...</div>
+            <select id="compat-a-tipo" onchange="adminCompatibilita()" style="width:100%;padding:6px 8px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:12px;font-family:inherit;margin-bottom:6px">
+              \${Object.entries(ENTITA).map(([k,v])=>\`<option value="\${k}" \${k===aTipo?'selected':''}>\${v.label}</option>\`).join('')}
+            </select>
+            <select id="compat-a-codice" onchange="adminCompatibilita()" style="width:100%;padding:6px 8px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:12px;font-family:inherit">
+              <option value="">— Seleziona —</option>
+              \${aCodsOpts}
+            </select>
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--mid);margin-bottom:4px;font-weight:500">...ESCLUDI QUESTA OPZIONE</div>
+            <select id="compat-b-tipo" onchange="adminCompatibilita()" style="width:100%;padding:6px 8px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:12px;font-family:inherit;margin-bottom:6px">
+              \${Object.entries(ENTITA).map(([k,v])=>\`<option value="\${k}" \${k===bTipo?'selected':''}>\${v.label}</option>\`).join('')}
+            </select>
+            <div style="font-size:11px;color:var(--mid)">\${bItems.length} opzioni disponibili</div>
+          </div>
+        </div>
+        <div style="max-height:calc(100vh - 380px);overflow-y:auto;border:0.5px solid var(--border);border-radius:var(--radius)">
+          \${aCodice
+            ? opzioniHtml||'<div style="padding:16px;text-align:center;color:var(--mid);font-size:12px">Nessuna opzione B per questa categoria</div>'
+            : '<div style="padding:20px;text-align:center;color:var(--mid);font-size:12px">Seleziona prima un valore A per vedere le opzioni</div>'}
+        </div>
+      \`)}
+    </div>
+
+    <!-- Pannello destro: elenco tutte le regole -->
+    <div style="flex:1;overflow-y:auto">
+      \${adminCard(\`Tutte le regole attive (\${regole?.length||0})\`,\`
+        \${tutteRegole
+          ? \`<div style="overflow-x:auto"><table style="width:100%">
+              <thead><tr><th>Se tipo A</th><th>Codice A</th><th>Nome A</th><th></th><th>Esclude B</th><th>Codice B</th><th>Nome B</th><th></th></tr></thead>
+              <tbody>\${tutteRegole}</tbody>
+            </table></div>\`
+          : '<div style="padding:20px;text-align:center;color:var(--mid);font-style:italic">Nessuna regola ancora — tutte le combinazioni sono disponibili</div>'}
+      \`)}
+    </div>
+  </div>\`;
+}
+
+function aggiungiRegolaBtn(btn){
+  const at=btn.dataset.aTipo, ac=btn.dataset.aCodice, an=btn.dataset.aNome;
+  const bt=btn.dataset.bTipo, bc=btn.dataset.bCodice, bn=btn.dataset.bNome;
+  aggiungiRegola(at,ac,an,bt,bc,bn);
+}
+
+async function aggiungiRegola(aTipo, aCodice, aNome, bTipo, bCodice, bNome){
+  const {error}=await sb.from('regole_compatibilita').insert([{
+    entita_a_tipo:aTipo, entita_a_codice:aCodice, entita_a_nome:aNome,
+    entita_b_tipo:bTipo, entita_b_codice:bCodice, entita_b_nome:bNome
+  }]);
+  if(error){
+    if(error.code==='23505'||error.message?.includes('duplicate')||error.message?.includes('unique')){
+      toast('Questa regola esiste già','err');
+    } else {
+      toast('Errore: '+error.message,'err');
+    }
+    adminCompatibilita();
+    return;
+  }
+  toast('Regola aggiunta','ok');
+  adminCompatibilita();
+}
+
+async function rimuoviRegola(id){
+  await sb.from('regole_compatibilita').delete().eq('id',id);
+  toast('Regola rimossa','ok');
+  adminCompatibilita();
+}
+
+// compatibilità legacy (usata dal vecchio sistema)
+async function setCompatEscludi(){ adminCompatibilita(); }
+async function rimuoviCompat(t,id){ await rimuoviRegola(id); }
+
+// ══════════════════════════════════════════════════════
+// IMPOSTAZIONI
+// ══════════════════════════════════════════════════════
+async function adminLavorazioni(){
+  const {data:lav} = await sb.from('impostazioni').select('*').like('chiave','lav_%');
+  const {data:suppTaglio} = await sb.from('impostazioni').select('valore').eq('chiave','supplemento_taglio_pannello').maybeSingle();
+  const rows = (lav||[]).map(l=>\`<tr>
+    <td>\${inlineInput(l.descrizione||l.chiave,\`adminSalva('impostazioni','\${l.id}','descrizione',this.value)\`,'240px')}</td>
+    <td>\${inlineInput(l.valore,\`adminSalva('impostazioni','\${l.id}','valore',this.value)\`,'100px','number')} €</td>
+    <td><button onclick="eliminaRigaAdmin('impostazioni','\${l.id}','adminLavorazioni')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
+  </tr>\`).join('');
+
+  document.getElementById('admin-main').innerHTML=\`
+    \${adminCard('Supplemento taglio a misura pannelli blindati',\`
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px">
+        <input type="number" id="imp-taglio" value="\${suppTaglio?.valore||0}" min="0" step="0.01"
+          style="padding:6px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px;font-weight:600;width:120px">
+        <span style="font-size:13px;color:var(--mid)">€</span>
+        <button class="btn btn-sm" onclick="salvaImpostazione('supplemento_taglio_pannello','imp-taglio')">Salva</button>
+      </div>
+      <div style="font-size:11px;color:var(--mid)">Supplemento applicato ai pannelli blindati tagliati a misura</div>
+    \`)}
+    \${adminCard('Altre lavorazioni extra',\`
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;padding-bottom:12px;border-bottom:0.5px solid var(--border)">
+        <input type="text" id="lav-desc" placeholder="Descrizione lavorazione" style="padding:6px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;flex:1">
+        <input type="number" id="lav-prezzo" placeholder="€" min="0" step="0.01" style="padding:6px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;width:100px">
+        <button class="btn btn-red btn-sm" onclick="aggiungiLavorazione()">+ Aggiungi</button>
+      </div>
+      <table><thead><tr><th>Descrizione</th><th>Prezzo (€)</th><th></th></tr></thead>
+      <tbody>\${rows||'<tr><td colspan="3" style="text-align:center;color:var(--mid);padding:16px;font-style:italic">Nessuna lavorazione configurata</td></tr>'}</tbody>
+      </table>
+    \`)}\`;
+}
+
+async function aggiungiLavorazione(){
+  const desc = document.getElementById('lav-desc')?.value.trim();
+  const prezzo = document.getElementById('lav-prezzo')?.value;
+  if(!desc){toast('Inserisci la descrizione','err');return;}
+  const chiave = 'lav_'+Date.now();
+  const {error} = await sb.from('impostazioni').insert({chiave, valore:prezzo||'0', descrizione:desc});
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Lavorazione aggiunta','ok'); adminLavorazioni();
+}
+
+function adminImpostazioni(){
+  sb.from('impostazioni').select('*').then(({data})=>{
+    const imp={};(data||[]).forEach(r=>{imp[r.chiave]=r.valore;});
+    document.getElementById('admin-main').innerHTML=\`
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">Numerazione documenti</div>
+        <div style="font-size:13px;color:var(--mid);margin-bottom:12px">Le sequenze numeriche vengono gestite automaticamente da Supabase. I prefissi sono configurati nel codice.</div>
+        <table style="font-size:13px">
+          <tr><td style="color:var(--mid);padding:4px 0">Formato preventivi</td><td><strong>PRV-YYYY-NNNN</strong></td></tr>
+          <tr><td style="color:var(--mid);padding:4px 0">Formato ordini</td><td><strong>ORD-YYYY-NNNN</strong></td></tr>
+        </table>
+      </div>
+      <div class="card">
+        <div class="card-title">Supabase Storage</div>
+        <div style="font-size:13px;color:var(--mid);margin-bottom:10px">Bucket per le immagini del catalogo</div>
+        <div style="background:var(--green-bg);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--green-tx)">
+          Bucket <strong>catalogo_immagini</strong> configurato e attivo
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Gestione utenti e ruoli</div>
+      <div id="utenti-content"><div class="loading"><div class="spinner"></div></div></div>
+    </div>\`;
+    renderUtentiInline();
+  });
+}
+
+async function salvaImpostazione(chiave,inputId){
+  const val=document.getElementById(inputId)?.value;
+  if(val===null||val===undefined) return;
+  const {error}=await sb.from('impostazioni').upsert({chiave,valore:val},{onConflict:'chiave'});
+  if(error){toast('Errore: '+error.message,'err');}
+  else{toast('Salvato','ok');}
+}
+
+async function renderUtentiInline(){
+  // Raggruppa per user_id per mostrare ruoli multipli
+  const {data} = await sb.from('utenti_ruoli').select('*').order('user_id');
+  const {data:ruoliDisp} = await sb.from('ruoli').select('*').eq('attivo',true).order('nome');
+  const byUser = {};
+  (data||[]).forEach(r=>{ if(!byUser[r.user_id]) byUser[r.user_id]={ruoli:[],created_at:r.created_at}; byUser[r.user_id].ruoli.push(r); });
+  const ruoliOpts=(ruoliDisp||[]).map(r=>\`<option value="\${r.codice}">\${r.nome}</option>\`).join('');
+
+  const rows=Object.entries(byUser).map(([uid,info])=>{
+    const ruoliBadge=info.ruoli.map(r=>\`
+      <span style="display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:99px;font-size:11px;background:var(--blue-bg);color:var(--blue-tx);margin:1px">
+        \${RUOLI_LABEL[r.codice_ruolo]||r.codice_ruolo}
+        <span onclick="rimuoviRuoloUtente('\${r.id}')" style="cursor:pointer;color:var(--mid)" title="Rimuovi">×</span>
+      </span>\`).join('');
+    return \`<tr>
+      <td style="font-size:11px;color:var(--mid);font-family:monospace">\${uid.slice(0,20)}...</td>
+      <td><input type="text" placeholder="Nome" value="\${info.ruoli[0]?.nome||''}" style="width:80px;padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px" onchange="aggiornaNomeCognome('\${info.ruoli[0]?.id}','nome',this.value)"></td>
+      <td><input type="text" placeholder="Cognome" value="\${info.ruoli[0]?.cognome||''}" style="width:90px;padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px" onchange="aggiornaNomeCognome('\${info.ruoli[0]?.id}','cognome',this.value)"></td>
+      <td style="max-width:280px">
+        \${ruoliBadge}
+        <br><div style="display:flex;gap:4px;margin-top:4px">
+          <select id="add-role-\${uid.replace(/-/g,'')}" style="padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:11px;font-family:inherit">\${ruoliOpts}</select>
+          <button onclick="aggiungiRuoloUtente('\${uid}','add-role-\${uid.replace(/-/g,'')}')" class="btn btn-sm" style="font-size:11px;padding:3px 8px">+ Aggiungi ruolo</button>
+        </div>
+      </td>
+      <td style="font-size:12px;color:var(--mid)">\${new Date(info.created_at).toLocaleDateString('it-IT')}</td>
+      <td><button onclick="eliminaUtente('\${uid}')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px" title="Rimuovi utente">×</button></td>
+    </tr>\`;
+  }).join('');
+
+  document.getElementById('utenti-content').innerHTML=\`
+  <div style="background:var(--blue-bg);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--blue-tx);margin-bottom:12px">
+    Ogni utente può avere più ruoli. I permessi vengono aggregati da tutti i ruoli assegnati. Il super_admin ha accesso completo a tutto.
+  </div>
+  <table style="margin-bottom:16px">
+    <thead><tr><th>User ID</th><th>Nome</th><th>Cognome</th><th>Ruoli assegnati</th><th>Dal</th><th></th></tr></thead>
+    <tbody>\${rows||'<tr><td colspan="4" style="text-align:center;color:var(--mid);padding:16px">Nessun utente</td></tr>'}</tbody>
+  </table>
+  <div style="border-top:0.5px solid var(--border);padding-top:14px">
+    <div style="font-size:12px;font-weight:500;margin-bottom:8px">Aggiungi nuovo utente</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <input type="text" id="new-user-id" placeholder="Incolla user_id da Supabase Auth..." style="flex:1;min-width:200px;padding:7px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit">
+      <select id="new-user-ruolo" style="padding:7px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit">\${ruoliOpts}</select>
+      <button class="btn btn-red" onclick="aggiungiUtente()">Aggiungi</button>
+    </div>
+  </div>\`;
+}
+
+async function aggiungiRuoloUtente(userId, selectId){
+  const ruolo = document.getElementById(selectId)?.value;
+  if(!ruolo) return;
+  const {error} = await sb.from('utenti_ruoli').insert([{user_id:userId, codice_ruolo:ruolo}]);
+  if(error){toast('Errore (ruolo già assegnato?): '+error.message,'err');return;}
+  toast('Ruolo aggiunto','ok'); renderUtentiInline();
+}
+
+async function rimuoviRuoloUtente(rigaId){
+  if(!confirm('Rimuovere questo ruolo dall\\'utente?')) return;
+  await sb.from('utenti_ruoli').delete().eq('id',rigaId);
+  toast('Ruolo rimosso','ok'); renderUtentiInline();
+}
+
+async function eliminaUtente(userId){
+  if(!confirm('Rimuovere TUTTI i ruoli di questo utente?')) return;
+  await sb.from('utenti_ruoli').delete().eq('user_id',userId);
+  toast('Utente rimosso','ok'); renderUtentiInline();
+}
+
+// ══════════════════════════════════════════════════════
+// FUNZIONI GENERICHE ADMIN
+// ══════════════════════════════════════════════════════
+function msgErrore(error, valore){
+  if(error.code==='23505'||error.message?.includes('duplicate')||error.message?.includes('unique')){
+    return \`Il codice "\${valore}" esiste già — scegli un codice diverso.\`;
+  }
+  return 'Errore: '+error.message;
+}
+
+async function adminSalva(tabella, id, campo, valore){
+  let val = valore;
+  const numericFields=['sovrapprezzo_a','sovrapprezzo_p','prezzo_a','prezzo_p','prezzo_base',
+    'prezzo_vetro','prezzo_extra_incisioni','sovrapprezzo_bugna_A','sovrapprezzo_bugna_P',
+    'maggiorazione_pct','spalla_cm','spessore_da_cm','spessore_a_cm','cm_accessorio',
+    'prezzo_access_A','prezzo_access_P','spalla_cassone_cm','quantita',
+    'percentuale_provvigione','sconto_base_pct','sconto_max_pct'];
+  if(numericFields.includes(campo)){
+    val = parseFloat(valore);
+    if(isNaN(val)) return;
+  }
+  const {error} = await sb.from(tabella).update({[campo]:val}).eq('id',id);
+  if(error){toast(msgErrore(error,valore),'err');return;}
+  toast('Salvato','ok');
+}
+
+async function salvaPrezzo(codModello, listino, campo, valore){
+  const val = parseFloat(valore);
+  if(isNaN(val)) return;
+  const {data:existing} = await sb.from('prezzi_modello')
+    .select('id').eq('codice_modello',codModello).eq('listino',listino).limit(1);
+  if(existing && existing.length > 0){
+    const {error} = await sb.from('prezzi_modello').update({[campo]:val}).eq('codice_modello',codModello).eq('listino',listino);
+    if(error){toast('Errore: '+error.message,'err');return;}
+  } else {
+    const {error} = await sb.from('prezzi_modello').insert([{codice_modello:codModello,listino,[campo]:val}]);
+    if(error){toast('Errore: '+error.message,'err');return;}
+  }
+  toast('Prezzo salvato','ok');
+  adminModelli();
+}
+
+async function toggleCampo(tabella, id, campo, attualeStr){
+  const attuale = attualeStr===true||attualeStr==='true';
+  const {error} = await sb.from(tabella).update({[campo]:!attuale}).eq('id',id);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast(!attuale?'Attivato':'Disattivato','ok');
+  // Refresh current view
+  loadAdminSection();
+}
+
+async function nuovaRiga(tabella, defaultData, callback){
+  const {error} = await sb.from(tabella).insert([defaultData]);
+  if(error){toast(msgErrore(error, defaultData.codice||defaultData.nome||''),'err');return;}
+  toast('Riga aggiunta','ok');
+  if(callback && window[callback]) window[callback]();
+}
+
+async function nuovaRigaUpsert(tabella, defaultData, callback){
+  // Genera un codice univoco aggiungendo un suffisso random se necessario
+  let data = {...defaultData};
+  if(data.codice) data.codice = data.codice + Math.random().toString(36).slice(2,5).toUpperCase();
+  const {error} = await sb.from(tabella).insert([data]);
+  if(error){toast(msgErrore(error, data.codice||data.nome||''),'err');return;}
+  toast('Riga aggiunta','ok');
+  if(callback && window[callback]) window[callback]();
+}
+
+async function uploadImmagine(tabella, id, input){
+  const file = input.files[0];
+  if(!file) return;
+  const ext = file.name.split('.').pop();
+  const path = \`\${tabella}/\${id}.\${ext}\`;
+  toast('Caricamento in corso...','ok');
+  const {error:upErr} = await sb.storage.from('catalogo_immagini').upload(path, file, {upsert:true});
+  if(upErr){toast('Errore upload: '+upErr.message,'err');return;}
+  const {data:urlData} = sb.storage.from('catalogo_immagini').getPublicUrl(path);
+  const url = urlData?.publicUrl;
+  if(url){
+    await sb.from(tabella).update({immagine_url:url}).eq('id',id);
+    toast('Immagine caricata','ok');
+    loadAdminSection();
+  }
+}
+
+// ── UTENTI E RUOLI ─────────────────────────────────────
+async function renderUtenti(){
+  // Redirect to impostazioni
+  adminSection='impostazioni';
+  renderAdmin();
+}
+
+// aggiornaRuolo mantenuto per compatibilità (non più usato direttamente)
+async function aggiornaNomeCognome(rigaId, campo, valore){
+  if(!rigaId) return;
+  const {error} = await sb.from('utenti_ruoli').update({[campo]:valore}).eq('id',rigaId);
+  if(error){ toast('Errore: '+error.message,'err'); return; }
+  toast('Aggiornato','ok');
+}
+
+async function aggiornaRuolo(id, ruolo){
+  const {error} = await sb.from('utenti_ruoli').update({codice_ruolo:ruolo}).eq('id',id);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Ruolo aggiornato','ok');
+}
+
+async function aggiungiUtente(){
+  const userId = document.getElementById('new-user-id').value.trim();
+  const ruolo = document.getElementById('new-user-ruolo').value;
+  if(!userId){toast('Inserisci un user_id valido','err');return;}
+  const {error} = await sb.from('utenti_ruoli').insert([{user_id:userId, codice_ruolo:ruolo}]);
+  if(error){toast('Errore (utente già presente con questo ruolo?): '+error.message,'err');return;}
+  toast('Utente aggiunto con ruolo '+RUOLI_LABEL[ruolo],'ok');
+  renderUtentiInline();
+}
+
+
+// Sposta i modal nel body per evitare problemi di z-index e display
+document.addEventListener('DOMContentLoaded', function() {
+  ['modal-cfg', 'modal-nuovo-doc'].forEach(function(id) {
+    const el = document.getElementById(id);
+    if (el && el.parentElement !== document.body) {
+      document.body.appendChild(el);
+    }
+  });
+});
+
+function ensureModalInBody(id) {
+  const el = document.getElementById(id);
+  if (el && el.parentElement !== document.body) {
+    document.body.appendChild(el);
+  }
+  return el;
+}
+
+// Sposta i modal fuori da qualsiasi container al caricamento
+(function(){
+  var toMove = ['modal-cfg', 'modal-nuovo-doc'];
+  toMove.forEach(function(id){
+    var el = document.getElementById(id);
+    if(el && el.parentElement && el.parentElement.id !== 'body-root'){
+      document.body.appendChild(el);
+    }
+  });
+})();
+
+// ── ESPORTA PDF ───────────────────────────────────────
+async function esportaPDF(tipo, id) {
+  toast('Generazione PDF in corso...', 'ok');
+  try {
+    const tabDoc = tipo==='preventivo' ? 'preventivi' : 'ordini_vendita';
+    const tabRighe = tipo==='preventivo' ? 'righe_preventivo' : 'righe_ordine';
+    const fkRiga = tipo==='preventivo' ? 'preventivo_id' : 'ordine_id';
+
+    // Carica documento completo
+    const [{data:doc}, {data:righe}, {data:cliente}] = await Promise.all([
+      sb.from(tabDoc).select('*,anagrafiche(*),agenti(nome,cognome)').eq('id',id).single(),
+      sb.from(tabRighe).select('*').eq(fkRiga,id).order('riga_numero'),
+      sb.from(tabDoc).select('*,anagrafiche(*)').eq('id',id).single(),
+    ]);
+
+    if(!doc){ toast('Documento non trovato','err'); return; }
+
+    const an = doc.anagrafiche || {};
+    const ag = doc.agenti || {};
+
+    // Payload per il server
+    const payload = {
+      tipo,
+      documento: {
+        numero: doc.numero,
+        data: new Date(doc.data_creazione||doc.created_at).toLocaleDateString('it-IT'),
+        data_ultima_modifica: doc.data_ultima_modifica ? new Date(doc.data_ultima_modifica).toLocaleDateString('it-IT') : '',
+        compilatore: doc.nome_compilatore || '',
+        tipo_documento: tipo==='preventivo' ? 'PREVENTIVO' : 'CONFERMA D\\'ORDINE',
+        // Cliente
+        ragione_sociale: an.ragione_sociale || '',
+        ragione_sociale_riga2: an.ragione_sociale_riga2 || '',
+        indirizzo: an.indirizzo || '',
+        cap: an.cap || '',
+        citta: an.citta || '',
+        provincia: an.provincia || '',
+        paese: an.paese || 'Italia',
+        partita_iva: an.partita_iva || '',
+        codice_fiscale: an.codice_fiscale || '',
+        telefono: an.telefono_principale || '',
+        cellulare: an.cellulare_principale || '',
+        email1: an.email_principale || '',
+        email_ordini: an.email_ordini || '',
+        email2: an.email2 || '',
+        sdi: an.codice_sdi || '',
+        pec: an.pec_fatturazione || an.pec || '',
+        pec_fatturazione: an.pec_fatturazione || '',
+        banca: an.banca || '',
+        cin: an.cin || '',
+        abi: an.abi || '',
+        cab: an.cab || '',
+        referente: an.referente || '',
+        telefono_referente: an.telefono || '',
+        cellulare_referente: an.cellulare_referente || '',
+        email_referente: an.email || '',
+        codice_cliente: an.codice || '',
+        agente: ag.nome ? \`\${ag.nome} \${ag.cognome}\` : '',
+        // Destinazione
+        dest_nome: doc.indirizzo_destinazione ? an.ragione_sociale : '',
+        dest_indirizzo: doc.indirizzo_destinazione || '',
+        dest_cap: doc.cap_destinazione || '',
+        dest_citta: doc.citta_destinazione || '',
+        dest_provincia: doc.provincia_destinazione || '',
+        dest_paese: 'Italia',
+        dest_riferimenti: doc.riferimenti_destinazione || '',
+        // Condizioni
+        trasporto: doc.trasporto || '',
+        resa: doc.resa || 'Franco fabbrica',
+        imballo: an.tipo_imballo || 'Sì',
+        condizioni_pagamento: an.condizioni_pagamento || '',
+        validita_offerta: doc.validita_offerta || '30',
+        riferimento_cliente: doc.riferimento_cliente || '',
+        // Sconto
+        sconto1: doc.sconto1 || 0,
+        sconto2: doc.sconto2 || 0,
+        totale_imponibile: doc.totale_imponibile || 0,
+        totale_netto: doc.totale_netto || 0,
+      },
+      righe: (righe||[]).map((r,i) => ({
+        posizione: String(i+1).padStart(3,'0'),
+        larghezza: r.larghezza_mm || '',
+        altezza: r.altezza_mm || '',
+        spessore: r.spessore_muro_cm || '',
+        senso: r.senso_apertura || '',
+        apertura: r.nome_apertura || '',
+        codice_apertura: r.codice_apertura || '',
+        quantita: r.quantita || 1,
+        um: 'NR',
+        serie: r.nome_serie || '',
+        modello: r.nome_modello || '',
+        finitura: r.nome_finitura || '',
+        tipologia: r.nome_apertura || '',
+        senso_apertura: r.senso_apertura || '',
+        spalla: r.codice_spalla || (r.spessore_muro_cm ? r.spessore_muro_cm+'cm' : ''),
+        ferramenta: r.nome_ferramenta || '',
+        serratura: r.nome_serratura || '',
+        maniglia: r.nome_maniglia || '',
+        versione_maniglia: '',
+        colore_maniglia: r.nome_colore_maniglia || '',
+        vetro: r.nome_tipo_vetro || '',
+        bugna: r.pannello_bugna || '',
+        colore_inserto: r.nome_colore_alu || r.nome_colore_pietra || '',
+        note_riga: r.note_riga || '',
+        // Prezzi
+        prezzo_base: r.prezzo_base || 0,
+        prezzo_finitura: r.prezzo_finitura || 0,
+        prezzo_apertura: r.prezzo_apertura || 0,
+        prezzo_telaio: r.prezzo_telaio || 0,
+        prezzo_ferramenta: r.prezzo_ferramenta || 0,
+        prezzo_maniglia: r.prezzo_maniglia || 0,
+        prezzo_serratura: r.prezzo_serratura || 0,
+        prezzo_vetro: r.prezzo_vetro || 0,
+        prezzo_bugna: r.prezzo_bugna || 0,
+        prezzo_extra: r.prezzo_extra_incisioni || 0,
+        prezzo_unitario: r.prezzo_unitario || 0,
+        prezzo_totale: r.prezzo_totale_riga || 0,
+        totale_riga_netto: (() => {
+          const sc = doc.sconto1 || 0;
+          const tot = r.prezzo_totale_riga || r.prezzo_unitario || r.prezzo_base || 0;
+          return tot ? Math.round(tot * (1 - sc/100) * 100) / 100 : 0;
+        })(),
+        sconto: doc.sconto1 || 0,
+        // Kit obbligatori
+        kit_varsavia: r.kit_varsavia || '',
+        kit_rim16: r.kit_rim16 || '',
+        fuori_misura_l: r.fuori_misura_l ? 'Sì' : '',
+        fuori_misura_h: r.fuori_misura_h ? 'Sì' : '',
+        immagine_url: r.immagine_url || '',
+      }))
+    };
+
+    // Chiama il server per generare il PDF
+    const resp = await fetch('/genera-pdf', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+
+    if(!resp.ok){
+      const err = await resp.text();
+      toast('Errore generazione PDF: '+err, 'err');
+      return;
+    }
+
+    // Download PDF
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = \`\${doc.numero}.pdf\`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast('PDF scaricato: '+doc.numero, 'ok');
+
+  } catch(e) {
+    console.error('esportaPDF error:', e);
+    toast('Errore: '+e.message, 'err');
+  }
+}
+</script>
+
+<!-- MODAL CONFIGURATORE PORTA -->
+<div class="form-overlay" id="modal-cfg" style="background:rgba(0,0,0,0.75)">
+  <div class="form-modal" style="width:min(820px,100%);max-height:90vh;display:flex;flex-direction:column">
+    <div class="form-modal-head">
+      <div style="display:flex;flex-direction:column;gap:6px;flex:1">
+        <span class="form-modal-title">Configuratore porta</span>
+        <div id="cfg-stepper" style="display:flex;align-items:center;gap:4px;flex-wrap:wrap"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:16px">
+        <div style="text-align:right">
+          <div style="font-size:11px;color:rgba(255,255,255,0.5)">Prezzo unitario</div>
+          <div id="cfg-prezzo-unitario" style="font-size:18px;font-weight:500;color:#fff">€ 0,00</div>
+        </div>
+        <button class="form-close" onclick="closeCfg()">×</button>
+      </div>
+    </div>
+    <div id="cfg-body" style="padding:20px;overflow-y:auto;flex:1">
+      <div class="loading"><div class="spinner"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL NUOVO DOCUMENTO (preventivo o ordine diretto) -->
+<div class="form-overlay" id="modal-nuovo-doc">
+  <div class="form-modal" style="width:min(860px,100%);max-height:92vh;display:flex;flex-direction:column">
+    <div class="form-modal-head">
+      <span class="form-modal-title" id="ndoc-title">Nuovo preventivo</span>
+      <button class="form-close" onclick="document.getElementById('modal-nuovo-doc').classList.remove('open')">×</button>
+    </div>
+    <div style="padding:18px 20px;overflow-y:auto;flex:1">
+      <!-- Intestazione -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
+        <div class="form-field">
+          <label>Cliente <span class="req">*</span></label>
+          <select id="ndoc-clienti" onchange="ndocClienteChange(this)">
+            <option value="">Seleziona cliente...</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label>Agente Max Porte</label>
+          <select id="ndoc-agenti"><option value="">Nessun agente</option></select>
+        </div>
+        <div class="form-field">
+          <label>Listino</label>
+          <select id="ndoc-listino" onchange="aggiornaTotaleNdoc()">
+            <option value="A">Listino A</option>
+            <option value="P">Listino P (Piemonte/VdA)</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label>Trasporto</label>
+          <select id="ndoc-trasporto">
+            <option value="Max Porte">A cura Max Porte</option>
+            <option value="Cliente">A cura del cliente</option>
+            <option value="Vettore">A cura del vettore</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label>Resa</label>
+          <select id="ndoc-resa">
+            <option value="Franco fabbrica">Franco fabbrica</option>
+            <option value="Franco destino">Franco destino</option>
+            <option value="EXW">EXW — Ex Works</option>
+            <option value="DAP">DAP — Delivered at Place</option>
+            <option value="DDP">DDP — Delivered Duty Paid</option>
+          </select>
+        </div>
+        <div class="form-field" style="grid-column:1/-1">
+          <label>Vostro riferimento</label>
+          <input type="text" id="ndoc-rif-cliente" placeholder="Es: ordine n° 123, progetto Rossi...">
+        </div>
+        <div class="form-field">
+          <label>Sconto 1 (%)</label>
+          <input type="number" id="ndoc-sconto1" value="0" min="0" max="100" step="0.5" oninput="aggiornaTotaleNdoc()">
+        </div>
+        <div class="form-field">
+          <label>Sconto 2 (%) — doppio sconto</label>
+          <input type="number" id="ndoc-sconto2" value="0" min="0" max="100" step="0.5" oninput="aggiornaTotaleNdoc()">
+        </div>
+      </div>
+      <!-- Destinazione merce -->
+      <div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:var(--mid);margin-bottom:8px">Destinazione merce</div>
+      <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:10px;margin-bottom:16px">
+        <div class="form-field"><label>Indirizzo</label><input type="text" id="ndoc-ind" placeholder="Via/Piazza..."></div>
+        <div class="form-field"><label>CAP</label><input type="text" id="ndoc-cap" maxlength="5"></div>
+        <div class="form-field"><label>Città</label><input type="text" id="ndoc-cit"></div>
+        <div class="form-field"><label>Prov.</label><input type="text" id="ndoc-prv" maxlength="2" style="text-transform:uppercase"></div>
+      </div>
+      <!-- Note -->
+      <div class="form-field" style="margin-bottom:16px">
+        <label>Note</label>
+        <textarea id="ndoc-note" placeholder="Note per il cliente..." style="min-height:50px"></textarea>
+      </div>
+      <!-- Porte aggiunte -->
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div style="font-size:13px;font-weight:500">Porte configurate</div>
+        <button class="btn btn-red btn-sm" onclick="ndocAggiungiPorta()">+ Aggiungi porta</button>
+      </div>
+      <div id="ndoc-righe-list" style="min-height:60px;border:0.5px solid var(--border);border-radius:var(--radius);padding:8px 12px;margin-bottom:14px"></div>
+    </div>
+    <div class="form-modal-foot" style="justify-content:space-between">
+      <div>
+        <div style="font-size:11px;color:var(--mid)">Totale netto stimato:</div>
+        <div id="ndoc-totale" style="font-size:20px;font-weight:500;color:var(--red)">€ 0,00</div>
+        <div id="ndoc-sconto-detail"></div>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn" onclick="document.getElementById('modal-nuovo-doc').classList.remove('open')">Annulla</button>
+        <button class="btn btn-red" onclick="salvaNuovoDoc()">Salva</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- MODAL CONFIGURATORE PORTA -->
+
+
+
+</body>
+</html>
+`;
+function generaPDF(payload, callback) {
+  const tmpJson = path.join(os.tmpdir(), 'prev_' + Date.now() + '.json');
+  const tmpPdf = path.join(os.tmpdir(), 'prev_' + Date.now() + '.pdf');
+  try { fs.writeFileSync(tmpJson, JSON.stringify(payload)); } catch(e) { return callback(new Error('Scrittura JSON: ' + e.message)); }
+  const scriptPath = path.join(__dirname, 'genera_pdf.py');
+  if (!fs.existsSync(scriptPath)) { return callback(new Error('genera_pdf.py non trovato')); }
+  const proc = spawn('python3', [scriptPath, tmpJson, tmpPdf]);
+  let stderr = '';
+  proc.stderr.on('data', function(d) { stderr += d.toString(); });
+  proc.on('error', function(err) { callback(new Error('spawn: ' + err.message)); });
+  proc.on('close', function(code) {
+    try { fs.unlinkSync(tmpJson); } catch(e) {}
+    if (code === 0 && fs.existsSync(tmpPdf)) {
+      const pdfData = fs.readFileSync(tmpPdf);
+      try { fs.unlinkSync(tmpPdf); } catch(e) {}
+      callback(null, pdfData);
+    } else { callback(new Error('Python exit ' + code + ': ' + stderr.slice(-500))); }
+  });
+}
+// RESEND
+const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
+const MAIL_FROM = '"Max Porte" <commerciale@maxporte.it>';
+
+function inviaConResend({to, cc, subject, text, attachmentName, attachmentData}, callback) {
+  const body = JSON.stringify({
+    from: MAIL_FROM,
+    to: Array.isArray(to) ? to : [to],
+    ...(cc ? {cc: Array.isArray(cc) ? cc : [cc]} : {}),
+    subject,
+    text,
+    attachments: [{
+      filename: attachmentName,
+      content: attachmentData.toString('base64'),
+    }]
+  });
+
+  const options = {
+    hostname: 'api.resend.com',
+    path: '/emails',
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer ' + RESEND_API_KEY,
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(body),
+    }
+  };
+
+  const req = https.request(options, function(r) {
+    let data = '';
+    r.on('data', function(c) { data += c; });
+    r.on('end', function() {
+      if (r.statusCode >= 200 && r.statusCode < 300) {
+        callback(null);
+      } else {
+        callback(new Error('Resend error ' + r.statusCode + ': ' + data));
+      }
+    });
+  });
+  req.on('error', callback);
+  req.write(body);
+  req.end();
+}
+
+const server = http.createServer(function(req, res) {
+  if (req.method === 'GET' && req.url === '/logo-maxporte.png') {
+    const p = path.join(__dirname, 'logo-maxporte.png');
+    if (fs.existsSync(p)) { res.writeHead(200, {'Content-Type':'image/png','Cache-Control':'public,max-age=86400'}); res.end(fs.readFileSync(p)); }
+    else { res.writeHead(404); res.end('Not found'); }
+    return;
+  }
+  if (req.method === 'POST' && req.url === '/genera-pdf') {
+    let body = '';
+    req.on('data', function(chunk) { body += chunk.toString(); });
+    req.on('end', function() {
+      try {
+        const payload = JSON.parse(body);
+        generaPDF(payload, function(err, pdfData) {
+          if (err) { console.error('generaPDF error:', err.message); res.writeHead(500, {'Content-Type':'text/plain'}); res.end(err.message); }
+          else {
+            const numero = (payload.documento && payload.documento.numero) || 'documento';
+            res.writeHead(200, {'Content-Type':'application/pdf','Content-Disposition':'attachment; filename="'+numero+'.pdf"','Content-Length':pdfData.length});
+            res.end(pdfData);
+          }
+        });
+      } catch(e) { res.writeHead(400,{'Content-Type':'text/plain'}); res.end('JSON: '+e.message); }
+    });
+    return;
+  }
+  if(req.method==='POST'&&req.url==='/invia-preventivo'){
+    let body='';
+    req.on('data',function(c){body+=c.toString();});
+    req.on('end',function(){
+      try{
+        const d=JSON.parse(body);
+        generaPDF(d.payload,function(err,pdf){
+          if(err){res.writeHead(500,{'Content-Type':'application/json'});res.end(JSON.stringify({ok:false,error:err.message}));return;}
+          inviaConResend({
+            to:d.email_to, cc:d.email_cc||'',
+            subject:d.oggetto, text:d.testo,
+            attachmentName:d.numero_preventivo+'.pdf', attachmentData:pdf
+          },function(e2){
+            if(e2){res.writeHead(500,{'Content-Type':'application/json'});res.end(JSON.stringify({ok:false,error:e2.message}));}
+            else{res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({ok:true}));}
+          });
+        });
+      }catch(e){res.writeHead(400,{'Content-Type':'application/json'});res.end(JSON.stringify({ok:false,error:e.message}));}
+    });
+    return;
+  }
+  res.writeHead(200,{'Content-Type':'text/html;charset=utf-8','Cache-Control':'no-store'});
+  res.end(HTML);
+});
+server.listen(PORT, function() { console.log('MPX Gestionale avviato su porta ' + PORT); });
