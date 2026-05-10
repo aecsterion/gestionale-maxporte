@@ -3466,7 +3466,7 @@ async function cfgAccPannello(){
   var infoMag=CFG._panMag
     ?\'<div style="background:var(--beige);border-radius:var(--radius);padding:10px 14px;font-size:12px;margin-bottom:14px;border:0.5px solid var(--border)">\'+
       \'<strong>Pannello a magazzino:</strong> \'+hMag+\' x \'+lMax+\' mm\'+
-      (CFG._panMag.giacenza!=null?\' \xe2\x80\x94 Giacenza: <strong>\'+CFG._panMag.giacenza+\' pz</strong>\':\'\')+\'</div>\'
+      (CFG._panMag.giacenza!=null?\' &mdash; Giacenza: <strong>\'+CFG._panMag.giacenza+\' pz</strong>\':\'\')+\'</div>\'
     :\'<div style="background:var(--amber-bg);border-radius:var(--radius);padding:10px 14px;font-size:12px;margin-bottom:14px;color:var(--amber-tx)">\'+
       \'Nessun pannello per la finitura <strong>\'+( CFG.finitura||\'\' )+\'</strong>.</div>\';
   var sensiHtml=sensi.map(function(s){
@@ -3477,15 +3477,15 @@ async function cfgAccPannello(){
   }).join(\'\');
   document.getElementById(\'cfg-body\').innerHTML=
     \'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">\'+
-    \'<div style="font-size:13px;font-weight:500">Configurazione pannello <span style="color:var(--mid);font-weight:400">\xe2\x80\x94 \'+CFG.nome_modello+\'</span></div>\'+
-    \'<button class="btn btn-sm" onclick="renderCfgStep(\\' finitura\\')">\xe2\x86\x90 Indietro</button>\'+
+    \'<div style="font-size:13px;font-weight:500">Configurazione pannello <span style="color:var(--mid);font-weight:400">&mdash; \'+CFG.nome_modello+\'</span></div>\'+
+    \'<button class="btn btn-sm" onclick="renderCfgStep(&apos;finitura&apos;)">&larr; Indietro</button>\'+
     \'</div>\'+infoMag+
     \'<div style="display:grid;gap:14px;max-width:440px">\'+
     \'<div><label style="font-size:12px;color:var(--mid);display:block;margin-bottom:6px">Senso apertura</label>\'+
     \'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px" id="sensi-grid">\'+sensiHtml+\'</div>\'+
     \'<input type="hidden" id="pannello-senso" value="\'+sensoSel+\'"></div>\'+
     \'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">\'+
-    \'<div><label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Larghezza (mm)\'+( lMax?\' \xe2\x80\x94 max \'+lMax+\' mm\':\'\')+\'</label>\'+
+    \'<div><label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Larghezza (mm)\'+( lMax?\' &mdash; max \'+lMax+\' mm\':\'\')+\'</label>\'+
     \'<input type="number" id="pan-l" value="\'+( CFG.larghezza||\'\' )+\'" placeholder="es. 900"\'+
     \' style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px"\'+
     \' oninput="checkLarghezzaPan(this.value)"></div>\'+
@@ -3494,7 +3494,7 @@ async function cfgAccPannello(){
     \' style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px"\'+
     \' oninput="aggiornaZoccoliPreview(this.value)"></div></div>\'+
     \'<div id="zoccoli-preview"></div>\'+
-    \'<button class="btn btn-red" onclick="selAccPannello()">Avanti \xe2\x86\x92</button></div>\';
+    \'<button class="btn btn-red" onclick="selAccPannello()">Avanti &rarr;</button></div>\';
   if(CFG.altezza) aggiornaZoccoliPreview(CFG.altezza);
 }
 
