@@ -2141,8 +2141,8 @@ async function cfgFinitura(){
     .eq('attiva',true);
   // Filtra per fascia se pannello blindato
   if(CFG.serie==='PAN-BL'){
-    if(CFG.modello==='PAN-LAM') finQuery=finQuery.eq('fascia','LAMINATO');
-    else if(CFG.modello==='PAN-LAC') finQuery=finQuery.in('fascia',['MP CLASSIC','MP LIGHT','MP PREMIUM']);
+    if(CFG.modello==='PAN_LAM'||CFG.modello==='PAN-LAM') finQuery=finQuery.eq('fascia','LAMINATO');
+    else if(CFG.modello==='PAN_LAC'||CFG.modello==='PAN-LAC') finQuery=finQuery.in('fascia',['MP CLASSIC','MP LIGHT','MP PREMIUM']);
   }
   const {data:tutteFiniture} = await finQuery.order('fascia').order('nome_finitura');
 
@@ -5406,23 +5406,30 @@ function switchMagSub(sub){
 
 async function adminCategorieMag(){
   const {data,error}=await sb.from(\'categorie_magazzino\').select(\'*\').order(\'nome\');
-  if(error){document.getElementById(\'admin-sub\').innerHTML=\'<p style="color:var(--red)">Errore caricamento.</p>\';return;}
-  const tipiColori=[\'nessuno\',\'laminato\',\'laccato\',\'ferramenta\'];
+  if(error){document.getElementById(\'admin-sub\').innerHTML=\'<p style="color:var(--red)">Errore.</p>\';return;}
   const rows=(data||[]).map(function(c){
-    var optsColori=tipiColori.map(function(t){return \'<option value="\'+t+\'"\'+( c.tipo_colori===t?\' selected\':\'\')+\'>\'+t+\'</option>\';}).join(\'\');
+    function flagBtn(campo,label){
+      var on=!!c[campo];
+      return \'<span onclick="toggleCampo(\'\''+'categorie_magazzino'+\'\',\'\'\'+ c.id+\'\',\'\'\'+ campo +\'\',\'\'\'+ on +\'\')" \'+ 
+        \'style="cursor:pointer;padding:2px 7px;border-radius:4px;font-size:11px;font-weight:600;margin-right:3px;\'+ 
+        \'background:\'+( on?\'var(--red)\':\'var(--border)\')+\';color:\'+( on?\'#fff\':\'var(--mid)\')+\'">\'+ label +\'</span>\';
+    }
     return \'<tr>\'+
       \'<td><input type="text" value="\'+c.nome+\'" data-id="\'+c.id+\'" data-campo="nome"\'+
       \' style="border:none;background:transparent;width:180px;font-size:13px" onchange="adminSalvaCatMag(this)"></td>\'+
       \'<td><input type="text" value="\'+c.codice+\'" data-id="\'+c.id+\'" data-campo="codice"\'+
-      \' style="border:none;background:transparent;width:140px;font-size:13px;font-family:monospace" onchange="adminSalvaCatMag(this)"></td>\'+
-      \'<td><select data-id="\'+c.id+\'" data-campo="tipo_colori" onchange="adminSalvaCatMag(this)"\'+
-      \' style="border:none;background:transparent;font-size:13px">\'+optsColori+\'</select></td>\'+
+      \' style="border:none;background:transparent;width:120px;font-size:13px;font-family:monospace" onchange="adminSalvaCatMag(this)"></td>\'+
+      \'<td>\'+
+        flagBtn(\'colori_laminato\',\'LAM\')+
+        flagBtn(\'colori_laccato\',\'LAC\')+
+        flagBtn(\'colori_ferramenta\',\'FER\')+
+      \'</td>\'+
       \'<td><input type="text" value="\'+( c.descrizione||\'\')+\'" data-id="\'+c.id+\'" data-campo="descrizione"\'+
       \' placeholder="Descrizione" style="border:none;background:transparent;width:200px;font-size:13px" onchange="adminSalvaCatMag(this)"></td>\'+
       \'<td style="text-align:right"><button class="btn btn-sm" style="color:var(--red)" data-cid="\'+c.id+\'" onclick="eliminaCategoriaMag(this.dataset.cid)">×</button></td>\'+
       \'</tr>\';
   }).join(\'\');
-  var html=\'<table style="width:100%"><thead><tr><th>Nome</th><th>Codice</th><th>Tipo colori</th><th>Descrizione</th><th></th></tr></thead>\'+
+  var html=\'<table style="width:100%"><thead><tr><th>Nome</th><th>Codice</th><th>Colori</th><th>Descrizione</th><th></th></tr></thead>\'+
     \'<tbody>\'+rows+\'</tbody></table>\';
   document.getElementById(\'admin-sub\').innerHTML=adminCard(\'Categorie magazzino\',html,
     \'<button class="btn btn-sm btn-red" onclick="aggiungiCategoriaMag()">+ Nuova categoria</button>\');
