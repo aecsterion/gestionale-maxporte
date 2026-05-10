@@ -1499,7 +1499,7 @@ async function renderMagazzino(){
   const {data}=await sb.from(\'magazzino\').select(\'*\').order(\'categoria\').order(\'descrizione\');
   const items=data||[];
   const sottoscorta=items.filter(function(m){return Number(m.giacenza||0)<=Number(m.scorta_minima||0);}).length;
-  const pannelli=items.filter(function(m){return m.categoria===\'pannello_blindato\';}).length;
+  const pannelli=items.filter(function(m){return m.categoria===\'PAN-BL\';}).length;
   const rows=items.map(function(m){
     const s=Number(m.giacenza||0)<=Number(m.scorta_minima||0);
     const dim=(m.altezza_mm||m.larghezza_mm)?(m.altezza_mm||\'?\')+\' x \'+(m.larghezza_mm||\'?\')+\' mm\':\'\xe2\x80\x94\';
@@ -3457,7 +3457,7 @@ async function cfgAccPannello(){
   CFG._suppTaglioPannello=parseFloat(imp?.valore||0);
   const {data:magP}=await sb.from(\'magazzino\')
     .select(\'altezza_mm,larghezza_mm,giacenza\')
-    .eq(\'categoria\',\'pannello_blindato\').eq(\'codice_finitura\',CFG.finitura||\'\').order(\'altezza_mm\',{ascending:false});
+    .eq(\'categoria\',\'PAN-BL\').eq(\'codice_finitura\',CFG.finitura||\'\').order(\'altezza_mm\',{ascending:false});
   CFG._panMag=magP?.[0]||null;
   const hMag=CFG._panMag?.altezza_mm||0;
   const lMax=CFG._panMag?.larghezza_mm||0;
