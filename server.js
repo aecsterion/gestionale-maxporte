@@ -5408,10 +5408,11 @@ async function adminCategorieMag(){
   const {data,error}=await sb.from(\'categorie_magazzino\').select(\'*\').order(\'nome\');
   if(error){document.getElementById(\'admin-sub\').innerHTML=\'<p style="color:var(--red)">Errore.</p>\';return;}
   const rows=(data||[]).map(function(c){
-    function flagBtn(campo,label){
-      var on=!!c[campo];
-      return \'<span onclick="toggleCampo(\'\''+'categorie_magazzino'+\'\',\'\'\'+ c.id+\'\',\'\'\'+ campo +\'\',\'\'\'+ on +\'\')" \'+ 
-        \'style="cursor:pointer;padding:2px 7px;border-radius:4px;font-size:11px;font-weight:600;margin-right:3px;\'+ 
+    function flagBtn(campo,label,val){
+      var on=!!val;
+      return \'<span data-tabella="categorie_magazzino" data-id="\'+c.id+\'" data-campo="\'+campo+\'" data-val="\'+on+\'"\'+
+        \' onclick="toggleCampo(this.dataset.tabella,this.dataset.id,this.dataset.campo,this.dataset.val)"\'+
+        \' style="cursor:pointer;padding:2px 7px;border-radius:4px;font-size:11px;font-weight:600;margin-right:3px;\'+
         \'background:\'+( on?\'var(--red)\':\'var(--border)\')+\';color:\'+( on?\'#fff\':\'var(--mid)\')+\'">\'+ label +\'</span>\';
     }
     return \'<tr>\'+
@@ -5420,9 +5421,9 @@ async function adminCategorieMag(){
       \'<td><input type="text" value="\'+c.codice+\'" data-id="\'+c.id+\'" data-campo="codice"\'+
       \' style="border:none;background:transparent;width:120px;font-size:13px;font-family:monospace" onchange="adminSalvaCatMag(this)"></td>\'+
       \'<td>\'+
-        flagBtn(\'colori_laminato\',\'LAM\')+
-        flagBtn(\'colori_laccato\',\'LAC\')+
-        flagBtn(\'colori_ferramenta\',\'FER\')+
+        flagBtn(\'colori_laminato\',\'LAM\',c.colori_laminato)+
+        flagBtn(\'colori_laccato\',\'LAC\',c.colori_laccato)+
+        flagBtn(\'colori_ferramenta\',\'FER\',c.colori_ferramenta)+
       \'</td>\'+
       \'<td><input type="text" value="\'+( c.descrizione||\'\')+\'" data-id="\'+c.id+\'" data-campo="descrizione"\'+
       \' placeholder="Descrizione" style="border:none;background:transparent;width:200px;font-size:13px" onchange="adminSalvaCatMag(this)"></td>\'+
