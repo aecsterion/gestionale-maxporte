@@ -4409,15 +4409,15 @@ async function approvaOrdine(id, tipo){
 // ══════════════════════════════════════════════════════
 
 const ADMIN_SECTIONS = [
-  {id:'catalogo',    label:'Catalogo',          icon:'M4 4h8v8H4zM10 2h4v4h-4zM2 10h4v4H2z'},
-  {id:'prezzi',      label:'Prezzi e listini',  icon:'M8 1l2 5h5l-4 3 1.5 5L8 11l-4.5 3L5 9 1 6h5z'},
-  {id:'telaio',      label:'Telaio e componenti',icon:'M2 8h12M8 2v12'},
-  {id:'distinte',    label:'Distinte base',     icon:'M3 3h10v2H3zM3 7h10v2H3zM3 11h6v2H3z'},
-  {id:'compatibilita',label:'Compatibilità',    icon:'M2 8h5M9 8h5M8 2v5M8 9v5'},
-  {id:'lavorazioni', label:'Lavorazioni extra', icon:'M4 2h8l2 4-10 0zM2 6h12v10H2zM6 10h4'},
-  {id:'agenti',      label:'Agenti',            icon:'M8 5a3 3 0 100 6 3 3 0 000-6zM2 14c0-3 2-5 6-5s6 2 6 5'},
-  {id:'impostazioni',label:'Impostazioni',      icon:'M8 5a3 3 0 100 6M8 1v2M8 13v2M1 8h2M13 8h2'},
-  {id:'magazzino_admin',label:'Magazzino',       icon:'M2 4h12v10H2zM2 4l6-3 6 3M6 14v-4h4v4'},
+  {id:'agenti',        label:'Agenti',             icon:'M8 5a3 3 0 100 6 3 3 0 000-6zM2 14c0-3 2-5 6-5s6 2 6 5'},
+  {id:'catalogo',      label:'Catalogo',           icon:'M4 4h8v8H4zM10 2h4v4h-4zM2 10h4v4H2z'},
+  {id:'compatibilita', label:'Compatibilità', icon:'M2 8h5M9 8h5M8 2v5M8 9v5'},
+  {id:'distinte',      label:'Distinte base',      icon:'M3 3h10v2H3zM3 7h10v2H3zM3 11h6v2H3z'},
+  {id:'impostazioni',  label:'Impostazioni',       icon:'M8 5a3 3 0 100 6M8 1v2M8 13v2M1 8h2M13 8h2'},
+  {id:'lavorazioni',   label:'Lavorazioni extra',  icon:'M4 2h8l2 4-10 0zM2 6h12v10H2zM6 10h4'},
+  {id:'magazzino_admin',label:'Magazzino',         icon:'M2 4h12v10H2zM2 4l6-3 6 3M6 14v-4h4v4'},
+  {id:'prezzi',        label:'Prezzi e listini',   icon:'M8 1l2 5h5l-4 3 1.5 5L8 11l-4.5 3L5 9 1 6h5z'},
+  {id:'telaio',        label:'Telaio e componenti',icon:'M2 8h12M8 2v12'},
 ];
 
 const ADMIN_SUB = {
@@ -5756,64 +5756,60 @@ async function adminLavorazioni(){
 }
 
 async function adminMagazzino(){
-  const tabs=[{id:\'categorie\',label:\'Categorie\'}];
-  const sub=adminSub===\'categorie\'?\'categorie\':\'categorie\';
-  const tabsHtml=adminSubTabs(tabs,sub,\'switchMagSub\');
-  document.getElementById(\'admin-main\').innerHTML=tabsHtml+\'<div id="admin-sub"></div>\';
+  document.getElementById(\'admin-main\').innerHTML=
+    adminSubTabs([{id:\'categorie\',label:\'Categorie\'}],\'categorie\',\'switchMagSub\')+
+    \'<div id="admin-sub"></div>\';
   adminCategorieMag();
 }
 
 function switchMagSub(sub){
-  adminSub=sub;
-  adminMagazzino();
+  adminSub=sub;adminMagazzino();
 }
 
 async function adminCategorieMag(){
   const {data,error}=await sb.from(\'categorie_magazzino\').select(\'*\').order(\'nome\');
-  if(error){document.getElementById(\'admin-sub\').innerHTML=\'<p style="color:var(--red)">Errore.</p>\';return;}
+  if(error){document.getElementById(\'admin-sub\').innerHTML=\'<p style="color:var(--red)">Errore caricamento.</p>\';return;}
   const rows=(data||[]).map(function(c){
     return \'<tr>\'+
-      \' data-id="\'+c.id+\'" data-campo="nome" style="border:none;background:transparent;width:160px;font-size:13px" onchange="adminSalvaCatMag(this)"></td>\'+
-      \'<td><input type="text" value="\'+c.codice+\'" data-id="\'+c.id+\'" data-campo="codice" style="border:none;background:transparent;width:120px;font-size:13px;font-family:monospace" onchange="adminSalvaCatMag(this)"></td>\'+
-      \'<td><input type="text" value="\'+( c.descrizione||\'\')+\'" data-id="\'+c.id+\'" data-campo="descrizione" placeholder="Descrizione" style="border:none;background:transparent;width:220px;font-size:13px" onchange="adminSalvaCatMag(this)"></td>\'+
-      \'<td><button class="btn btn-sm" style="color:var(--red)" data-cid="\'+c.id+\'" onclick="eliminaCategoriaMag(this.dataset.cid)">×</button></td>\'+
+      \'<td><input type="text" value="\'+c.nome+\'" data-id="\'+c.id+\'" data-campo="nome"\'+
+      \' style="border:none;background:transparent;width:180px;font-size:13px" onchange="adminSalvaCatMag(this)"></td>\'+
+      \'<td><input type="text" value="\'+c.codice+\'" data-id="\'+c.id+\'" data-campo="codice"\'+
+      \' style="border:none;background:transparent;width:140px;font-size:13px;font-family:monospace" onchange="adminSalvaCatMag(this)"></td>\'+
+      \'<td><input type="text" value="\'+( c.descrizione||\'\')+\'" data-id="\'+c.id+\'" data-campo="descrizione"\'+
+      \' placeholder="Descrizione opzionale" style="border:none;background:transparent;width:100%;font-size:13px" onchange="adminSalvaCatMag(this)"></td>\'+
+      \'<td style="text-align:right"><button class="btn btn-sm" style="color:var(--red)" data-cid="\'+c.id+\'" onclick="eliminaCategoriaMag(this.dataset.cid)">×</button></td>\'+
       \'</tr>\';
   }).join(\'\');
-  var html=\'<table style="width:100%"><thead><tr><th>Nome</th><th>Codice</th><th>Descrizione</th><th></th></tr></thead>\'+
+  const html=\'<table style="width:100%"><thead><tr>\'+
+    \'<th style="width:200px">Nome</th><th style="width:160px">Codice</th><th>Descrizione</th><th></th></tr></thead>\'+
     \'<tbody>\'+rows+\'</tbody></table>\';
   document.getElementById(\'admin-sub\').innerHTML=adminCard(\'Categorie magazzino\',html,
     \'<button class="btn btn-sm btn-red" onclick="aggiungiCategoriaMag()">+ Nuova categoria</button>\');
 }
 
 async function adminSalvaCatMag(el){
-  const id=el.dataset.id;
-  const campo=el.dataset.campo;
-  const valore=el.value.trim();
+  const id=el.dataset.id,campo=el.dataset.campo,valore=el.value.trim();
   if(!id||!campo) return;
   const {error}=await sb.from(\'categorie_magazzino\').update({[campo]:valore}).eq(\'id\',id);
   if(error){toast(\'Errore: \'+error.message,\'err\');el.style.background=\'var(--red-bg)\';return;}
-  toast(\'Salvato\',\'ok\');el.style.background=\'var(--green-bg)\';
-  setTimeout(function(){el.style.background=\'transparent\';},1500);
-}
-
-async function adminSalvaCategoriaMag(id,campo,valore){
-  const {error}=await sb.from(\'categorie_magazzino\').update({[campo]:valore}).eq(\'id\',id);
-  if(error){toast(\'Errore: \'+error.message,\'err\');return;}
   toast(\'Salvato\',\'ok\');
+  el.style.background=\'var(--green-bg)\';
+  setTimeout(function(){el.style.background=\'transparent\';},1500);
 }
 
 async function aggiungiCategoriaMag(){
   const nome=prompt(\'Nome categoria (es. Pannello blindato):\');
-  if(!nome) return;
-  const codice=prompt(\'Codice categoria (es. pannello_blindato):\')||nome.toLowerCase().replace(/ /g,\'_\');
-  const {error}=await sb.from(\'categorie_magazzino\').insert([{nome,codice}]);
+  if(!nome||!nome.trim()) return;
+  const codice=(prompt(\'Codice (es. pannello_blindato):\')||nome.trim().toLowerCase().replace(/ /g,\'_\')).trim();
+  if(!codice) return;
+  const {error}=await sb.from(\'categorie_magazzino\').insert([{nome:nome.trim(),codice}]);
   if(error){toast(\'Errore: \'+error.message,\'err\');return;}
   toast(\'Categoria aggiunta\',\'ok\');
   adminCategorieMag();
 }
 
 async function eliminaCategoriaMag(id){
-  if(!confirm(\'Eliminare questa categoria? Gli articoli associati non verranno eliminati.\')) return;
+  if(!confirm(\'Eliminare questa categoria?\')) return;
   const {error}=await sb.from(\'categorie_magazzino\').delete().eq(\'id\',id);
   if(error){toast(\'Errore: \'+error.message,\'err\');return;}
   toast(\'Eliminata\',\'ok\');
