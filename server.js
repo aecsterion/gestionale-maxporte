@@ -3471,8 +3471,8 @@ async function cfgAccPannello(){
       \'Nessun pannello in magazzino per la finitura <strong>\'+( CFG.finitura||\'\' )+\'</strong>.</div>\';
   document.getElementById(\'cfg-body\').innerHTML=\\`
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-      <div style="font-size:13px;font-weight:500">Configurazione pannello <span style="color:var(--mid);font-weight:400">\\xe2\\x80\\x94 \\${CFG.nome_modello}</span></div>
-      <button class="btn btn-sm" onclick="renderCfgStep('finitura')">\\xe2\\x86\\x90 Indietro</button>
+      <div style="font-size:13px;font-weight:500">Configurazione pannello <span style="color:var(--mid);font-weight:400">— \\${CFG.nome_modello}</span></div>
+      <button class="btn btn-sm" onclick="renderCfgStep('finitura')">← Indietro</button>
     </div>
     \\${infoMag}
     <div style="display:grid;gap:14px;max-width:440px">
@@ -3486,7 +3486,7 @@ async function cfgAccPannello(){
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div>
-          <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Larghezza (mm)\\${lMax?' \\xe2\\x80\\x94 max '+lMax+' mm':''}</label>
+          <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Larghezza (mm)\\${lMax?' — max '+lMax+' mm':''}</label>
           <input type="number" id="pan-l" value="\\${CFG.larghezza||\'\'}" placeholder="es. 900"
             style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px"
             oninput="checkLarghezzaPan(this.value)">
@@ -3500,7 +3500,7 @@ async function cfgAccPannello(){
         </div>
       </div>
       <div id="zoccoli-preview"></div>
-      <button class="btn btn-red" onclick="selAccPannello()">Avanti \\xe2\\x86\\x92</button>
+      <button class="btn btn-red" onclick="selAccPannello()">Avanti →</button>
     </div>\\`;
   if(CFG.altezza) aggiornaZoccoliPreview(CFG.altezza);
 }
@@ -3523,7 +3523,7 @@ function aggiornaZoccoliPreview(hStr){
   }
   if(h<=hMag){
     el.innerHTML=\'<div style="background:var(--green-bg);border-radius:var(--radius);padding:10px 12px;font-size:12px;color:var(--green-tx)">\'+
-      \'\xe2\x9c\x93 Taglio diretto: pannello H \'+hMag+\' mm \xe2\x86\x92 <strong>\'+h+\' mm</strong></div>\';
+      \'✓ Taglio diretto: pannello H \'+hMag+\' mm → <strong>\'+h+\' mm</strong></div>\';
   } else {
     let z=0;
     while(hMag+z*80<h) z++;
@@ -3532,7 +3532,7 @@ function aggiornaZoccoliPreview(hStr){
       el.innerHTML=\'<div style="background:var(--red-bg);border-radius:var(--radius);padding:10px 12px;font-size:12px;color:var(--red)">Altezza non raggiungibile.</div>\';
     } else {
       el.innerHTML=\'<div style="background:var(--amber-bg);border-radius:var(--radius);padding:10px 12px;font-size:12px;color:var(--amber-tx)">\'+
-        \'<strong>\'+z+\' zoccolo\'+( z>1?\'li\':\'\')+\'</strong> da 80 mm \xe2\x80\x94 \'+
+        \'<strong>\'+z+\' zoccolo\'+( z>1?\'li\':\'\')+\'</strong> da 80 mm — \'+
         \'pannello tagliato a <strong>\'+hT+\' mm</strong> + \'+z+\' x 80 mm = \'+h+\' mm</div>\';
     }
   }
