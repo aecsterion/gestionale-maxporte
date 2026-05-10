@@ -678,14 +678,14 @@ tr.data-row:hover td{background:var(--beige);cursor:pointer}
         <div class="form-field"><label>Categoria</label><select id="mag-categoria" onchange="aggiornaCodiceMP()"><option value="">&#8212;</option></select></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-        <div class="form-field"><label>Finitura</label><select id="mag-codice_finitura" onchange="aggiornaFinMag(this);aggiornaCodiceMP()"><option value="">&#8212; Nessuna &#8212;</option></select></div>
+        <div class="form-field"><label>Colore</label><select id="mag-codice_finitura" onchange="aggiornaFinMag(this);aggiornaCodiceMP()"><option value="">&#8212; Nessuna &#8212;</option></select></div>
         <div class="form-field"><label>Unit&#224;</label><select id="mag-unita">
           <option value="pz">pz</option><option value="m">m</option>
           <option value="m2">m&#178;</option><option value="kg">kg</option></select></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
-        <div class="form-field"><label>Altezza (mm)</label><input id="mag-altezza_mm" type="number" oninput="aggiornaCodiceMP()"></div>
         <div class="form-field"><label>Larghezza (mm)</label><input id="mag-larghezza_mm" type="number" oninput="aggiornaCodiceMP()"></div>
+        <div class="form-field"><label>Altezza (mm)</label><input id="mag-altezza_mm" type="number" oninput="aggiornaCodiceMP()"></div>
         <div class="form-field"><label>Spessore (mm)</label><input id="mag-spessore_mm" type="number" oninput="aggiornaCodiceMP()"></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
@@ -1520,7 +1520,7 @@ async function renderMagazzino(){
     \'<div class="metric"><div class="metric-label">Sotto scorta</div><div class="metric-value" style="color:var(--red)">\'+sottoscorta+\'</div></div>\'+
     \'</div><div class="card"><div class="card-header"><span class="card-title">Magazzino</span>\'+
     \'<button class="btn btn-red btn-sm" onclick="apriNuovoArticoloMag()">+ Nuovo articolo</button></div>\'+
-    \'<table><thead><tr><th>Codice MP</th><th>Descrizione</th><th>Categoria</th><th>Finitura</th>\'+
+    \'<table><thead><tr><th>Codice MP</th><th>Descrizione</th><th>Categoria</th><th>Colore</th>\'+
     \'<th>Dim.</th><th>Giacenza</th><th>Scorta min.</th><th>Stato</th></tr></thead>\'+
     \'<tbody>\'+(rows||\'<tr><td colspan="8" style="text-align:center;color:var(--mid);padding:24px">Nessun articolo</td></tr>\')+
     \'</tbody></table></div>\';
@@ -1600,11 +1600,11 @@ function aggiornaCodiceMP(force){
   if(mp.value&&!force) return; // non sovrascrivere se già compilato
   const catSel=document.getElementById(\'mag-categoria\');
   const cat=(catSel&&catSel.value)?catSel.value.toUpperCase().replace(\'_\',\'-\').slice(0,6):\'\';
-  const h=document.getElementById(\'mag-altezza_mm\')?.value||\'\';
   const l=document.getElementById(\'mag-larghezza_mm\')?.value||\'\';
+  const h=document.getElementById(\'mag-altezza_mm\')?.value||\'\';
   const s=document.getElementById(\'mag-spessore_mm\')?.value||\'\';
   const fin=document.getElementById(\'mag-codice_finitura\')?.value||\'\';
-  const parts=[cat,h,l,s,fin].filter(Boolean);
+  const parts=[cat,l,h,s,fin].filter(Boolean);
   if(parts.length>1) mp.value=parts.join(\'-\');
 }
 
@@ -3566,13 +3566,13 @@ async function selAccPannello(){
   const hMag=panMag?.altezza_mm||0;
   const lMax=panMag?.larghezza_mm||0;
   if(lMax>0&&l>lMax){toast(\'Larghezza massima: \'+lMax+\' mm\',\'err\');return;}
-  CFG.senso=senso;CFG.larghezza=l;CFG.altezza=a;CFG.misura_custom=true;
+  CFG.senso=senso;CFG.larghezza=l;CFG.altezza=a;CFG.misura_custom=false;
   CFG.p_extra=CFG._suppTaglioPannello||0;
   CFG._zoccoliAuto=0;CFG._hTaglioPannello=a;CFG._hMagPannello=hMag;
   if(hMag>0&&a>hMag){
     let z=0; while(hMag+z*80<a) z++;
     const hT=a-z*80;
-    if(hT<=0){toast(\'Altezza non raggiungibile\',\'err\');return;}
+    if(hT<=0||hT>hMag){toast(\'Altezza non raggiungibile con i pannelli disponibili\',\'err\');return;}
     CFG._zoccoliAuto=z;CFG._hTaglioPannello=hT;
   }
   cfgUpdatePrice();cfgRiepilogo();
@@ -4400,8 +4400,9 @@ const ADMIN_SECTIONS = [
   {id:'distinte',    label:'Distinte base',     icon:'M3 3h10v2H3zM3 7h10v2H3zM3 11h6v2H3z'},
   {id:'compatibilita',label:'Compatibilità',    icon:'M2 8h5M9 8h5M8 2v5M8 9v5'},
   {id:'lavorazioni', label:'Lavorazioni extra', icon:'M4 2h8l2 4-10 0zM2 6h12v10H2zM6 10h4'},
-  {id:'agenti',      label:'Agenti',            icon:'M8 5a3 3 0 100 6 3 3 0 000-6zM2 14c0-3 2-5 6-5s6 2 6 5'},
-  {id:'impostazioni',label:'Impostazioni',      icon:'M8 5a3 3 0 100 6M8 1v2M8 13v2M1 8h2M13 8h2'},
+  {id:'agenti',        label:'Agenti',             icon:'M8 5a3 3 0 100 6 3 3 0 000-6zM2 14c0-3 2-5 6-5s6 2 6 5'},
+  {id:'impostazioni',  label:'Impostazioni',       icon:'M8 5a3 3 0 100 6M8 1v2M8 13v2M1 8h2M13 8h2'},
+  {id:'magazzino_admin',label:'Magazzino',         icon:'M2 4h12v10H2zM2 4l6-3 6 3M6 14v-4h4v4'},
 ];
 
 const ADMIN_SUB = {
@@ -4411,6 +4412,7 @@ const ADMIN_SUB = {
   distinte:   ['db_modelli'],
   agenti:     ['agenti_lista'],
   impostazioni:['generale','utenti'],
+  magazzino_admin:['categorie'],
 };
 
 let adminSection = 'catalogo';
@@ -4455,6 +4457,7 @@ function loadAdminSection(){
   else if(adminSection==='lavorazioni') adminLavorazioni();
   else if(adminSection==='agenti') adminAgenti();
   else if(adminSection==='impostazioni') adminImpostazioni();
+  else if(adminSection==='magazzino_admin') adminMagazzino();
 }
 
 // ── HELPER UI ──────────────────────────────────────────
