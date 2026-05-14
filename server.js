@@ -5622,16 +5622,22 @@ async function apriRegola(id){
       \' style="border:none;background:transparent;width:160px;font-size:12px" onchange="adminSalvaComp(this)"></td>\'+
       \'<td><select data-id="\'+c.id+\'" data-campo="tipo_ricerca" onchange="adminSalvaComp(this)"\'+
       \' style="border:none;background:transparent;font-size:12px">\'+tipoOpts+\'</select></td>\'+
+      \'<td><input type="text" value="\'+( c.categoria_mp||\'\')+\'" data-id="\'+c.id+\'" data-campo="categoria_mp"\'+
+      \' placeholder="es. AN-BAT" style="border:none;background:transparent;width:90px;font-size:12px" onchange="adminSalvaComp(this)"></td>\'+
       \'<td><input type="text" value="\'+( c.codice_mp||\'\')+\'" data-id="\'+c.id+\'" data-campo="codice_mp"\'+
-      \' placeholder="codice o cat." style="border:none;background:transparent;width:100px;font-size:12px" onchange="adminSalvaComp(this)"></td>\'+
+      \' placeholder="es. VIT-3520" style="border:none;background:transparent;width:90px;font-size:12px" onchange="adminSalvaComp(this)"></td>\'+
       \'<td><select data-id="\'+c.id+\'" data-campo="colore_da" onchange="adminSalvaComp(this)"\'+
       \' style="border:none;background:transparent;font-size:12px">\'+coloreOpts+\'</select></td>\'+
       \'<td><input type="text" value="\'+( c.formula_larghezza||\'\')+\'" data-id="\'+c.id+\'" data-campo="formula_larghezza"\'+
-      \' placeholder="es. L+32" style="border:none;background:transparent;width:80px;font-size:12px" onchange="adminSalvaComp(this)"></td>\'+
+      \' placeholder="L+32" style="border:none;background:transparent;width:70px;font-size:12px" onchange="adminSalvaComp(this)"></td>\'+
       \'<td><input type="text" value="\'+( c.formula_altezza||\'\')+\'" data-id="\'+c.id+\'" data-campo="formula_altezza"\'+
-      \' placeholder="es. H+13" style="border:none;background:transparent;width:80px;font-size:12px" onchange="adminSalvaComp(this)"></td>\'+
+      \' placeholder="H+13" style="border:none;background:transparent;width:70px;font-size:12px" onchange="adminSalvaComp(this)"></td>\'+
+      \'<td><input type="text" value="\'+( c.formula_larghezza_taglio||\'\')+\'" data-id="\'+c.id+\'" data-campo="formula_larghezza_taglio"\'+
+      \' placeholder="L+37" style="border:none;background:transparent;width:70px;font-size:12px" onchange="adminSalvaComp(this)"></td>\'+
+      \'<td><input type="text" value="\'+( c.formula_altezza_taglio||\'\')+\'" data-id="\'+c.id+\'" data-campo="formula_altezza_taglio"\'+
+      \' placeholder="H+13" style="border:none;background:transparent;width:70px;font-size:12px" onchange="adminSalvaComp(this)"></td>\'+
       \'<td><input type="text" value="\'+( c.formula_qta||\'\')+\'" data-id="\'+c.id+\'" data-campo="formula_qta"\'+
-      \' placeholder="es. 2.5" style="border:none;background:transparent;width:100px;font-size:12px" onchange="adminSalvaComp(this)"></td>\'+
+      \' placeholder="es. 2.5" style="border:none;background:transparent;width:80px;font-size:12px" onchange="adminSalvaComp(this)"></td>\'+
       \'<td><input type="text" value="\'+( c.unita||\'\')+\'" data-id="\'+c.id+\'" data-campo="unita"\'+
       \' placeholder="pz" style="border:none;background:transparent;width:40px;font-size:12px" onchange="adminSalvaComp(this)"></td>\'+
       \'<td><input type="text" value="\'+( c.note||\'\')+\'" data-id="\'+c.id+\'" data-campo="note"\'+
@@ -5639,11 +5645,11 @@ async function apriRegola(id){
       \'<td><button class="btn btn-sm" style="color:var(--red)" data-cid="\'+c.id+\'" onclick="eliminaComp(this.dataset.cid)">&times;</button></td>\'+
       \'</tr>\';
   }).join(\'\');
-  if(!compRows) compRows=\'<tr><td colspan="10" style="text-align:center;color:var(--mid);padding:16px">Nessun componente &mdash; aggiungi il primo</td></tr>\';
+  if(!compRows) compRows=\'<tr><td colspan="13" style="text-align:center;color:var(--mid);padding:16px">Nessun componente &mdash; aggiungi il primo</td></tr>\';
   var html=\'<div style="margin-bottom:10px;font-size:12px;color:var(--mid)">Regola: <strong>\'+regola.nome+\'</strong>\'+
     ( conds?\' &mdash; \'+conds:\'\')+\'</div>\'+
     \'<div style="overflow-x:auto"><table style="width:100%;white-space:nowrap"><thead><tr>\'+
-    \'<th>Descrizione</th><th>Tipo ricerca</th><th>Codice/Categoria</th><th>Colore da</th><th>Formula L</th><th>Formula H</th><th>Formula Q.t&agrave;</th><th>UM</th><th>Note</th><th></th>\'+
+    \'<th>Descrizione</th><th>Tipo ricerca</th><th>Categoria MP</th><th>Codice MP</th><th>Colore da</th><th>L finita</th><th>H finita</th><th>L taglio</th><th>H taglio</th><th>Q.t&agrave;</th><th>UM</th><th>Note</th><th></th>\'+
     \'</tr></thead><tbody>\'+compRows+\'</tbody></table></div>\';
   document.getElementById(\'distinte-sub\').innerHTML=adminCard(\'Componenti: \'+regola.nome,html,
     \'<button class="btn btn-sm" onclick="adminDistinteRegole()">&larr; Regole</button> \'+
