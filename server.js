@@ -1626,9 +1626,10 @@ async function aggiornaColoriMag(){
   }
   const finSel=document.getElementById(\'mag-codice_finitura\');
   if(finSel){
+    var curVal=finSel.value;
     var opts=\'<option value="">&mdash; Nessuna &mdash;</option>\'+
       finsUnique.map(function(f){
-        var sel=f.codice_finitura===m.codice_finitura?\' selected\':\'\';
+        var sel=f.codice_finitura===curVal?\' selected\':\'\';
         return \'<option value="\'+f.codice_finitura+\'" data-nome="\'+f.nome_finitura+\'"\'+sel+\'>\'+ f.codice_finitura+\' - \'+f.nome_finitura+\'</option>\';
       }).join(\'\');
     finSel.innerHTML=opts;
