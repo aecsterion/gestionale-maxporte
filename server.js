@@ -4512,7 +4512,7 @@ function loadAdminSection(){
   if(adminSection==='catalogo') adminCatalogo();
   else if(adminSection==='prezzi') adminPrezzi();
   else if(adminSection==='telaio') adminTelaioPanel();
-  else if(adminSection==='distinte') adminDistinte();
+  else if(adminSection==='distinte') adminDistinteMain();
   else if(adminSection==='compatibilita') adminCompatibilita();
   else if(adminSection==='lavorazioni') adminLavorazioni();
   else if(adminSection==='agenti') adminAgenti();
@@ -5387,6 +5387,18 @@ async function nuovoScorInt(){
 // ══════════════════════════════════════════════════════
 // DISTINTE BASE
 // ══════════════════════════════════════════════════════
+async function adminDistinteMain(){
+  var sub=adminSub||'base';
+  var tabs=[{id:'base',label:'Distinte base'},{id:'regole',label:'Regole dinamiche'}];
+  document.getElementById('admin-main').innerHTML=adminSubTabs(tabs,sub,'switchDistinteSub')+'<div id="distinte-sub"></div>';
+  if(sub==='base') adminDistinte();
+  else if(sub==='regole') adminDistinteRegole();
+}
+
+function switchDistinteSub(sub){
+  adminSub=sub;adminDistinteMain();
+}
+
 async function adminDistinte(){
   const [{data:modelli},{data:serie}] = await Promise.all([
     sb.from('modelli').select('codice,nome,codice_serie').eq('attivo',true).order('codice_serie').order('nome'),
@@ -5518,6 +5530,142 @@ async function eliminaCategoriaMag(id){
   if(error){toast(\'Errore: \'+error.message,\'err\');return;}
   toast(\'Eliminata\',\'ok\');
   adminCategorieMag();
+}
+
+async function adminDistinteRegole(){
+  const {data:regole}=await sb.from(\'distinta_regole\').select(\'*\').order(\'codice_serie\').order(\'nome\');
+  const rows=(regole||[]).map(function(r){
+    var conds=[r.codice_serie,r.codice_modello,r.tipologia,r.codice_finitura,r.colore_ferramenta].filter(Boolean).join(\' / \');
+    var stato=r.attiva?\'<span class="badge bg">Attiva</span>\':\'<span class="badge br">Inattiva</span>\';
+    return \'<tr>\'+
+      \'<td><strong>\'+r.nome+\'</strong></td>\'+
+      \'<td style="font-size:12px;color:var(--mid)">\'+( conds||\' &mdash; qualsiasi &mdash;\')+\'</td>\'+
+      \'<td>\'+stato+\'</td>\'+
+      \'<td style="text-align:right">\'+
+        \'<button class="btn btn-sm" data-rid="\'+r.id+\'" onclick="apriRegola(this.dataset.rid)">Componenti</button> \'+
+        \'<button class="btn btn-sm" style="color:var(--red)" data-rid="\'+r.id+\'" onclick="eliminaRegola(this.dataset.rid)">&times;</button>\'+
+      \'</td>\'+
+      \'</tr>\';
+  }).join(\'\');
+  var html=\'<table style="width:100%"><thead><tr>\'+
+    \'<th>Nome regola</th><th>Condizioni</th><th>Stato</th><th></th></tr></thead>\'+
+    \'<tbody>\'+(rows||\'<tr><td colspan="4" style="text-align:center;color:var(--mid);padding:20px">Nessuna regola</td></tr>\')+\'</tbody></table>\';
+  document.getElementById(\'distinte-sub\').innerHTML=adminCard(\'Regole distinta dinamica\',html,
+    \'<button class="btn btn-sm btn-red" onclick="nuovaRegola()">+ Nuova regola</button>\');
+}
+
+async function nuovaRegola(){
+  const {data:serie}=await sb.from(\'serie\').select(\'codice,nome\').order(\'nome\');
+  var serieOpts=(serie||[]).map(function(s){return \'<option value="\'+s.codice+\'">\'+ s.codice+\' - \'+s.nome+\'</option>\';}).join(\'\');
+  var tipoOpts=[\'BAT\',\'CS\',\'FM\',\'BAT2A\',\'CS2A\',\'ROTO\',\'SE\',\'PAS\',\'SOP\'].map(function(t){return \'<option value="\'+t+\'">\'+ t+\'</option>\';}).join(\'\');
+  document.getElementById(\'modal-regola-body\').innerHTML=
+    \'<div class="form-field"><label>Nome regola *</label><input id="reg-nome" type="text" placeholder="es. TAM Allori BAT"></div>\'+
+    \'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">\'+
+    \'<div class="form-field"><label>Serie</label><select id="reg-serie"><option value="">&mdash; tutte &mdash;</option>\'+serieOpts+\'</select></div>\'+
+    \'<div class="form-field"><label>Modello (codice)</label><input id="reg-modello" type="text" placeholder="es. Allori1A"></div>\'+
+    \'<div class="form-field"><label>Tipologia</label><select id="reg-tipologia"><option value="">&mdash; tutte &mdash;</option>\'+tipoOpts+\'</select></div>\'+
+    \'<div class="form-field"><label>Finitura (codice)</label><input id="reg-finitura" type="text" placeholder="vuoto=tutte"></div>\'+
+    \'<div class="form-field"><label>Colore ferramenta</label><input id="reg-ferramenta" type="text" placeholder="vuoto=tutti"></div>\'+
+    \'</div>\'+
+    \'<div class="form-field"><label>Note</label><input id="reg-note" type="text"></div>\'+
+    \'<label style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:4px">\'+
+    \'<input type="checkbox" id="reg-attiva" checked> Regola attiva</label>\';
+  _regolaEditId=null;
+  document.getElementById(\'modal-regola-title\').textContent=\'Nuova regola\';
+  const mo=ensureModalInBody(\'modal-regola\');if(mo)mo.classList.add(\'open\');
+}
+
+var _regolaEditId=null;
+
+async function salvaRegola(){
+  const d={
+    nome:document.getElementById(\'reg-nome\')?.value?.trim(),
+    codice_serie:document.getElementById(\'reg-serie\')?.value?.trim()||null,
+    codice_modello:document.getElementById(\'reg-modello\')?.value?.trim()||null,
+    tipologia:document.getElementById(\'reg-tipologia\')?.value?.trim()||null,
+    codice_finitura:document.getElementById(\'reg-finitura\')?.value?.trim()||null,
+    colore_ferramenta:document.getElementById(\'reg-ferramenta\')?.value?.trim()||null,
+    note:document.getElementById(\'reg-note\')?.value?.trim()||null,
+    attiva:document.getElementById(\'reg-attiva\')?.checked??true,
+  };
+  if(!d.nome){toast(\'Inserisci il nome della regola\',\'err\');return;}
+  var er;
+  if(_regolaEditId){const r=await sb.from(\'distinta_regole\').update(d).eq(\'id\',_regolaEditId);er=r.error;}
+  else{const r=await sb.from(\'distinta_regole\').insert([d]);er=r.error;}
+  if(er){toast(\'Errore: \'+er.message,\'err\');return;}
+  toast(\'Salvato\',\'ok\');closeForm(\'modal-regola\');adminDistinteRegole();
+}
+
+async function eliminaRegola(id){
+  if(!confirm(\'Eliminare questa regola e tutti i suoi componenti?\')) return;
+  await sb.from(\'distinta_componenti\').delete().eq(\'regola_id\',id);
+  const {error}=await sb.from(\'distinta_regole\').delete().eq(\'id\',id);
+  if(error){toast(\'Errore: \'+error.message,\'err\');return;}
+  toast(\'Eliminata\',\'ok\');adminDistinteRegole();
+}
+
+async function apriRegola(id){
+  _regolaEditId=id;
+  const [{data:regola},{data:comps}]=await Promise.all([
+    sb.from(\'distinta_regole\').select(\'*\').eq(\'id\',id).single(),
+    sb.from(\'distinta_componenti\').select(\'*\').eq(\'regola_id\',id).order(\'ordine\'),
+  ]);
+  if(!regola) return;
+  var conds=[regola.codice_serie,regola.codice_modello,regola.tipologia].filter(Boolean).join(\' / \');
+  var tipiRicerca=[\'codice_fisso\',\'query_magazzino\',\'dal_configuratore\'];
+  var coloriDa=[\'nessuno\',\'finitura\',\'ferramenta\'];
+  var compRows=(comps||[]).map(function(c){
+    var tipoOpts=tipiRicerca.map(function(t){return \'<option value="\'+t+\'"\'+( c.tipo_ricerca===t?\' selected\':\'\')+\'>\'+t+\'</option>\';}).join(\'\');
+    var coloreOpts=coloriDa.map(function(t){return \'<option value="\'+t+\'"\'+( c.colore_da===t?\' selected\':\'\')+\'>\'+t+\'</option>\';}).join(\'\');
+    return \'<tr>\'+
+      \'<td><input type="text" value="\'+( c.descrizione||\'\')+\'" data-id="\'+c.id+\'" data-campo="descrizione"\'+
+      \' style="border:none;background:transparent;width:160px;font-size:12px" onchange="adminSalvaComp(this)"></td>\'+
+      \'<td><select data-id="\'+c.id+\'" data-campo="tipo_ricerca" onchange="adminSalvaComp(this)"\'+
+      \' style="border:none;background:transparent;font-size:12px">\'+tipoOpts+\'</select></td>\'+
+      \'<td><input type="text" value="\'+( c.codice_mp||\'\')+\'" data-id="\'+c.id+\'" data-campo="codice_mp"\'+
+      \' placeholder="codice o cat." style="border:none;background:transparent;width:100px;font-size:12px" onchange="adminSalvaComp(this)"></td>\'+
+      \'<td><select data-id="\'+c.id+\'" data-campo="colore_da" onchange="adminSalvaComp(this)"\'+
+      \' style="border:none;background:transparent;font-size:12px">\'+coloreOpts+\'</select></td>\'+
+      \'<td><input type="text" value="\'+( c.formula_qta||\'\')+\'" data-id="\'+c.id+\'" data-campo="formula_qta"\'+
+      \' placeholder="es. 2.5" style="border:none;background:transparent;width:100px;font-size:12px" onchange="adminSalvaComp(this)"></td>\'+
+      \'<td><input type="text" value="\'+( c.unita||\'\')+\'" data-id="\'+c.id+\'" data-campo="unita"\'+
+      \' placeholder="pz" style="border:none;background:transparent;width:40px;font-size:12px" onchange="adminSalvaComp(this)"></td>\'+
+      \'<td><input type="text" value="\'+( c.note||\'\')+\'" data-id="\'+c.id+\'" data-campo="note"\'+
+      \' placeholder="note" style="border:none;background:transparent;width:100px;font-size:12px" onchange="adminSalvaComp(this)"></td>\'+
+      \'<td><button class="btn btn-sm" style="color:var(--red)" data-cid="\'+c.id+\'" onclick="eliminaComp(this.dataset.cid)">&times;</button></td>\'+
+      \'</tr>\';
+  }).join(\'\');
+  if(!compRows) compRows=\'<tr><td colspan="8" style="text-align:center;color:var(--mid);padding:16px">Nessun componente &mdash; aggiungi il primo</td></tr>\';
+  var html=\'<div style="margin-bottom:10px;font-size:12px;color:var(--mid)">Regola: <strong>\'+regola.nome+\'</strong>\'+
+    ( conds?\' &mdash; \'+conds:\'\')+\'</div>\'+
+    \'<div style="overflow-x:auto"><table style="width:100%;white-space:nowrap"><thead><tr>\'+
+    \'<th>Descrizione</th><th>Tipo ricerca</th><th>Codice/Categoria</th><th>Colore da</th><th>Formula Q.t&agrave;</th><th>UM</th><th>Note</th><th></th>\'+
+    \'</tr></thead><tbody>\'+compRows+\'</tbody></table></div>\';
+  document.getElementById(\'distinte-sub\').innerHTML=adminCard(\'Componenti: \'+regola.nome,html,
+    \'<button class="btn btn-sm" onclick="adminDistinteRegole()">&larr; Regole</button> \'+
+    \'<button class="btn btn-sm btn-red" data-rid="\'+id+\'" onclick="nuovoComp(this.dataset.rid)">+ Componente</button>\');
+}
+
+async function adminSalvaComp(el){
+  const id=el.dataset.id,campo=el.dataset.campo,valore=el.value.trim();
+  if(!id||!campo) return;
+  const {error}=await sb.from(\'distinta_componenti\').update({[campo]:valore}).eq(\'id\',id);
+  if(error){toast(\'Errore: \'+error.message,\'err\');return;}
+  toast(\'OK\',\'ok\');
+}
+
+async function nuovoComp(regolaId){
+  const {error}=await sb.from(\'distinta_componenti\').insert([{
+    regola_id:regolaId,descrizione:\'Nuovo componente\',tipo_ricerca:\'codice_fisso\',formula_qta:\'1\',unita:\'pz\',colore_da:\'nessuno\',ordine:99
+  }]);
+  if(error){toast(\'Errore: \'+error.message,\'err\');return;}
+  apriRegola(regolaId);
+}
+
+async function eliminaComp(id){
+  if(!confirm(\'Eliminare questo componente?\')) return;
+  await sb.from(\'distinta_componenti\').delete().eq(\'id\',id);
+  if(_regolaEditId) apriRegola(_regolaEditId);
 }
 
 async function adminAgenti(){
@@ -6415,6 +6563,16 @@ async function esportaPDF(tipo, id) {
 
 </body>
 </html>
+<div id="modal-regola" class="form-modal-overlay">
+  <div class="form-modal" style="max-width:600px">
+    <div class="form-modal-head"><span class="form-modal-title" id="modal-regola-title">Regola</span>
+      <button class="form-close" onclick="closeForm('modal-regola')">&times;</button></div>
+    <div class="form-modal-body" id="modal-regola-body"></div>
+    <div class="form-modal-foot">
+      <button class="btn" onclick="closeForm('modal-regola')">Annulla</button>
+      <button class="btn btn-red" onclick="salvaRegola()">Salva</button></div>
+  </div>
+</div>
 `;
 function generaPDF(payload, callback) {
   const tmpJson = path.join(os.tmpdir(), 'prev_' + Date.now() + '.json');
