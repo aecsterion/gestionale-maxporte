@@ -5548,6 +5548,7 @@ async function adminDistinteRegole(){
       \'<td>\'+stato+\'</td>\'+
       \'<td style="text-align:right">\'+
         \'<button class="btn btn-sm" data-rid="\'+r.id+\'" onclick="apriRegola(this.dataset.rid)">Componenti</button> \'+
+        \'<button class="btn btn-sm" data-rid="\'+r.id+\'" onclick="duplicaRegola(this.dataset.rid)">Duplica</button> \'+
         \'<button class="btn btn-sm" style="color:var(--red)" data-rid="\'+r.id+\'" onclick="eliminaRegola(this.dataset.rid)">&times;</button>\'+
       \'</td>\'+
       \'</tr>\';
@@ -5599,6 +5600,33 @@ async function salvaRegola(){
   else{const r=await sb.from(\'distinta_regole\').insert([d]);er=r.error;}
   if(er){toast(\'Errore: \'+er.message,\'err\');return;}
   toast(\'Salvato\',\'ok\');closeForm(\'modal-regola\');adminDistinteRegole();
+}
+
+async function duplicaRegola(id){
+  const [{data:regola},{data:comps}]=await Promise.all([
+    sb.from(\'distinta_regole\').select(\'*\').eq(\'id\',id).single(),
+    sb.from(\'distinta_componenti\').select(\'*\').eq(\'regola_id\',id).order(\'ordine\'),
+  ]);
+  if(!regola){toast(\'Regola non trovata\',\'err\');return;}
+  const nuovaRegola={...regola};
+  delete nuovaRegola.id;
+  delete nuovaRegola.created_at;
+  nuovaRegola.nome=regola.nome+\' (copia)\';
+  const {data:nr,error:e1}=await sb.from(\'distinta_regole\').insert([nuovaRegola]).select().single();
+  if(e1){toast(\'Errore duplicazione regola: \'+e1.message,\'err\');return;}
+  if(comps&&comps.length){
+    const nuoviComps=comps.map(function(c){
+      const nc={...c};
+      delete nc.id;
+      delete nc.created_at;
+      nc.regola_id=nr.id;
+      return nc;
+    });
+    const {error:e2}=await sb.from(\'distinta_componenti\').insert(nuoviComps);
+    if(e2){toast(\'Errore duplicazione componenti: \'+e2.message,\'err\');return;}
+  }
+  toast(\'Regola duplicata\',\'ok\');
+  adminDistinteRegole();
 }
 
 async function eliminaRegola(id){
