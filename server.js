@@ -5613,7 +5613,7 @@ async function apriRegola(id){
   if(!regola) return;
   var conds=[regola.codice_serie,regola.codice_modello,regola.tipologia].filter(Boolean).join(\' / \');
   var tipiRicerca=[\'codice_fisso\',\'query_magazzino\',\'dal_configuratore\'];
-  var coloriDa=[\'nessuno\',\'finitura\',\'ferramenta\'];
+  var coloriDa=[\'nessuno\',\'finitura\',\'ferramenta\',\'inserto\',\'dal_configuratore\'];
   var compRows=(comps||[]).map(function(c){
     var tipoOpts=tipiRicerca.map(function(t){return \'<option value="\'+t+\'"\'+( c.tipo_ricerca===t?\' selected\':\'\')+\'>\'+t+\'</option>\';}).join(\'\');
     var coloreOpts=coloriDa.map(function(t){return \'<option value="\'+t+\'"\'+( c.colore_da===t?\' selected\':\'\')+\'>\'+t+\'</option>\';}).join(\'\');
