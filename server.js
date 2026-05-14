@@ -1575,10 +1575,12 @@ async function popolaFormMag(m){
     const {data:fins2}=await sb.from(\'finiture\').select(\'codice_finitura,nome_finitura\').in(\'fascia\',fasce).order(\'nome_finitura\');
     const seen=new Set();
     (fins2||[]).forEach(function(f){if(!seen.has(f.codice_finitura)){seen.add(f.codice_finitura);finsUnique.push({codice_finitura:f.codice_finitura,nome_finitura:f.nome_finitura});}});
-  } else if(catInfo&&catInfo.colori_ferramenta){
+  }
+  if(catInfo&&catInfo.colori_ferramenta){
     const {data:ferr}=await sb.from(\'ferramenta\').select(\'codice,nome\').eq(\'attivo\',true).order(\'nome\');
     (ferr||[]).forEach(function(f){finsUnique.push({codice_finitura:f.codice,nome_finitura:f.nome});});
-  } else {
+  }
+  if(!catInfo||(!catInfo.colori_laminato&&!catInfo.colori_laccato&&!catInfo.colori_ferramenta)){
     const {data:fins3}=await sb.from(\'finiture\').select(\'codice_finitura,nome_finitura\').order(\'nome_finitura\');
     const seen2=new Set();
     (fins3||[]).forEach(function(f){if(!seen2.has(f.codice_finitura)){seen2.add(f.codice_finitura);finsUnique.push(f);}});
@@ -1616,10 +1618,12 @@ async function aggiornaColoriMag(){
     const {data:fins2}=await sb.from(\'finiture\').select(\'codice_finitura,nome_finitura\').in(\'fascia\',fasce).order(\'nome_finitura\');
     const seen=new Set();
     (fins2||[]).forEach(function(f){if(!seen.has(f.codice_finitura)){seen.add(f.codice_finitura);finsUnique.push({codice_finitura:f.codice_finitura,nome_finitura:f.nome_finitura});}});
-  } else if(catInfo&&catInfo.colori_ferramenta){
+  }
+  if(catInfo&&catInfo.colori_ferramenta){
     const {data:ferr}=await sb.from(\'ferramenta\').select(\'codice,nome\').eq(\'attivo\',true).order(\'nome\');
     (ferr||[]).forEach(function(f){finsUnique.push({codice_finitura:f.codice,nome_finitura:f.nome});});
-  } else {
+  }
+  if(!catInfo||(!catInfo.colori_laminato&&!catInfo.colori_laccato&&!catInfo.colori_ferramenta)){
     const {data:fins3}=await sb.from(\'finiture\').select(\'codice_finitura,nome_finitura\').order(\'nome_finitura\');
     const seen2=new Set();
     (fins3||[]).forEach(function(f){if(!seen2.has(f.codice_finitura)){seen2.add(f.codice_finitura);finsUnique.push(f);}});
