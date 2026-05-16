@@ -5651,8 +5651,10 @@ async function apriRegola(id){
     var tipoOpts=tipiRicerca.map(function(t){return \'<option value="\'+t+\'"\'+( c.tipo_ricerca===t?\' selected\':\'\')+\'>\'+t+\'</option>\';}).join(\'\');
     var coloreOpts=coloriDa.map(function(t){return \'<option value="\'+t+\'"\'+( c.colore_da===t?\' selected\':\'\')+\'>\'+t+\'</option>\';}).join(\'\');
     return \'<tr>\'+
+      \'<td><input type="text" value="\'+( c.codice_componente||\'\')+\'" data-id="\'+c.id+\'" data-campo="codice_componente"\'+
+      \' placeholder="es. CERNIERE" style="border:none;background:transparent;width:90px;font-size:12px;font-family:monospace" onchange="adminSalvaComp(this)"></td>\'+
       \'<td><input type="text" value="\'+( c.descrizione||\'\')+\'" data-id="\'+c.id+\'" data-campo="descrizione"\'+
-      \' style="border:none;background:transparent;width:160px;font-size:12px" onchange="adminSalvaComp(this)"></td>\'+
+      \' style="border:none;background:transparent;width:140px;font-size:12px" onchange="adminSalvaComp(this)"></td>\'+
       \'<td><select data-id="\'+c.id+\'" data-campo="tipo_ricerca" onchange="adminSalvaComp(this)"\'+
       \' style="border:none;background:transparent;font-size:12px">\'+tipoOpts+\'</select></td>\'+
       \'<td><input type="text" value="\'+( c.categoria_mp||\'\')+\'" data-id="\'+c.id+\'" data-campo="categoria_mp"\'+
@@ -5673,16 +5675,18 @@ async function apriRegola(id){
       \' placeholder="es. 2.5" style="border:none;background:transparent;width:80px;font-size:12px" onchange="adminSalvaComp(this)"></td>\'+
       \'<td><input type="text" value="\'+( c.unita||\'\')+\'" data-id="\'+c.id+\'" data-campo="unita"\'+
       \' placeholder="pz" style="border:none;background:transparent;width:40px;font-size:12px" onchange="adminSalvaComp(this)"></td>\'+
+      \'<td><input type="text" value="\'+( c.condizione||\'\')+\'" data-id="\'+c.id+\'" data-campo="condizione"\'+
+      \' placeholder="es. ha_vetro" style="border:none;background:transparent;width:110px;font-size:12px" onchange="adminSalvaComp(this)"></td>\'+
       \'<td><input type="text" value="\'+( c.note||\'\')+\'" data-id="\'+c.id+\'" data-campo="note"\'+
       \' placeholder="note" style="border:none;background:transparent;width:100px;font-size:12px" onchange="adminSalvaComp(this)"></td>\'+
       \'<td><button class="btn btn-sm" style="color:var(--red)" data-cid="\'+c.id+\'" onclick="eliminaComp(this.dataset.cid)">&times;</button></td>\'+
       \'</tr>\';
   }).join(\'\');
-  if(!compRows) compRows=\'<tr><td colspan="13" style="text-align:center;color:var(--mid);padding:16px">Nessun componente &mdash; aggiungi il primo</td></tr>\';
+  if(!compRows) compRows=\'<tr><td colspan="15" style="text-align:center;color:var(--mid);padding:16px">Nessun componente &mdash; aggiungi il primo</td></tr>\';
   var html=\'<div style="margin-bottom:10px;font-size:12px;color:var(--mid)">Regola: <strong>\'+regola.nome+\'</strong>\'+
     ( conds?\' &mdash; \'+conds:\'\')+\'</div>\'+
     \'<div style="overflow-x:auto"><table style="width:100%;white-space:nowrap"><thead><tr>\'+
-    \'<th>Descrizione</th><th>Tipo ricerca</th><th>Categoria MP</th><th>Codice MP</th><th>Colore da</th><th>L finita</th><th>H finita</th><th>L taglio</th><th>H taglio</th><th>Q.t&agrave;</th><th>UM</th><th>Note</th><th></th>\'+
+    \'<th>Cod.comp.</th><th>Descrizione</th><th>Tipo ricerca</th><th>Categoria MP</th><th>Codice MP</th><th>Colore da</th><th>L finita</th><th>H finita</th><th>L taglio</th><th>H taglio</th><th>Q.t&agrave;</th><th>UM</th><th>Condizione</th><th>Note</th><th></th>\'+
     \'</tr></thead><tbody>\'+compRows+\'</tbody></table></div>\';
   document.getElementById(\'distinte-sub\').innerHTML=adminCard(\'Componenti: \'+regola.nome,html,
     \'<button class="btn btn-sm" onclick="adminDistinteRegole()">&larr; Regole</button> \'+
