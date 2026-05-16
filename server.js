@@ -1528,7 +1528,7 @@ async function calcolaDistinta(cfg, sb) {
       const risultato = await elaboraComponente(comp, cfg, sb);
       if (risultato) componenti.push(risultato);
     } catch (e) {
-      errori.push(`Componente ${comp.codice_componente || comp.descrizione}: ${e.message}`);
+      errori.push('Componente ' + (comp.codice_componente || comp.descrizione) + ': ' + e.message);
     }
   }
 
