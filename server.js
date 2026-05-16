@@ -5548,6 +5548,7 @@ async function adminDistinteRegole(){
       \'<td>\'+stato+\'</td>\'+
       \'<td style="text-align:right">\'+
         \'<button class="btn btn-sm" data-rid="\'+r.id+\'" onclick="apriRegola(this.dataset.rid)">Componenti</button> \'+
+        \'<button class="btn btn-sm" data-rid="\'+r.id+\'" onclick="modificaRegola(this.dataset.rid)">Modifica</button> \'+
         \'<button class="btn btn-sm" data-rid="\'+r.id+\'" onclick="duplicaRegola(this.dataset.rid)">Duplica</button> \'+
         \'<button class="btn btn-sm" style="color:var(--red)" data-rid="\'+r.id+\'" onclick="eliminaRegola(this.dataset.rid)">&times;</button>\'+
       \'</td>\'+
@@ -5600,6 +5601,29 @@ async function salvaRegola(){
   else{const r=await sb.from(\'distinta_regole\').insert([d]);er=r.error;}
   if(er){toast(\'Errore: \'+er.message,\'err\');return;}
   toast(\'Salvato\',\'ok\');closeForm(\'modal-regola\');adminDistinteRegole();
+}
+
+async function modificaRegola(id){
+  const {data:r}=await sb.from(\'distinta_regole\').select(\'*\').eq(\'id\',id).single();
+  if(!r) return;
+  const {data:serie}=await sb.from(\'serie\').select(\'codice,nome\').order(\'nome\');
+  var serieOpts=(serie||[]).map(function(s){return \'<option value="\'+s.codice+\'"\'+( r.codice_serie===s.codice?\' selected\':\'\')+\'>\'+ s.codice+\' - \'+s.nome+\'</option>\';}).join(\'\');
+  var tipoOpts=[\'BAT\',\'CS\',\'FM\',\'BAT2A\',\'CS2A\',\'ROTO\',\'SE\',\'PAS\',\'SOP\'].map(function(t){return \'<option value="\'+t+\'"\'+( r.tipologia===t?\' selected\':\'\')+\'>\'+ t+\'</option>\';}).join(\'\');
+  document.getElementById(\'modal-regola-body\').innerHTML=
+    \'<div class="form-field"><label>Nome regola *</label><input id="reg-nome" type="text" value="\'+r.nome+\'"></div>\'+
+    \'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">\'+
+    \'<div class="form-field"><label>Serie</label><select id="reg-serie"><option value="">&mdash; tutte &mdash;</option>\'+serieOpts+\'</select></div>\'+
+    \'<div class="form-field"><label>Modello (codice)</label><input id="reg-modello" type="text" value="\'+( r.codice_modello||\'\')+\'" placeholder="vuoto=tutti"></div>\'+
+    \'<div class="form-field"><label>Tipologia</label><select id="reg-tipologia"><option value="">&mdash; tutte &mdash;</option>\'+tipoOpts+\'</select></div>\'+
+    \'<div class="form-field"><label>Finitura (codice)</label><input id="reg-finitura" type="text" value="\'+( r.codice_finitura||\'\')+\'" placeholder="vuoto=tutte"></div>\'+
+    \'<div class="form-field"><label>Colore ferramenta</label><input id="reg-ferramenta" type="text" value="\'+( r.colore_ferramenta||\'\')+\'" placeholder="vuoto=tutti"></div>\'+
+    \'</div>\'+
+    \'<div class="form-field"><label>Note</label><input id="reg-note" type="text" value="\'+( r.note||\'\')+\'"></div>\'+
+    \'<label style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:4px">\'+
+    \'<input type="checkbox" id="reg-attiva"\'+( r.attiva?\' checked\':\'\')+\'> Regola attiva</label>\';
+  _regolaEditId=id;
+  document.getElementById(\'modal-regola-title\').textContent=\'Modifica regola\';
+  const mo=ensureModalInBody(\'modal-regola\');if(mo)mo.classList.add(\'open\');
 }
 
 async function duplicaRegola(id){
