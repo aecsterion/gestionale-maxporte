@@ -1547,8 +1547,8 @@ async function trovaRegole(cfg, sb) {
   // Filtra le regole che matchano la configurazione
   const matching = tutte.filter(r => {
     if (r.codice_serie && r.codice_serie !== cfg.serie) return false;
-    if (r.codice_modello && r.codice_modello !== cfg.modello) return false;
-    if (r.tipologia && r.tipologia !== cfg.tipologia) return false;
+    if (r.codice_modello && r.codice_modello !== (cfg.modello||cfg.codice_modello)) return false;
+    if (r.tipologia && r.tipologia !== (cfg.apertura||cfg.tipologia)) return false;
     if (r.codice_finitura && r.codice_finitura !== cfg.finitura) return false;
     if (r.colore_ferramenta && r.colore_ferramenta !== cfg.colore_ferramenta) return false;
     return true;
@@ -6946,7 +6946,7 @@ async function esportaPDF(tipo, id) {
       <button class="btn btn-red" onclick="salvaRegola()">Salva</button></div>
   </div>
 </div>
-<div id="modal-distinta" class="form-modal-overlay">
+<div id="modal-distinta" class="form-modal-overlay" style="z-index:10000">
   <div class="form-modal" style="max-width:800px">
     <div class="form-modal-head"><span class="form-modal-title">Anteprima distinta</span>
       <button class="form-close" onclick="closeForm('modal-distinta')">&times;</button></div>
