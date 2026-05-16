@@ -1494,6 +1494,307 @@ async function renderFatture(){
 }
 
 // ── MAGAZZINO ─────────────────────────────────────────
+// ============================================================
+// MOTORE DISTINTA DINAMICA - MPX Gestionale
+// Funzioni client-side (browser JS)
+// ============================================================
+
+// ── ENTRY POINT ─────────────────────────────────────────────
+// cfg = oggetto CFG del configuratore
+// sb  = client Supabase
+// Ritorna: { componenti: [...], errori: [...] }
+
+async function calcolaDistinta(cfg, sb) {
+  const errori = [];
+  const componenti = [];
+
+  // 1. Trova tutte le regole che matchano, ordinate per specificità
+  const regole = await trovaRegole(cfg, sb);
+  if (!regole.length) {
+    return { componenti: [], errori: [\'Nessuna regola distinta trovata per questa configurazione\'] };
+  }
+
+  // 2. Applica ereditarietà -- costruisce lista componenti finale
+  const compsFinali = applicaEreditarieta(regole);
+
+  // 3. Per ogni componente, valuta condizione, calcola misure e trova articolo
+  for (const comp of compsFinali) {
+    // Valuta condizione (es. ha_vetro, ha_inserto_alluminio)
+    if (comp.condizione && !valutaCondizione(comp.condizione, cfg)) {
+      continue; // componente non applicabile a questa configurazione
+    }
+
+    try {
+      const risultato = await elaboraComponente(comp, cfg, sb);
+      if (risultato) componenti.push(risultato);
+    } catch (e) {
+      errori.push(`Componente ${comp.codice_componente || comp.descrizione}: ${e.message}`);
+    }
+  }
+
+  return { componenti, errori };
+}
+
+// ── TROVA REGOLE ─────────────────────────────────────────────
+async function trovaRegole(cfg, sb) {
+  const { data: tutte } = await sb
+    .from(\'distinta_regole\')
+    .select(\'*, distinta_componenti(*)\')
+    .eq(\'attiva\', true);
+
+  if (!tutte) return [];
+
+  // Filtra le regole che matchano la configurazione
+  const matching = tutte.filter(r => {
+    if (r.codice_serie && r.codice_serie !== cfg.serie) return false;
+    if (r.codice_modello && r.codice_modello !== cfg.modello) return false;
+    if (r.tipologia && r.tipologia !== cfg.tipologia) return false;
+    if (r.codice_finitura && r.codice_finitura !== cfg.finitura) return false;
+    if (r.colore_ferramenta && r.colore_ferramenta !== cfg.colore_ferramenta) return false;
+    return true;
+  });
+
+  // Ordina per specificità crescente (dalla più generica alla più specifica)
+  // Specificità = numero di condizioni non null
+  matching.sort((a, b) => {
+    const specA = [a.codice_serie, a.codice_modello, a.tipologia, a.codice_finitura, a.colore_ferramenta].filter(Boolean).length;
+    const specB = [b.codice_serie, b.codice_modello, b.tipologia, b.codice_finitura, b.colore_ferramenta].filter(Boolean).length;
+    return specA - specB;
+  });
+
+  return matching;
+}
+
+// ── EREDITARIETÀ ─────────────────────────────────────────────
+// Partendo dalla regola più generica, le regole più specifiche
+// sovrascrivono i componenti con lo stesso codice_componente
+function applicaEreditarieta(regole) {
+  const mappa = new Map(); // codice_componente -> componente
+
+  for (const regola of regole) {
+    const comps = (regola.distinta_componenti || [])
+      .sort((a, b) => (a.ordine || 0) - (b.ordine || 0));
+
+    for (const comp of comps) {
+      const chiave = comp.codice_componente || comp.id;
+      mappa.set(chiave, comp);
+    }
+  }
+
+  return Array.from(mappa.values());
+}
+
+// ── VALUTA CONDIZIONE ────────────────────────────────────────
+function valutaCondizione(condizione, cfg) {
+  if (!condizione) return true;
+  const flags = cfg._flags || {};
+  // Supporta: ha_vetro, ha_inserto_alluminio, ha_pannello_o_bugna, ecc.
+  if (condizione in flags) return !!flags[condizione];
+  // Supporta: ha_zoccoli (per pannelli blindati)
+  if (condizione === \'ha_zoccoli\') return (cfg._zoccoliAuto || 0) > 0;
+  // Supporta: taglio_larghezza (se l\'anta viene tagliata in larghezza)
+  if (condizione === \'taglio_larghezza\') return cfg._taglio_larghezza || false;
+  return true;
+}
+
+// ── ELABORA COMPONENTE ───────────────────────────────────────
+async function elaboraComponente(comp, cfg, sb) {
+  // Variabili disponibili per le formule
+  const vars = costruisciVariabili(cfg);
+
+  const qta = valutaFormula(comp.formula_qta || \'1\', vars);
+  const lFinita = comp.formula_larghezza ? valutaFormula(comp.formula_larghezza, vars) : null;
+  const hFinita = comp.formula_altezza ? valutaFormula(comp.formula_altezza, vars) : null;
+  const lTaglio = comp.formula_larghezza_taglio ? valutaFormula(comp.formula_larghezza_taglio, vars) : lFinita;
+  const hTaglio = comp.formula_altezza_taglio ? valutaFormula(comp.formula_altezza_taglio, vars) : hFinita;
+
+  let articolo = null;
+  let codice_mp = null;
+  let descrizione_mp = null;
+
+  if (comp.tipo_ricerca === \'codice_fisso\') {
+    // Cerca direttamente per codice MP
+    const { data } = await sb.from(\'magazzino\')
+      .select(\'id, codice_mp, descrizione, giacenza, codice_finitura\')
+      .eq(\'codice_mp\', comp.codice_mp)
+      .gt(\'giacenza\', 0)
+      .order(\'created_at\', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    articolo = data;
+    codice_mp = comp.codice_mp;
+    descrizione_mp = comp.descrizione;
+
+  } else if (comp.tipo_ricerca === \'query_magazzino\') {
+    // Determina il colore da cercare
+    const colore = determinaColore(comp.colore_da, cfg);
+
+    // Query base
+    let query = sb.from(\'magazzino\')
+      .select(\'id, codice_mp, descrizione, giacenza, larghezza_mm, altezza_mm, codice_finitura, created_at\')
+      .gt(\'giacenza\', 0)
+      .order(\'created_at\', { ascending: true }); // FIFO
+
+    if (comp.categoria_mp) query = query.eq(\'categoria\', comp.categoria_mp);
+    if (colore) query = query.eq(\'codice_finitura\', colore);
+
+    // Filtro per prefisso codice (per viti, copricerniere, ecc.)
+    if (comp.codice_mp) {
+      query = query.ilike(\'codice_mp\', comp.codice_mp + \'%\');
+    }
+
+    // Filtro dimensioni (FIFO su articoli compatibili)
+    if (lTaglio) query = query.gte(\'larghezza_mm\', lTaglio);
+    if (hTaglio) query = query.gte(\'altezza_mm\', hTaglio);
+
+    const { data } = await query.limit(1).maybeSingle();
+    articolo = data;
+    if (articolo) {
+      codice_mp = articolo.codice_mp;
+      descrizione_mp = articolo.descrizione || comp.descrizione;
+    }
+
+  } else if (comp.tipo_ricerca === \'dal_configuratore\') {
+    // Prende il codice dal configuratore
+    codice_mp = determinaDalConfiguratoreCode(comp.codice_componente, cfg);
+    descrizione_mp = comp.descrizione;
+    // Cerca in magazzino per colore
+    if (codice_mp) {
+      const colore = determinaColore(comp.colore_da, cfg);
+      let query = sb.from(\'magazzino\')
+        .select(\'id, codice_mp, descrizione, giacenza, larghezza_mm, altezza_mm, codice_finitura\')
+        .gt(\'giacenza\', 0)
+        .order(\'created_at\', { ascending: true });
+      if (codice_mp) query = query.ilike(\'codice_mp\', codice_mp + \'%\');
+      if (colore) query = query.eq(\'codice_finitura\', colore);
+      const { data } = await query.limit(1).maybeSingle();
+      articolo = data;
+      if (articolo) {
+        codice_mp = articolo.codice_mp;
+        descrizione_mp = articolo.descrizione || comp.descrizione;
+      }
+    }
+  }
+
+  // Calcola misure reali anta (usa misure dell\'articolo trovato se disponibili)
+  const lReale = articolo?.larghezza_mm || lFinita;
+  const hReale = articolo?.altezza_mm || hFinita;
+
+  // Determina se serve taglio
+  const taglio_larghezza = lReale && lFinita && lReale > lFinita;
+  const taglio_altezza = hReale && hFinita && hReale > hFinita;
+
+  return {
+    codice_componente: comp.codice_componente,
+    descrizione: descrizione_mp || comp.descrizione,
+    codice_mp,
+    magazzino_id: articolo?.id || null,
+    qta: Math.round(qta * 1000) / 1000,
+    unita: comp.unita || \'pz\',
+    // Misure
+    larghezza_finita: lFinita,
+    altezza_finita: hFinita,
+    larghezza_reale: lReale,
+    altezza_reale: hReale,
+    // Taglio
+    richiede_taglio_larghezza: taglio_larghezza,
+    richiede_taglio_altezza: taglio_altezza,
+    larghezza_taglio: taglio_larghezza ? (lTaglio || lFinita) : null,
+    altezza_taglio: taglio_altezza ? (hTaglio || hFinita) : null,
+    // Disponibilità
+    disponibile: !!articolo,
+    giacenza: articolo?.giacenza || 0,
+    // Meta
+    note: comp.note,
+  };
+}
+
+// ── VARIABILI PER FORMULE ────────────────────────────────────
+function costruisciVariabili(cfg) {
+  return {
+    L: cfg.larghezza || 0,
+    H: cfg.altezza || 0,
+    S: cfg.spessore_muro || 0,
+    L_anta: cfg._larghezza_reale_anta || (cfg.larghezza || 0),
+    H_anta: cfg._altezza_reale_anta || (cfg.altezza || 0),
+    SFRIDO: 1.05,
+    ZOC: cfg._zoccoliAuto || 0,
+  };
+}
+
+// ── VALUTA FORMULA ───────────────────────────────────────────
+function valutaFormula(formula, vars) {
+  if (!formula) return 1;
+  // Sostituisci le variabili nella formula
+  let expr = formula;
+  for (const [k, v] of Object.entries(vars)) {
+    expr = expr.replace(new RegExp(\'\\b\' + k + \'\\b\', \'g\'), v);
+  }
+  try {
+    return Function(\'"use strict"; return (\' + expr + \')\')();
+  } catch (e) {
+    console.error(\'Errore formula:\', formula, e);
+    return 0;
+  }
+}
+
+// ── DETERMINA COLORE ─────────────────────────────────────────
+function determinaColore(colore_da, cfg) {
+  if (!colore_da || colore_da === \'nessuno\') return null;
+  if (colore_da === \'finitura\') return cfg.finitura || null;
+  if (colore_da === \'ferramenta\') return cfg.colore_ferramenta || null;
+  if (colore_da === \'inserto\') return cfg.colore_inserto || null;
+  if (colore_da === \'dal_configuratore\') return cfg.finitura || null;
+  return null;
+}
+
+// ── DETERMINA CODICE DAL CONFIGURATORE ──────────────────────
+function determinaDalConfiguratoreCode(codice_componente, cfg) {
+  if (codice_componente === \'TELAIO\') return cfg.telaio || null;
+  if (codice_componente === \'SERRATURA\') return cfg.serratura || null;
+  if (codice_componente === \'MANIGLIA\') return cfg.maniglia || null;
+  return null;
+}
+
+
+async function anteprimaDistinta(){
+  const body=document.getElementById(\'modal-distinta-body\');
+  body.innerHTML=\'<div style="text-align:center;padding:20px;color:var(--mid)">Calcolo in corso...</div>\';
+  const mo=ensureModalInBody(\'modal-distinta\');if(mo)mo.classList.add(\'open\');
+  const {componenti,errori}=await calcolaDistinta(CFG,sb);
+  if(errori.length&&!componenti.length){
+    body.innerHTML=\'<div style="color:var(--red);padding:16px">\'+errori.map(function(e){return \'<p>\'+e+\'</p>\';}).join(\'\')+ \'</div>\';
+    return;
+  }
+  var rows=componenti.map(function(c){
+    var stato=c.disponibile
+      ?\'<span class="badge bg">Disponibile (\'+c.giacenza+\')</span>\'
+      :\'<span class="badge br">Non disponibile</span>\';
+    var taglio=\'\';
+    if(c.richiede_taglio_larghezza||c.richiede_taglio_altezza){
+      taglio=\'<br><small style="color:var(--amber-tx)">Taglio: \'+
+        ( c.larghezza_taglio?c.larghezza_taglio+\'mm\':c.larghezza_finita+\'mm\')+\' x \'+
+        ( c.altezza_taglio?c.altezza_taglio+\'mm\':c.altezza_finita+\'mm\')+\'</small>\';
+    }
+    var misure=\'\';
+    if(c.larghezza_reale||c.altezza_reale){
+      misure=\'<br><small style="color:var(--mid)">\'+(c.larghezza_reale||\'-\')+\' x \'+( c.altezza_reale||\'-\')+\' mm</small>\';
+    }
+    return \'<tr>\'+
+      \'<td>\'+( c.codice_mp||\'\xe2\x80\x94\')+\'</td>\'+
+      \'<td>\'+c.descrizione+misure+taglio+\'</td>\'+
+      \'<td style="text-align:right"><strong>\'+c.qta+\'</strong> \'+c.unita+\'</td>\'+
+      \'<td>\'+stato+\'</td>\'+
+      \'</tr>\';
+  }).join(\'\');
+  var erroriHtml=errori.length?\'<div style="background:var(--amber-bg);border-radius:var(--radius);padding:10px;margin-bottom:12px;font-size:12px">\'+
+    errori.map(function(e){return \'<p style="margin:2px 0;color:var(--amber-tx)">⚠ \'+e+\'</p>\';}).join(\'\')+ \'</div>\':  \'\'
+  body.innerHTML=erroriHtml+
+    \'<table style="width:100%"><thead><tr>\'+
+    \'<th>Codice MP</th><th>Descrizione</th><th>Q.t&agrave;</th><th>Disponibilit&agrave;</th>\'+
+    \'</tr></thead><tbody>\'+rows+\'</tbody></table>\';
+}
+
 async function renderMagazzino(){
   const {data:cats}=await sb.from(\'categorie_magazzino\').select(\'*\').order(\'nome\');
   const {data}=await sb.from(\'magazzino\').select(\'*\').order(\'categoria\').order(\'descrizione\');
@@ -3717,6 +4018,7 @@ async function cfgRiepilogo(){
         <div style="font-size:11px;color:var(--mid)">Totale riga</div>
         <div id="cfg-prezzo-totale" style="font-size:20px;font-weight:500;color:var(--red)">€ \${(tot*(CFG.quantita||1)).toLocaleString('it-IT',{minimumFractionDigits:2})}</div>
       </div>
+      <button class="btn" onclick="anteprimaDistinta()">&#128196; Anteprima distinta</button>
       <button class="btn btn-red" onclick="aggiungiRigaAlDocumento()">+ Aggiungi al documento</button>
     </div>\`;
   cfgUpdatePrice();
@@ -6642,6 +6944,15 @@ async function esportaPDF(tipo, id) {
     <div class="form-modal-foot">
       <button class="btn" onclick="closeForm('modal-regola')">Annulla</button>
       <button class="btn btn-red" onclick="salvaRegola()">Salva</button></div>
+  </div>
+</div>
+<div id="modal-distinta" class="form-modal-overlay">
+  <div class="form-modal" style="max-width:800px">
+    <div class="form-modal-head"><span class="form-modal-title">Anteprima distinta</span>
+      <button class="form-close" onclick="closeForm('modal-distinta')">&times;</button></div>
+    <div class="form-modal-body" id="modal-distinta-body" style="max-height:70vh;overflow-y:auto"></div>
+    <div class="form-modal-foot">
+      <button class="btn" onclick="closeForm('modal-distinta')">Chiudi</button></div>
   </div>
 </div>
 `;
