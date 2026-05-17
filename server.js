@@ -1781,7 +1781,7 @@ async function anteprimaDistinta(){
       misure=\'<br><small style="color:var(--mid)">\'+(c.larghezza_reale||\'-\')+\' x \'+( c.altezza_reale||\'-\')+\' mm</small>\';
     }
     return \'<tr>\'+
-      \'<td>\'+( c.codice_mp||\'\xe2\x80\x94\')+\'</td>\'+
+      \'<td>\'+( c.codice_mp||\' &mdash; \')+\'</td>\'+
       \'<td>\'+c.descrizione+misure+taglio+\'</td>\'+
       \'<td style="text-align:right"><strong>\'+c.qta+\'</strong> \'+c.unita+\'</td>\'+
       \'<td>\'+stato+\'</td>\'+
