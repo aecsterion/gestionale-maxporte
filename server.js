@@ -1799,7 +1799,7 @@ async function anteprimaDistinta(){
     return \'<tr>\'+
       \'<td>\'+( c.codice_mp||\' &mdash; \')+\'</td>\'+
       \'<td>\'+c.descrizione+misure+taglio+\'</td>\'+
-      \'<td style="text-align:right"><strong>\'+c.qta+\'</strong> \'+c.unita+\'</td>\'+
+      \'<td style="text-align:right"><strong>\'+( typeof c.qta===\'number\'?c.qta.toLocaleString(\'it-IT\',{maximumFractionDigits:2}):c.qta)+\'</strong> \'+c.unita+\'</td>\'+
       \'<td>\'+stato+\'</td>\'+
       \'</tr>\';
   }).join(\'\');
