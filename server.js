@@ -1511,7 +1511,7 @@ async function calcolaDistinta(cfg, sb) {
   // 1. Trova tutte le regole che matchano, ordinate per specificità
   const regole = await trovaRegole(cfg, sb);
   if (!regole.length) {
-    return { componenti: [], errori: [\'Nessuna regola distinta trovata per questa configurazione\'] };
+    return { componenti: [], errori: [\\'Nessuna regola distinta trovata per questa configurazione\\'] };
   }
 
   // 2. Applica ereditarietà -- costruisce lista componenti finale
@@ -1554,9 +1554,9 @@ async function calcolaDistinta(cfg, sb) {
 // ── TROVA REGOLE ─────────────────────────────────────────────
 async function trovaRegole(cfg, sb) {
   const { data: tutte } = await sb
-    .from(\'distinta_regole\')
-    .select(\'*, distinta_componenti(*)\')
-    .eq(\'attiva\', true);
+    .from(\\'distinta_regole\\')
+    .select(\\'*, distinta_componenti(*)\\')
+    .eq(\\'attiva\\', true);
 
   if (!tutte) return [];
 
@@ -1607,9 +1607,9 @@ function valutaCondizione(condizione, cfg) {
   // Supporta: ha_vetro, ha_inserto_alluminio, ha_pannello_o_bugna, ecc.
   if (condizione in flags) return !!flags[condizione];
   // Supporta: ha_zoccoli (per pannelli blindati)
-  if (condizione === \'ha_zoccoli\') return (cfg._zoccoliAuto || 0) > 0;
-  // Supporta: taglio_larghezza (se l\'anta viene tagliata in larghezza)
-  if (condizione === \'taglio_larghezza\') return cfg._taglio_larghezza || false;
+  if (condizione === \\'ha_zoccoli\\') return (cfg._zoccoliAuto || 0) > 0;
+  // Supporta: taglio_larghezza (se l\\'anta viene tagliata in larghezza)
+  if (condizione === \\'taglio_larghezza\\') return cfg._taglio_larghezza || false;
   return true;
 }
 
@@ -1618,7 +1618,7 @@ async function elaboraComponente(comp, cfg, sb) {
   // Variabili disponibili per le formule
   const vars = costruisciVariabili(cfg);
 
-  const qta = valutaFormula(comp.formula_qta || \'1\', vars);
+  const qta = valutaFormula(comp.formula_qta || \\'1\\', vars);
   const lFinita = comp.formula_larghezza ? valutaFormula(comp.formula_larghezza, vars) : null;
   const hFinita = comp.formula_altezza ? valutaFormula(comp.formula_altezza, vars) : null;
   const lTaglio = comp.formula_larghezza_taglio ? valutaFormula(comp.formula_larghezza_taglio, vars) : lFinita;
@@ -1628,40 +1628,40 @@ async function elaboraComponente(comp, cfg, sb) {
   let codice_mp = null;
   let descrizione_mp = null;
 
-  if (comp.tipo_ricerca === \'codice_fisso\') {
+  if (comp.tipo_ricerca === \\'codice_fisso\\') {
     // Cerca direttamente per codice MP
-    const { data } = await sb.from(\'magazzino\')
-      .select(\'id, codice_mp, descrizione, giacenza, codice_finitura\')
-      .eq(\'codice_mp\', comp.codice_mp)
-      .gt(\'giacenza\', 0)
-      .order(\'created_at\', { ascending: true })
+    const { data } = await sb.from(\\'magazzino\\')
+      .select(\\'id, codice_mp, descrizione, giacenza, codice_finitura\\')
+      .eq(\\'codice_mp\\', comp.codice_mp)
+      .gt(\\'giacenza\\', 0)
+      .order(\\'created_at\\', { ascending: true })
       .limit(1)
       .maybeSingle();
     articolo = data;
     codice_mp = comp.codice_mp;
     descrizione_mp = comp.descrizione;
 
-  } else if (comp.tipo_ricerca === \'query_magazzino\') {
+  } else if (comp.tipo_ricerca === \\'query_magazzino\\') {
     // Determina il colore da cercare
     const colore = determinaColore(comp.colore_da, cfg);
 
     // Query base
-    let query = sb.from(\'magazzino\')
-      .select(\'id, codice_mp, descrizione, giacenza, larghezza_mm, altezza_mm, codice_finitura, created_at\')
-      .gt(\'giacenza\', 0)
-      .order(\'created_at\', { ascending: true }); // FIFO
+    let query = sb.from(\\'magazzino\\')
+      .select(\\'id, codice_mp, descrizione, giacenza, larghezza_mm, altezza_mm, codice_finitura, created_at\\')
+      .gt(\\'giacenza\\', 0)
+      .order(\\'created_at\\', { ascending: true }); // FIFO
 
-    if (comp.categoria_mp) query = query.eq(\'categoria\', comp.categoria_mp);
-    if (colore) query = query.eq(\'codice_finitura\', colore);
+    if (comp.categoria_mp) query = query.eq(\\'categoria\\', comp.categoria_mp);
+    if (colore) query = query.eq(\\'codice_finitura\\', colore);
 
     // Filtro per prefisso codice (per viti, copricerniere, ecc.)
     if (comp.codice_mp) {
-      query = query.ilike(\'codice_mp\', comp.codice_mp + \'%\');
+      query = query.ilike(\\'codice_mp\\', comp.codice_mp + \\'%\\');
     }
 
     // Filtro dimensioni (FIFO su articoli compatibili)
-    if (lTaglio) query = query.gte(\'larghezza_mm\', lTaglio);
-    if (hTaglio) query = query.gte(\'altezza_mm\', hTaglio);
+    if (lTaglio) query = query.gte(\\'larghezza_mm\\', lTaglio);
+    if (hTaglio) query = query.gte(\\'altezza_mm\\', hTaglio);
 
     const { data } = await query.limit(1).maybeSingle();
     articolo = data;
@@ -1670,18 +1670,18 @@ async function elaboraComponente(comp, cfg, sb) {
       descrizione_mp = articolo.descrizione || comp.descrizione;
     }
 
-  } else if (comp.tipo_ricerca === \'dal_configuratore\') {
+  } else if (comp.tipo_ricerca === \\'dal_configuratore\\') {
     var codiceConf = determinaDalConfiguratoreCode(comp.codice_componente, cfg);
     descrizione_mp = comp.descrizione;
     var colore2 = determinaColore(comp.colore_da, cfg);
-    var query2 = sb.from(\'magazzino\')
-      .select(\'id, codice_mp, descrizione, giacenza, larghezza_mm, altezza_mm, codice_finitura\')
-      .gt(\'giacenza\', 0)
-      .order(\'created_at\', { ascending: true });
-    if (comp.categoria_mp) query2 = query2.eq(\'categoria\', comp.categoria_mp);
-    if (codiceConf) query2 = query2.ilike(\'codice_mp\', codiceConf + \'%\');
-    if (comp.codice_mp) query2 = query2.ilike(\'codice_mp\', comp.codice_mp + \'%\');
-    if (colore2) query2 = query2.eq(\'codice_finitura\', colore2);
+    var query2 = sb.from(\\'magazzino\\')
+      .select(\\'id, codice_mp, descrizione, giacenza, larghezza_mm, altezza_mm, codice_finitura\\')
+      .gt(\\'giacenza\\', 0)
+      .order(\\'created_at\\', { ascending: true });
+    if (comp.categoria_mp) query2 = query2.eq(\\'categoria\\', comp.categoria_mp);
+    if (codiceConf) query2 = query2.ilike(\\'codice_mp\\', codiceConf + \\'%\\');
+    if (comp.codice_mp) query2 = query2.ilike(\\'codice_mp\\', comp.codice_mp + \\'%\\');
+    if (colore2) query2 = query2.eq(\\'codice_finitura\\', colore2);
     var res2 = await query2.limit(1).maybeSingle();
     articolo = res2 ? res2.data : null;
     if (articolo) {
@@ -1690,7 +1690,7 @@ async function elaboraComponente(comp, cfg, sb) {
     }
   }
 
-  // Calcola misure reali anta (usa misure dell\'articolo trovato se disponibili)
+  // Calcola misure reali anta (usa misure dell\\'articolo trovato se disponibili)
   const lReale = articolo?.larghezza_mm || lFinita;
   const hReale = articolo?.altezza_mm || hFinita;
 
@@ -1705,7 +1705,7 @@ async function elaboraComponente(comp, cfg, sb) {
     codice_finitura: articolo?.codice_finitura || null,
     magazzino_id: articolo?.id || null,
     qta: Math.round(qta * 1000) / 1000,
-    unita: comp.unita || \'pz\',
+    unita: comp.unita || \\'pz\\',
     // Misure
     larghezza_finita: lFinita,
     altezza_finita: hFinita,
@@ -1746,218 +1746,218 @@ function valutaFormula(formula, vars) {
     expr = expr.split(keys[i]).join(String(vars[keys[i]]));
   }
   try {
-    return Function(\'return (\' + expr + \')\')();
+    return Function(\\'return (\\' + expr + \\')\\')();
   } catch (e) {
-    console.error(\'Errore formula:\', formula, e);
+    console.error(\\'Errore formula:\\', formula, e);
     return 0;
   }
 }
 
 // ── DETERMINA COLORE ─────────────────────────────────────────
 function determinaColore(colore_da, cfg) {
-  if (!colore_da || colore_da === \'nessuno\') return null;
-  if (colore_da === \'finitura\') return cfg.finitura || null;
-  if (colore_da === \'ferramenta\') return cfg.colore_ferramenta || null;
-  if (colore_da === \'inserto\') return cfg.colore_inserto || null;
-  if (colore_da === \'dal_configuratore\') return cfg.finitura || null;
+  if (!colore_da || colore_da === \\'nessuno\\') return null;
+  if (colore_da === \\'finitura\\') return cfg.finitura || null;
+  if (colore_da === \\'ferramenta\\') return cfg.colore_ferramenta || null;
+  if (colore_da === \\'inserto\\') return cfg.colore_inserto || null;
+  if (colore_da === \\'dal_configuratore\\') return cfg.finitura || null;
   return null;
 }
 
 // ── DETERMINA CODICE DAL CONFIGURATORE ──────────────────────
 function determinaDalConfiguratoreCode(codice_componente, cfg) {
-  if (codice_componente === \'TELAIO\') return cfg.telaio || null;
-  if (codice_componente === \'SERRATURA\') return null;
-  if (codice_componente === \'MANIGLIA\') return null;
+  if (codice_componente === \\'TELAIO\\') return cfg.telaio || null;
+  if (codice_componente === \\'SERRATURA\\') return null;
+  if (codice_componente === \\'MANIGLIA\\') return null;
   return null;
 }
 
 
 async function anteprimaDistinta(){
-  const body=document.getElementById(\'modal-distinta-body\');
-  body.innerHTML=\'<div style="text-align:center;padding:20px;color:var(--mid)">Calcolo in corso...</div>\';
-  const mo=ensureModalInBody(\'modal-distinta\');if(mo)mo.classList.add(\'open\');
+  const body=document.getElementById(\\'modal-distinta-body\\');
+  body.innerHTML=\\'<div style="text-align:center;padding:20px;color:var(--mid)">Calcolo in corso...</div>\\';
+  const mo=ensureModalInBody(\\'modal-distinta\\');if(mo)mo.classList.add(\\'open\\');
   const {componenti,errori}=await calcolaDistinta(CFG,sb);
   if(errori.length&&!componenti.length){
-    body.innerHTML=\'<div style="color:var(--red);padding:16px">\'+errori.map(function(e){return \'<p>\'+e+\'</p>\';}).join(\'\')+ \'</div>\';
+    body.innerHTML=\\'<div style="color:var(--red);padding:16px">\\'+errori.map(function(e){return \\'<p>\\'+e+\\'</p>\\';}).join(\\'\\')+ \\'</div>\\';
     return;
   }
   var rows=componenti.map(function(c){
     var stato=c.disponibile
-      ?\'<span class="badge bg">Disponibile (\'+c.giacenza+\')</span>\'
-      :\'<span class="badge br">Non disponibile</span>\';
-    var taglio=\'\';
+      ?\\'<span class="badge bg">Disponibile (\\'+c.giacenza+\\')</span>\\'
+      :\\'<span class="badge br">Non disponibile</span>\\';
+    var taglio=\\'\\';
     if(c.richiede_taglio_larghezza||c.richiede_taglio_altezza){
-      taglio=\'<br><small style="color:var(--amber-tx)">Taglio: \'+
-        ( c.larghezza_taglio?c.larghezza_taglio+\'mm\':c.larghezza_finita+\'mm\')+\' x \'+
-        ( c.altezza_taglio?c.altezza_taglio+\'mm\':c.altezza_finita+\'mm\')+\'</small>\';
+      taglio=\\'<br><small style="color:var(--amber-tx)">Taglio: \\'+
+        ( c.larghezza_taglio?c.larghezza_taglio+\\'mm\\':c.larghezza_finita+\\'mm\\')+\\' x \\'+
+        ( c.altezza_taglio?c.altezza_taglio+\\'mm\\':c.altezza_finita+\\'mm\\')+\\'</small>\\';
     }
-    var misure=\'\';
+    var misure=\\'\\';
     if(c.larghezza_reale||c.altezza_reale){
-      misure=\'<br><small style="color:var(--mid)">\'+(c.larghezza_reale||\'-\')+\' x \'+( c.altezza_reale||\'-\')+\' mm</small>\';
+      misure=\\'<br><small style="color:var(--mid)">\\'+(c.larghezza_reale||\\'-\\')+\\' x \\'+( c.altezza_reale||\\'-\\')+\\' mm</small>\\';
     }
-    return \'<tr>\'+
-      \'<td>\'+( c.codice_mp||\' &mdash; \')+\'</td>\'+
-      \'<td>\'+c.descrizione+misure+taglio+\'</td>\'+
-      \'<td style="text-align:right"><strong>\'+( typeof c.qta===\'number\'?c.qta.toLocaleString(\'it-IT\',{maximumFractionDigits:2}):c.qta)+\'</strong> \'+c.unita+\'</td>\'+
-      \'<td>\'+stato+\'</td>\'+
-      \'</tr>\';
-  }).join(\'\');
-  var erroriHtml=errori.length?\'<div style="background:var(--amber-bg);border-radius:var(--radius);padding:10px;margin-bottom:12px;font-size:12px">\'+
-    errori.map(function(e){return \'<p style="margin:2px 0;color:var(--amber-tx)">⚠ \'+e+\'</p>\';}).join(\'\')+ \'</div>\':  \'\'
+    return \\'<tr>\\'+
+      \\'<td>\\'+( c.codice_mp||\\' &mdash; \\')+\\'</td>\\'+
+      \\'<td>\\'+c.descrizione+misure+taglio+\\'</td>\\'+
+      \\'<td style="text-align:right"><strong>\\'+( typeof c.qta===\\'number\\'?c.qta.toLocaleString(\\'it-IT\\',{maximumFractionDigits:2}):c.qta)+\\'</strong> \\'+c.unita+\\'</td>\\'+
+      \\'<td>\\'+stato+\\'</td>\\'+
+      \\'</tr>\\';
+  }).join(\\'\\');
+  var erroriHtml=errori.length?\\'<div style="background:var(--amber-bg);border-radius:var(--radius);padding:10px;margin-bottom:12px;font-size:12px">\\'+
+    errori.map(function(e){return \\'<p style="margin:2px 0;color:var(--amber-tx)">⚠ \\'+e+\\'</p>\\';}).join(\\'\\')+ \\'</div>\\':  \\'\\'
   body.innerHTML=erroriHtml+
-    \'<table style="width:100%"><thead><tr>\'+
-    \'<th>Codice MP</th><th>Descrizione</th><th>Colore</th><th>Q.t&agrave;</th><th>Disponibilit&agrave;</th>\'+
-    \'</tr></thead><tbody>\'+rows+\'</tbody></table>\';
+    \\'<table style="width:100%"><thead><tr>\\'+
+    \\'<th>Codice MP</th><th>Descrizione</th><th>Colore</th><th>Q.t&agrave;</th><th>Disponibilit&agrave;</th>\\'+
+    \\'</tr></thead><tbody>\\'+rows+\\'</tbody></table>\\';
 }
 
 async function renderMagazzino(){
-  const {data:cats}=await sb.from(\'categorie_magazzino\').select(\'*\').order(\'nome\');
-  const {data}=await sb.from(\'magazzino\').select(\'*\').order(\'categoria\').order(\'descrizione\');
+  const {data:cats}=await sb.from(\\'categorie_magazzino\\').select(\\'*\\').order(\\'nome\\');
+  const {data}=await sb.from(\\'magazzino\\').select(\\'*\\').order(\\'categoria\\').order(\\'descrizione\\');
   const items=data||[];
   const sottoscorta=items.filter(function(m){return Number(m.giacenza||0)<=Number(m.scorta_minima||0);}).length;
-  const pannelli=items.filter(function(m){return m.categoria===\'PAN-BL\';}).length;
+  const pannelli=items.filter(function(m){return m.categoria===\\'PAN-BL\\';}).length;
   const rows=items.map(function(m){
     const s=Number(m.giacenza||0)<=Number(m.scorta_minima||0);
-    const dim=(m.altezza_mm||m.larghezza_mm)?(m.altezza_mm||\'?\')+\' x \'+(m.larghezza_mm||\'?\')+\' mm\':\'\xe2\x80\x94\';
-    const catNome=(cats||[]).find(function(c){return c.codice===m.categoria;})?.nome||m.categoria||\'\xe2\x80\x94\';
-    return \'<tr class="data-row" onclick="apriDettaglioMagazzino(this.dataset.id)" data-id="\'+m.id+\'" style="cursor:pointer">\'+
-      \'<td><strong>\'+(m.codice_mp||\'\xe2\x80\x94\')+\'</strong></td>\'+
-      \'<td>\'+(m.descrizione||\'\xe2\x80\x94\')+\'</td>\'+
-      \'<td>\'+(catNome?\'<span class="tag">\'+catNome+\'</span>\':\'\xe2\x80\x94\')+\'</td>\'+
-      \'<td>\'+(m.codice_finitura?\'<span class="tag">\'+m.codice_finitura+\'</span>\':\'\xe2\x80\x94\')+\'</td>\'+
-      \'<td>\'+dim+\'</td><td>\'+(m.giacenza||0)+\' \'+(m.unita||\'pz\')+\'</td>\'+
-      \'<td>\'+(m.scorta_minima||0)+\'</td>\'+
-      \'<td>\'+(s?\'<span class="badge br">Sotto scorta</span>\':\'<span class="badge bg">OK</span>\')+\'</td>\'+
-      \'<td style="text-align:right"><div style="display:flex;gap:4px;justify-content:flex-end">\'+
-        \'<button class="btn btn-sm" title="Modifica" data-mid="\'+m.id+\'" onclick="event.stopPropagation();apriDettaglioMagazzino(this.dataset.mid)" style="padding:4px 6px">\'+
-        \'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>\'+
-        \'<button class="btn btn-sm" title="Duplica" data-mid="\'+m.id+\'" onclick="event.stopPropagation();duplicaArticoloMag(this.dataset.mid)" style="padding:4px 6px">\'+
-        \'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>\'+
-        \'</div></td></tr>\';
-  }).join(\'\');
-  document.getElementById(\'main-content\').innerHTML=
-    \'<div class="grid-4" style="margin-bottom:16px">\'+
-    \'<div class="metric"><div class="metric-label">Articoli totali</div><div class="metric-value">\'+items.length+\'</div></div>\'+
-    \'<div class="metric"><div class="metric-label">Pannelli blindati</div><div class="metric-value">\'+pannelli+\'</div></div>\'+
-    \'<div class="metric"><div class="metric-label">Sotto scorta</div><div class="metric-value" style="color:var(--red)">\'+sottoscorta+\'</div></div>\'+
-    \'</div><div class="card"><div class="card-header"><span class="card-title">Magazzino</span>\'+
-    \'<button class="btn btn-red btn-sm" onclick="apriNuovoArticoloMag()">+ Nuovo articolo</button></div>\'+
-    \'<table><thead><tr><th>Codice MP</th><th>Descrizione</th><th>Categoria</th><th>Colore</th>\'+
-    \'<th>Dim.</th><th>Giacenza</th><th>Scorta min.</th><th>Stato</th><th></th></tr></thead>\'+
-    \'<tbody>\'+(rows||\'<tr><td colspan="8" style="text-align:center;color:var(--mid);padding:24px">Nessun articolo</td></tr>\')+
-    \'</tbody></table></div>\';
+    const dim=(m.altezza_mm||m.larghezza_mm)?(m.altezza_mm||\\'?\\')+\\' x \\'+(m.larghezza_mm||\\'?\\')+\\' mm\\':\\'\xe2\x80\x94\\';
+    const catNome=(cats||[]).find(function(c){return c.codice===m.categoria;})?.nome||m.categoria||\\'\xe2\x80\x94\\';
+    return \\'<tr class="data-row" onclick="apriDettaglioMagazzino(this.dataset.id)" data-id="\\'+m.id+\\'" style="cursor:pointer">\\'+
+      \\'<td><strong>\\'+(m.codice_mp||\\'\xe2\x80\x94\\')+\\'</strong></td>\\'+
+      \\'<td>\\'+(m.descrizione||\\'\xe2\x80\x94\\')+\\'</td>\\'+
+      \\'<td>\\'+(catNome?\\'<span class="tag">\\'+catNome+\\'</span>\\':\\'\xe2\x80\x94\\')+\\'</td>\\'+
+      \\'<td>\\'+(m.codice_finitura?\\'<span class="tag">\\'+m.codice_finitura+\\'</span>\\':\\'\xe2\x80\x94\\')+\\'</td>\\'+
+      \\'<td>\\'+dim+\\'</td><td>\\'+(m.giacenza||0)+\\' \\'+(m.unita||\\'pz\\')+\\'</td>\\'+
+      \\'<td>\\'+(m.scorta_minima||0)+\\'</td>\\'+
+      \\'<td>\\'+(s?\\'<span class="badge br">Sotto scorta</span>\\':\\'<span class="badge bg">OK</span>\\')+\\'</td>\\'+
+      \\'<td style="text-align:right"><div style="display:flex;gap:4px;justify-content:flex-end">\\'+
+        \\'<button class="btn btn-sm" title="Modifica" data-mid="\\'+m.id+\\'" onclick="event.stopPropagation();apriDettaglioMagazzino(this.dataset.mid)" style="padding:4px 6px">\\'+
+        \\'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>\\'+
+        \\'<button class="btn btn-sm" title="Duplica" data-mid="\\'+m.id+\\'" onclick="event.stopPropagation();duplicaArticoloMag(this.dataset.mid)" style="padding:4px 6px">\\'+
+        \\'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>\\'+
+        \\'</div></td></tr>\\';
+  }).join(\\'\\');
+  document.getElementById(\\'main-content\\').innerHTML=
+    \\'<div class="grid-4" style="margin-bottom:16px">\\'+
+    \\'<div class="metric"><div class="metric-label">Articoli totali</div><div class="metric-value">\\'+items.length+\\'</div></div>\\'+
+    \\'<div class="metric"><div class="metric-label">Pannelli blindati</div><div class="metric-value">\\'+pannelli+\\'</div></div>\\'+
+    \\'<div class="metric"><div class="metric-label">Sotto scorta</div><div class="metric-value" style="color:var(--red)">\\'+sottoscorta+\\'</div></div>\\'+
+    \\'</div><div class="card"><div class="card-header"><span class="card-title">Magazzino</span>\\'+
+    \\'<button class="btn btn-red btn-sm" onclick="apriNuovoArticoloMag()">+ Nuovo articolo</button></div>\\'+
+    \\'<table><thead><tr><th>Codice MP</th><th>Descrizione</th><th>Categoria</th><th>Colore</th>\\'+
+    \\'<th>Dim.</th><th>Giacenza</th><th>Scorta min.</th><th>Stato</th><th></th></tr></thead>\\'+
+    \\'<tbody>\\'+(rows||\\'<tr><td colspan="8" style="text-align:center;color:var(--mid);padding:24px">Nessun articolo</td></tr>\\')+
+    \\'</tbody></table></div>\\';
 }
 
 async function apriDettaglioMagazzino(id){
-  const {data:m}=await sb.from(\'magazzino\').select(\'*\').eq(\'id\',id).single();
-  if(!m){toast(\'Non trovato\',\'err\');return;}
+  const {data:m}=await sb.from(\\'magazzino\\').select(\\'*\\').eq(\\'id\\',id).single();
+  if(!m){toast(\\'Non trovato\\',\\'err\\');return;}
   _magEditId=id;
   await popolaFormMag(m);
   // Carica fornitori e movimenti
-  const fSec=document.getElementById(\'mag-fornitori-section\');
-  const mSec=document.getElementById(\'mag-movimenti-section\');
-  if(fSec) fSec.style.display=\'block\';
-  if(mSec) mSec.style.display=\'block\';
+  const fSec=document.getElementById(\\'mag-fornitori-section\\');
+  const mSec=document.getElementById(\\'mag-movimenti-section\\');
+  if(fSec) fSec.style.display=\\'block\\';
+  if(mSec) mSec.style.display=\\'block\\';
   await caricaFornitori(id);
   await caricaMovimenti(id);
-  const mo=ensureModalInBody(\'modal-magazzino\');if(mo)mo.classList.add(\'open\');
+  const mo=ensureModalInBody(\\'modal-magazzino\\');if(mo)mo.classList.add(\\'open\\');
 }
 
 function apriNuovoArticoloMag(){
   _magEditId=null;
   popolaFormMag({});
-  const fSec=document.getElementById(\'mag-fornitori-section\');
-  const mSec=document.getElementById(\'mag-movimenti-section\');
-  if(fSec) fSec.style.display=\'none\';
-  if(mSec) mSec.style.display=\'none\';
-  const mo=ensureModalInBody(\'modal-magazzino\');if(mo)mo.classList.add(\'open\');
+  const fSec=document.getElementById(\\'mag-fornitori-section\\');
+  const mSec=document.getElementById(\\'mag-movimenti-section\\');
+  if(fSec) fSec.style.display=\\'none\\';
+  if(mSec) mSec.style.display=\\'none\\';
+  const mo=ensureModalInBody(\\'modal-magazzino\\');if(mo)mo.classList.add(\\'open\\');
 }
 
 async function popolaFormMag(m){
-  document.getElementById(\'mag-title\').textContent=_magEditId?\'Modifica\':\'Nuovo articolo\';
+  document.getElementById(\\'mag-title\\').textContent=_magEditId?\\'Modifica\\':\\'Nuovo articolo\\';
   // Carica categorie
-  const {data:cats}=await sb.from(\'categorie_magazzino\').select(\'*\').order(\'nome\');
-  const catSel=document.getElementById(\'mag-categoria\');
+  const {data:cats}=await sb.from(\\'categorie_magazzino\\').select(\\'*\\').order(\\'nome\\');
+  const catSel=document.getElementById(\\'mag-categoria\\');
   if(catSel){
-    catSel.innerHTML=\'<option value="">&#8212;</option>\'+
-      (cats||[]).map(function(c){return \'<option value="\'+c.codice+\'" data-descr="\'+( c.descrizione||\'\')+\'"\'+(m.categoria===c.codice?\' selected\':\'\')+\'>\'+c.nome+\'</option>\';}).join(\'\');
+    catSel.innerHTML=\\'<option value="">&#8212;</option>\\'+
+      (cats||[]).map(function(c){return \\'<option value="\\'+c.codice+\\'" data-descr="\\'+( c.descrizione||\\'\\')+\\'"\\'+(m.categoria===c.codice?\\' selected\\':\\'\\')+\\'>\\'+c.nome+\\'</option>\\';}).join(\\'\\');
   }
   // Carica colori in base ai flag della categoria
-  var catCodice=m.categoria||\'\';
+  var catCodice=m.categoria||\\'\\';
   var catInfo=null;
   if(catCodice){
-    const {data:catRow}=await sb.from(\'categorie_magazzino\').select(\'colori_laminato,colori_laccato,colori_ferramenta\').eq(\'codice\',catCodice).maybeSingle();
+    const {data:catRow}=await sb.from(\\'categorie_magazzino\\').select(\\'colori_laminato,colori_laccato,colori_ferramenta\\').eq(\\'codice\\',catCodice).maybeSingle();
     catInfo=catRow;
   }
   var finsUnique=[];
   if(catInfo&&(catInfo.colori_laminato||catInfo.colori_laccato)){
     var fasce=[];
-    if(catInfo.colori_laminato) fasce.push(\'LAMINATO\');
-    if(catInfo.colori_laccato) fasce=fasce.concat([\'MP CLASSIC\',\'MP LIGHT\',\'MP PREMIUM\']);
-    const {data:fins2}=await sb.from(\'finiture\').select(\'codice_finitura,nome_finitura\').in(\'fascia\',fasce).order(\'nome_finitura\');
+    if(catInfo.colori_laminato) fasce.push(\\'LAMINATO\\');
+    if(catInfo.colori_laccato) fasce=fasce.concat([\\'MP CLASSIC\\',\\'MP LIGHT\\',\\'MP PREMIUM\\']);
+    const {data:fins2}=await sb.from(\\'finiture\\').select(\\'codice_finitura,nome_finitura\\').in(\\'fascia\\',fasce).order(\\'nome_finitura\\');
     const seen=new Set();
     (fins2||[]).forEach(function(f){if(!seen.has(f.codice_finitura)){seen.add(f.codice_finitura);finsUnique.push({codice_finitura:f.codice_finitura,nome_finitura:f.nome_finitura});}});
   }
   if(catInfo&&catInfo.colori_ferramenta){
-    const {data:ferr}=await sb.from(\'ferramenta\').select(\'codice,nome\').eq(\'attivo\',true).order(\'nome\');
+    const {data:ferr}=await sb.from(\\'ferramenta\\').select(\\'codice,nome\\').eq(\\'attivo\\',true).order(\\'nome\\');
     (ferr||[]).forEach(function(f){finsUnique.push({codice_finitura:f.codice,nome_finitura:f.nome});});
   }
   if(!catInfo||(!catInfo.colori_laminato&&!catInfo.colori_laccato&&!catInfo.colori_ferramenta)){
-    const {data:fins3}=await sb.from(\'finiture\').select(\'codice_finitura,nome_finitura\').order(\'nome_finitura\');
+    const {data:fins3}=await sb.from(\\'finiture\\').select(\\'codice_finitura,nome_finitura\\').order(\\'nome_finitura\\');
     const seen2=new Set();
     (fins3||[]).forEach(function(f){if(!seen2.has(f.codice_finitura)){seen2.add(f.codice_finitura);finsUnique.push(f);}});
   }
-  const finSel=document.getElementById(\'mag-codice_finitura\');
+  const finSel=document.getElementById(\\'mag-codice_finitura\\');
   if(finSel){
-    finSel.innerHTML=\'<option value="">&mdash; Nessuna &mdash;</option>\'+
-      finsUnique.map(function(f){return \'<option value="\'+f.codice_finitura+\'" data-nome="\'+f.nome_finitura+\'"\'+( m.codice_finitura===f.codice_finitura?\' selected\':\'\')+\'>\'+f.codice_finitura+\' - \'+f.nome_finitura+\'</option>\';}).join(\'\');
+    finSel.innerHTML=\\'<option value="">&mdash; Nessuna &mdash;</option>\\'+
+      finsUnique.map(function(f){return \\'<option value="\\'+f.codice_finitura+\\'" data-nome="\\'+f.nome_finitura+\\'"\\'+( m.codice_finitura===f.codice_finitura?\\' selected\\':\\'\\')+\\'>\\'+f.codice_finitura+\\' - \\'+f.nome_finitura+\\'</option>\\';}).join(\\'\\');
     aggiornaFinMag(finSel);
   }
-  const ff={\'mag-codice_mp\':m.codice_mp||\'\',\'mag-descrizione\':m.descrizione||\'\',
-    \'mag-altezza_mm\':m.altezza_mm||\'\',\'mag-larghezza_mm\':m.larghezza_mm||\'\',\'mag-spessore_mm\':m.spessore_mm||\'\',
-    \'mag-giacenza\':m.giacenza||0,\'mag-scorta_minima\':m.scorta_minima||0,\'mag-scorta_target\':m.scorta_target||0,
-    \'mag-pz_per_confezione\':m.pz_per_confezione||1,\'mag-unita\':m.unita||\'pz\',
-    \'mag-unita_ordine\':m.unita_ordine||\'pz\',\'mag-ubicazione\':m.ubicazione||\'\'};
+  const ff={\\'mag-codice_mp\\':m.codice_mp||\\'\\',\\'mag-descrizione\\':m.descrizione||\\'\\',
+    \\'mag-altezza_mm\\':m.altezza_mm||\\'\\',\\'mag-larghezza_mm\\':m.larghezza_mm||\\'\\',\\'mag-spessore_mm\\':m.spessore_mm||\\'\\',
+    \\'mag-giacenza\\':m.giacenza||0,\\'mag-scorta_minima\\':m.scorta_minima||0,\\'mag-scorta_target\\':m.scorta_target||0,
+    \\'mag-pz_per_confezione\\':m.pz_per_confezione||1,\\'mag-unita\\':m.unita||\\'pz\\',
+    \\'mag-unita_ordine\\':m.unita_ordine||\\'pz\\',\\'mag-ubicazione\\':m.ubicazione||\\'\\'};
   Object.entries(ff).forEach(function(kv){const el=document.getElementById(kv[0]);if(el)el.value=kv[1];});
-  const btn=document.getElementById(\'mag-btn-elimina\');if(btn)btn.style.display=_magEditId?\'\':\'none\';
+  const btn=document.getElementById(\\'mag-btn-elimina\\');if(btn)btn.style.display=_magEditId?\\'\\':\\'none\\';
   if(!m.codice_mp) aggiornaCodiceMP(false);
 }
 
 async function aggiornaColoriMag(){
-  const catSel=document.getElementById(\'mag-categoria\');
+  const catSel=document.getElementById(\\'mag-categoria\\');
   if(!catSel) return;
-  const m={categoria:catSel.value,codice_finitura:document.getElementById(\'mag-codice_finitura\')?.value||\'\'  };
+  const m={categoria:catSel.value,codice_finitura:document.getElementById(\\'mag-codice_finitura\\')?.value||\\'\\'  };
   var catInfo=null;
   if(m.categoria){
-    const {data:catRow}=await sb.from(\'categorie_magazzino\').select(\'colori_laminato,colori_laccato,colori_ferramenta\').eq(\'codice\',m.categoria).maybeSingle();
+    const {data:catRow}=await sb.from(\\'categorie_magazzino\\').select(\\'colori_laminato,colori_laccato,colori_ferramenta\\').eq(\\'codice\\',m.categoria).maybeSingle();
     catInfo=catRow;
   }
   var finsUnique=[];
   if(catInfo&&(catInfo.colori_laminato||catInfo.colori_laccato)){
     var fasce=[];
-    if(catInfo.colori_laminato) fasce.push(\'LAMINATO\');
-    if(catInfo.colori_laccato) fasce=fasce.concat([\'MP CLASSIC\',\'MP LIGHT\',\'MP PREMIUM\']);
-    const {data:fins2}=await sb.from(\'finiture\').select(\'codice_finitura,nome_finitura\').in(\'fascia\',fasce).order(\'nome_finitura\');
+    if(catInfo.colori_laminato) fasce.push(\\'LAMINATO\\');
+    if(catInfo.colori_laccato) fasce=fasce.concat([\\'MP CLASSIC\\',\\'MP LIGHT\\',\\'MP PREMIUM\\']);
+    const {data:fins2}=await sb.from(\\'finiture\\').select(\\'codice_finitura,nome_finitura\\').in(\\'fascia\\',fasce).order(\\'nome_finitura\\');
     const seen=new Set();
     (fins2||[]).forEach(function(f){if(!seen.has(f.codice_finitura)){seen.add(f.codice_finitura);finsUnique.push({codice_finitura:f.codice_finitura,nome_finitura:f.nome_finitura});}});
   }
   if(catInfo&&catInfo.colori_ferramenta){
-    const {data:ferr}=await sb.from(\'ferramenta\').select(\'codice,nome\').eq(\'attivo\',true).order(\'nome\');
+    const {data:ferr}=await sb.from(\\'ferramenta\\').select(\\'codice,nome\\').eq(\\'attivo\\',true).order(\\'nome\\');
     (ferr||[]).forEach(function(f){finsUnique.push({codice_finitura:f.codice,nome_finitura:f.nome});});
   }
   if(!catInfo||(!catInfo.colori_laminato&&!catInfo.colori_laccato&&!catInfo.colori_ferramenta)){
-    const {data:fins3}=await sb.from(\'finiture\').select(\'codice_finitura,nome_finitura\').order(\'nome_finitura\');
+    const {data:fins3}=await sb.from(\\'finiture\\').select(\\'codice_finitura,nome_finitura\\').order(\\'nome_finitura\\');
     const seen2=new Set();
     (fins3||[]).forEach(function(f){if(!seen2.has(f.codice_finitura)){seen2.add(f.codice_finitura);finsUnique.push(f);}});
   }
-  const finSel=document.getElementById(\'mag-codice_finitura\');
+  const finSel=document.getElementById(\\'mag-codice_finitura\\');
   if(finSel){
     var curVal=finSel.value;
-    var opts=\'<option value="">&mdash; Nessuna &mdash;</option>\'+
+    var opts=\\'<option value="">&mdash; Nessuna &mdash;</option>\\'+
       finsUnique.map(function(f){
-        var sel=f.codice_finitura===curVal?\' selected\':\'\';
-        return \'<option value="\'+f.codice_finitura+\'" data-nome="\'+f.nome_finitura+\'"\'+sel+\'>\'+ f.codice_finitura+\' - \'+f.nome_finitura+\'</option>\';
-      }).join(\'\');
+        var sel=f.codice_finitura===curVal?\\' selected\\':\\'\\';
+        return \\'<option value="\\'+f.codice_finitura+\\'" data-nome="\\'+f.nome_finitura+\\'"\\'+sel+\\'>\\'+ f.codice_finitura+\\' - \\'+f.nome_finitura+\\'</option>\\';
+      }).join(\\'\\');
     finSel.innerHTML=opts;
     aggiornaFinMag(finSel);
   }
@@ -1965,180 +1965,180 @@ async function aggiornaColoriMag(){
 
 function aggiornaFinMag(sel){
   const opt=sel.options[sel.selectedIndex];
-  const nomeEl=document.getElementById(\'mag-nome_finitura\');
-  if(nomeEl) nomeEl.value=(opt&&opt.value)?opt.getAttribute(\'data-nome\')||\'\':\'\';
+  const nomeEl=document.getElementById(\\'mag-nome_finitura\\');
+  if(nomeEl) nomeEl.value=(opt&&opt.value)?opt.getAttribute(\\'data-nome\\')||\\'\\':\\'\\';
 }
 
 function aggiornaCodiceMP(force){
-  const mp=document.getElementById(\'mag-codice_mp\');
+  const mp=document.getElementById(\\'mag-codice_mp\\');
   if(!mp) return;
   // Auto-compila descrizione dalla categoria se vuota
-  const catSel2=document.getElementById(\'mag-categoria\');
-  const descEl=document.getElementById(\'mag-descrizione\');
+  const catSel2=document.getElementById(\\'mag-categoria\\');
+  const descEl=document.getElementById(\\'mag-descrizione\\');
   if(catSel2&&descEl&&!descEl.value&&catSel2.value){
     const opt2=catSel2.options[catSel2.selectedIndex];
-    const descr2=opt2?opt2.getAttribute(\'data-descr\')||\'\':null;
+    const descr2=opt2?opt2.getAttribute(\\'data-descr\\')||\\'\\':null;
     if(descr2) descEl.value=descr2;
   }
   if(mp.value&&!force) return; // non sovrascrivere se già compilato
-  const catSel=document.getElementById(\'mag-categoria\');
-  const cat=(catSel&&catSel.value)?catSel.value.toUpperCase().replace(\'_\',\'-\').slice(0,6):\'\';
-  const l=document.getElementById(\'mag-larghezza_mm\')?.value||\'\';
-  const h=document.getElementById(\'mag-altezza_mm\')?.value||\'\';
-  const s=document.getElementById(\'mag-spessore_mm\')?.value||\'\';
-  const fin=document.getElementById(\'mag-codice_finitura\')?.value||\'\';
+  const catSel=document.getElementById(\\'mag-categoria\\');
+  const cat=(catSel&&catSel.value)?catSel.value.toUpperCase().replace(\\'_\\',\\'-\\').slice(0,6):\\'\\';
+  const l=document.getElementById(\\'mag-larghezza_mm\\')?.value||\\'\\';
+  const h=document.getElementById(\\'mag-altezza_mm\\')?.value||\\'\\';
+  const s=document.getElementById(\\'mag-spessore_mm\\')?.value||\\'\\';
+  const fin=document.getElementById(\\'mag-codice_finitura\\')?.value||\\'\\';
   const parts=[cat,l,h,s,fin].filter(Boolean);
-  if(parts.length>1) mp.value=parts.join(\'-\');
+  if(parts.length>1) mp.value=parts.join(\\'-\\');
 }
 
 var _magEditId=null;
 
 async function salvaMagazzino(){
   const d={
-    codice_mp:document.getElementById(\'mag-codice_mp\')?.value?.trim()||null,
-    descrizione:document.getElementById(\'mag-descrizione\')?.value?.trim()||null,
-    categoria:document.getElementById(\'mag-categoria\')?.value?.trim()||null,
-    codice_finitura:document.getElementById(\'mag-codice_finitura\')?.value?.trim()||null,
-    nome_finitura:document.getElementById(\'mag-nome_finitura\')?.value?.trim()||null,
-    altezza_mm:parseFloat(document.getElementById(\'mag-altezza_mm\')?.value)||null,
-    larghezza_mm:parseFloat(document.getElementById(\'mag-larghezza_mm\')?.value)||null,
-    spessore_mm:parseFloat(document.getElementById(\'mag-spessore_mm\')?.value)||null,
-    pz_per_confezione:parseFloat(document.getElementById(\'mag-pz_per_confezione\')?.value)||1,
-    unita_ordine:document.getElementById(\'mag-unita_ordine\')?.value||\'pz\',
-    scorta_minima:parseFloat(document.getElementById(\'mag-scorta_minima\')?.value)||0,
-    scorta_target:parseFloat(document.getElementById(\'mag-scorta_target\')?.value)||0,
-    unita:document.getElementById(\'mag-unita\')?.value||\'pz\',
-    ubicazione:document.getElementById(\'mag-ubicazione\')?.value?.trim()||null,
+    codice_mp:document.getElementById(\\'mag-codice_mp\\')?.value?.trim()||null,
+    descrizione:document.getElementById(\\'mag-descrizione\\')?.value?.trim()||null,
+    categoria:document.getElementById(\\'mag-categoria\\')?.value?.trim()||null,
+    codice_finitura:document.getElementById(\\'mag-codice_finitura\\')?.value?.trim()||null,
+    nome_finitura:document.getElementById(\\'mag-nome_finitura\\')?.value?.trim()||null,
+    altezza_mm:parseFloat(document.getElementById(\\'mag-altezza_mm\\')?.value)||null,
+    larghezza_mm:parseFloat(document.getElementById(\\'mag-larghezza_mm\\')?.value)||null,
+    spessore_mm:parseFloat(document.getElementById(\\'mag-spessore_mm\\')?.value)||null,
+    pz_per_confezione:parseFloat(document.getElementById(\\'mag-pz_per_confezione\\')?.value)||1,
+    unita_ordine:document.getElementById(\\'mag-unita_ordine\\')?.value||\\'pz\\',
+    scorta_minima:parseFloat(document.getElementById(\\'mag-scorta_minima\\')?.value)||0,
+    scorta_target:parseFloat(document.getElementById(\\'mag-scorta_target\\')?.value)||0,
+    unita:document.getElementById(\\'mag-unita\\')?.value||\\'pz\\',
+    ubicazione:document.getElementById(\\'mag-ubicazione\\')?.value?.trim()||null,
     updated_at:new Date().toISOString()
   };
-  if(!d.descrizione){toast(\'Inserisci descrizione\',\'err\');return;}
+  if(!d.descrizione){toast(\\'Inserisci descrizione\\',\\'err\\');return;}
   let er;
-  if(_magEditId){const r=await sb.from(\'magazzino\').update(d).eq(\'id\',_magEditId);er=r.error;}
-  else{const r=await sb.from(\'magazzino\').insert([d]);er=r.error;}
-  if(er){toast(\'Errore: \'+er.message,\'err\');return;}
-  toast(_magEditId?\'Aggiornato\':\'Aggiunto\',\'ok\');
-  closeForm(\'modal-magazzino\');
+  if(_magEditId){const r=await sb.from(\\'magazzino\\').update(d).eq(\\'id\\',_magEditId);er=r.error;}
+  else{const r=await sb.from(\\'magazzino\\').insert([d]);er=r.error;}
+  if(er){toast(\\'Errore: \\'+er.message,\\'err\\');return;}
+  toast(_magEditId?\\'Aggiornato\\':\\'Aggiunto\\',\\'ok\\');
+  closeForm(\\'modal-magazzino\\');
   renderMagazzino();
 }
 
 async function duplicaArticoloMag(id){
-  const {data:m}=await sb.from(\'magazzino\').select(\'*\').eq(\'id\',id).single();
-  if(!m){toast(\'Articolo non trovato\',\'err\');return;}
+  const {data:m}=await sb.from(\\'magazzino\\').select(\\'*\\').eq(\\'id\\',id).single();
+  if(!m){toast(\\'Articolo non trovato\\',\\'err\\');return;}
   const nuovo={...m};
   delete nuovo.id;delete nuovo.created_at;delete nuovo.updated_at;
-  nuovo.codice_mp=(m.codice_mp?m.codice_mp+\' (copia)\':null);
+  nuovo.codice_mp=(m.codice_mp?m.codice_mp+\\' (copia)\\':null);
   nuovo.giacenza=0;
-  const {error}=await sb.from(\'magazzino\').insert([nuovo]);
-  if(error){toast(\'Errore: \'+error.message,\'err\');return;}
-  toast(\'Articolo duplicato\',\'ok\');renderMagazzino();
+  const {error}=await sb.from(\\'magazzino\\').insert([nuovo]);
+  if(error){toast(\\'Errore: \\'+error.message,\\'err\\');return;}
+  toast(\\'Articolo duplicato\\',\\'ok\\');renderMagazzino();
 }
 
 async function eliminaArticoloMag(){
-  if(!_magEditId||!confirm(\'Eliminare questo articolo e tutti i suoi movimenti?\'))return;
-  const r=await sb.from(\'magazzino\').delete().eq(\'id\',_magEditId);
-  if(r.error){toast(\'Errore: \'+r.error.message,\'err\');return;}
-  toast(\'Eliminato\',\'ok\');closeForm(\'modal-magazzino\');renderMagazzino();
+  if(!_magEditId||!confirm(\\'Eliminare questo articolo e tutti i suoi movimenti?\\'))return;
+  const r=await sb.from(\\'magazzino\\').delete().eq(\\'id\\',_magEditId);
+  if(r.error){toast(\\'Errore: \\'+r.error.message,\\'err\\');return;}
+  toast(\\'Eliminato\\',\\'ok\\');closeForm(\\'modal-magazzino\\');renderMagazzino();
 }
 
 async function caricaFornitori(magId){
-  const {data}=await sb.from(\'magazzino_fornitori\').select(\'*,anagrafiche(ragione_sociale)\').eq(\'magazzino_id\',magId);
-  const el=document.getElementById(\'mag-fornitori-list\');
+  const {data}=await sb.from(\\'magazzino_fornitori\\').select(\\'*,anagrafiche(ragione_sociale)\\').eq(\\'magazzino_id\\',magId);
+  const el=document.getElementById(\\'mag-fornitori-list\\');
   if(!el) return;
-  if(!data||!data.length){el.innerHTML=\'<div style="font-size:12px;color:var(--mid)">Nessun fornitore associato.</div>\';return;}
+  if(!data||!data.length){el.innerHTML=\\'<div style="font-size:12px;color:var(--mid)">Nessun fornitore associato.</div>\\';return;}
   el.innerHTML=data.map(function(f){
-    return \'<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:0.5px solid var(--border);font-size:12px">\'+
-      \'<span style="flex:1"><strong>\'+(f.anagrafiche?.ragione_sociale||\'?\')+\'</strong>\'+
-      (f.codice_fornitore?\' <span style="color:var(--mid)">\'+f.codice_fornitore+\'</span>\':\'\')+
-      (f.prezzo_acquisto?\' \xe2\x80\x94 \xe2\x82\xac\'+f.prezzo_acquisto:\'\')+
-      (f.lead_time_giorni?\' \xe2\x80\x94 \'+f.lead_time_giorni+\'gg\':\'\')+
-      (f.preferito?\' <span class="badge bg">preferito</span>\':\'\')+
-      \'</span>\'+
-      \'<button class="btn btn-sm" data-fid="\'+f.id+\'" onclick="eliminaFornitore(this.dataset.fid)">\xc3\x97</button></div>\';
-  }).join(\'\');
+    return \\'<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:0.5px solid var(--border);font-size:12px">\\'+
+      \\'<span style="flex:1"><strong>\\'+(f.anagrafiche?.ragione_sociale||\\'?\\')+\\'</strong>\\'+
+      (f.codice_fornitore?\\' <span style="color:var(--mid)">\\'+f.codice_fornitore+\\'</span>\\':\\'\\')+
+      (f.prezzo_acquisto?\\' \xe2\x80\x94 \xe2\x82\xac\\'+f.prezzo_acquisto:\\'\\')+
+      (f.lead_time_giorni?\\' \xe2\x80\x94 \\'+f.lead_time_giorni+\\'gg\\':\\'\\')+
+      (f.preferito?\\' <span class="badge bg">preferito</span>\\':\\'\\')+
+      \\'</span>\\'+
+      \\'<button class="btn btn-sm" data-fid="\\'+f.id+\\'" onclick="eliminaFornitore(this.dataset.fid)">\xc3\x97</button></div>\\';
+  }).join(\\'\\');
 }
 
 async function apriAggiuntaFornitore(){
-  const {data:fornitori}=await sb.from(\'anagrafiche\').select(\'id,ragione_sociale\').eq(\'tipo\',\'fornitore\').order(\'ragione_sociale\');
-  const opts=(fornitori||[]).map(function(a){return \'<option value="\'+a.id+\'">\'+a.ragione_sociale+\'</option>\';}).join(\'\');
-  const html=\'<div style="background:var(--beige);border-radius:var(--radius);padding:12px;margin-top:8px">\'+
-    \'<div style="display:grid;grid-template-columns:2fr 1fr 1fr 80px;gap:8px;margin-bottom:8px">\'+
-    \'<select id="forn-ana" style="padding:6px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:12px"><option value="">Seleziona fornitore...</option>\'+opts+\'</select>\'+
-    \'<input id="forn-cod" type="text" placeholder="Cod. articolo forn." style="padding:6px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:12px">\'+
-    \'<input id="forn-prez" type="number" placeholder="Prezzo acquisto" step="0.01" style="padding:6px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:12px">\'+
-    \'<input id="forn-lead" type="number" placeholder="Lead time gg" style="padding:6px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:12px">\'+
-    \'</div>\'+
-    \'<div style="display:flex;gap:8px;align-items:center">\'+
-    \'<label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" id="forn-pref"> Fornitore preferito</label>\'+
-    \'<button class="btn btn-sm btn-red" onclick="salvaFornitore()">Salva fornitore</button>\'+
-    \'<button class="btn btn-sm" onclick="this.parentElement.parentElement.remove()">Annulla</button>\'+
-    \'</div></div>\';
-  const btn=document.querySelector(\'#mag-fornitori-section button\');
-  if(btn) btn.insertAdjacentHTML(\'afterend\',html);
+  const {data:fornitori}=await sb.from(\\'anagrafiche\\').select(\\'id,ragione_sociale\\').eq(\\'tipo\\',\\'fornitore\\').order(\\'ragione_sociale\\');
+  const opts=(fornitori||[]).map(function(a){return \\'<option value="\\'+a.id+\\'">\\'+a.ragione_sociale+\\'</option>\\';}).join(\\'\\');
+  const html=\\'<div style="background:var(--beige);border-radius:var(--radius);padding:12px;margin-top:8px">\\'+
+    \\'<div style="display:grid;grid-template-columns:2fr 1fr 1fr 80px;gap:8px;margin-bottom:8px">\\'+
+    \\'<select id="forn-ana" style="padding:6px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:12px"><option value="">Seleziona fornitore...</option>\\'+opts+\\'</select>\\'+
+    \\'<input id="forn-cod" type="text" placeholder="Cod. articolo forn." style="padding:6px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:12px">\\'+
+    \\'<input id="forn-prez" type="number" placeholder="Prezzo acquisto" step="0.01" style="padding:6px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:12px">\\'+
+    \\'<input id="forn-lead" type="number" placeholder="Lead time gg" style="padding:6px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:12px">\\'+
+    \\'</div>\\'+
+    \\'<div style="display:flex;gap:8px;align-items:center">\\'+
+    \\'<label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" id="forn-pref"> Fornitore preferito</label>\\'+
+    \\'<button class="btn btn-sm btn-red" onclick="salvaFornitore()">Salva fornitore</button>\\'+
+    \\'<button class="btn btn-sm" onclick="this.parentElement.parentElement.remove()">Annulla</button>\\'+
+    \\'</div></div>\\';
+  const btn=document.querySelector(\\'#mag-fornitori-section button\\');
+  if(btn) btn.insertAdjacentHTML(\\'afterend\\',html);
 }
 
 async function salvaFornitore(){
-  const anaId=document.getElementById(\'forn-ana\')?.value;
-  if(!anaId||!_magEditId){toast(\'Seleziona fornitore\',\'err\');return;}
+  const anaId=document.getElementById(\\'forn-ana\\')?.value;
+  if(!anaId||!_magEditId){toast(\\'Seleziona fornitore\\',\\'err\\');return;}
   const d={magazzino_id:_magEditId,anagrafica_id:anaId,
-    codice_fornitore:document.getElementById(\'forn-cod\')?.value?.trim()||null,
-    prezzo_acquisto:parseFloat(document.getElementById(\'forn-prez\')?.value)||0,
-    lead_time_giorni:parseInt(document.getElementById(\'forn-lead\')?.value)||0,
-    preferito:document.getElementById(\'forn-pref\')?.checked||false};
-  if(d.preferito) await sb.from(\'magazzino_fornitori\').update({preferito:false}).eq(\'magazzino_id\',_magEditId);
-  const {error}=await sb.from(\'magazzino_fornitori\').insert([d]);
-  if(error){toast(\'Errore: \'+error.message,\'err\');return;}
-  toast(\'Fornitore aggiunto\',\'ok\');
+    codice_fornitore:document.getElementById(\\'forn-cod\\')?.value?.trim()||null,
+    prezzo_acquisto:parseFloat(document.getElementById(\\'forn-prez\\')?.value)||0,
+    lead_time_giorni:parseInt(document.getElementById(\\'forn-lead\\')?.value)||0,
+    preferito:document.getElementById(\\'forn-pref\\')?.checked||false};
+  if(d.preferito) await sb.from(\\'magazzino_fornitori\\').update({preferito:false}).eq(\\'magazzino_id\\',_magEditId);
+  const {error}=await sb.from(\\'magazzino_fornitori\\').insert([d]);
+  if(error){toast(\\'Errore: \\'+error.message,\\'err\\');return;}
+  toast(\\'Fornitore aggiunto\\',\\'ok\\');
   caricaFornitori(_magEditId);
 }
 
 async function eliminaFornitore(id){
-  if(!confirm(\'Rimuovere questo fornitore?\'))return;
-  await sb.from(\'magazzino_fornitori\').delete().eq(\'id\',id);
+  if(!confirm(\\'Rimuovere questo fornitore?\\'))return;
+  await sb.from(\\'magazzino_fornitori\\').delete().eq(\\'id\\',id);
   caricaFornitori(_magEditId);
 }
 
 async function caricaMovimenti(magId){
-  const {data}=await sb.from(\'magazzino_movimenti\').select(\'*\').eq(\'magazzino_id\',magId).order(\'created_at\',{ascending:false}).limit(10);
-  const el=document.getElementById(\'mag-movimenti-list\');
+  const {data}=await sb.from(\\'magazzino_movimenti\\').select(\\'*\\').eq(\\'magazzino_id\\',magId).order(\\'created_at\\',{ascending:false}).limit(10);
+  const el=document.getElementById(\\'mag-movimenti-list\\');
   if(!el) return;
-  if(!data||!data.length){el.innerHTML=\'<div style="color:var(--mid)">Nessun movimento.</div>\';return;}
-  el.innerHTML=\'<table style="width:100%;font-size:12px"><thead><tr>\'+
-    \'<th>Data</th><th>Tipo</th><th>Q.tà</th><th>Causale</th></tr></thead><tbody>\'+
+  if(!data||!data.length){el.innerHTML=\\'<div style="color:var(--mid)">Nessun movimento.</div>\\';return;}
+  el.innerHTML=\\'<table style="width:100%;font-size:12px"><thead><tr>\\'+
+    \\'<th>Data</th><th>Tipo</th><th>Q.tà</th><th>Causale</th></tr></thead><tbody>\\'+
     data.map(function(m){
-      const col=m.tipo===\'carico\'?\'var(--green-tx)\':m.tipo===\'scarico\'?\'var(--red)\':\'var(--mid)\';
-      return \'<tr><td>\'+(m.created_at||\'\').slice(0,10)+\'</td>\'+
-        \'<td style="color:\'+col+\';font-weight:500">\'+m.tipo+\'</td>\'+
-        \'<td>\'+(m.tipo===\'scarico\'?\'-\':\'+\')+\'\'+m.quantita+\'</td>\'+
-        \'<td>\'+(m.causale||\'&#8212;\')+\'</td></tr>\';
-    }).join(\'\')+\'</tbody></table>\';
+      const col=m.tipo===\\'carico\\'?\\'var(--green-tx)\\':m.tipo===\\'scarico\\'?\\'var(--red)\\':\\'var(--mid)\\';
+      return \\'<tr><td>\\'+(m.created_at||\\'\\').slice(0,10)+\\'</td>\\'+
+        \\'<td style="color:\\'+col+\\';font-weight:500">\\'+m.tipo+\\'</td>\\'+
+        \\'<td>\\'+(m.tipo===\\'scarico\\'?\\'-\\':\\'+\\')+\\'\\'+m.quantita+\\'</td>\\'+
+        \\'<td>\\'+(m.causale||\\'&#8212;\\')+\\'</td></tr>\\';
+    }).join(\\'\\')+\\'</tbody></table>\\';
 }
 
 async function registraMovimento(){
-  if(!_magEditId){toast(\'Salva prima: articolo non salvato\',\'err\');return;}
-  const tipo=document.getElementById(\'mov-tipo\')?.value;
-  const qty=parseFloat(document.getElementById(\'mov-quantita\')?.value||0);
-  const causale=document.getElementById(\'mov-causale\')?.value?.trim()||null;
-  if(!qty||qty<=0){toast(\'Inserisci una quantità\',\'err\');return;}
+  if(!_magEditId){toast(\\'Salva prima: articolo non salvato\\',\\'err\\');return;}
+  const tipo=document.getElementById(\\'mov-tipo\\')?.value;
+  const qty=parseFloat(document.getElementById(\\'mov-quantita\\')?.value||0);
+  const causale=document.getElementById(\\'mov-causale\\')?.value?.trim()||null;
+  if(!qty||qty<=0){toast(\\'Inserisci una quantità\\',\\'err\\');return;}
   // Calcola nuova giacenza
-  const {data:art}=await sb.from(\'magazzino\').select(\'giacenza,scorta_minima,scorta_target\').eq(\'id\',_magEditId).single();
+  const {data:art}=await sb.from(\\'magazzino\\').select(\\'giacenza,scorta_minima,scorta_target\\').eq(\\'id\\',_magEditId).single();
   let giacenza=parseFloat(art?.giacenza||0);
-  if(tipo===\'carico\') giacenza+=qty;
-  else if(tipo===\'scarico\') giacenza=Math.max(0,giacenza-qty);
+  if(tipo===\\'carico\\') giacenza+=qty;
+  else if(tipo===\\'scarico\\') giacenza=Math.max(0,giacenza-qty);
   else giacenza=qty; // rettifica
   // Salva movimento
-  await sb.from(\'magazzino_movimenti\').insert([{magazzino_id:_magEditId,tipo,quantita:qty,causale}]);
+  await sb.from(\\'magazzino_movimenti\\').insert([{magazzino_id:_magEditId,tipo,quantita:qty,causale}]);
   // Aggiorna giacenza
-  await sb.from(\'magazzino\').update({giacenza,updated_at:new Date().toISOString()}).eq(\'id\',_magEditId);
+  await sb.from(\\'magazzino\\').update({giacenza,updated_at:new Date().toISOString()}).eq(\\'id\\',_magEditId);
   // Aggiorna UI
-  const gEl=document.getElementById(\'mag-giacenza\');if(gEl)gEl.value=giacenza;
-  document.getElementById(\'mov-quantita\').value=\'\';
-  document.getElementById(\'mov-causale\').value=\'\';
-  toast(\'Movimento registrato\',\'ok\');
+  const gEl=document.getElementById(\\'mag-giacenza\\');if(gEl)gEl.value=giacenza;
+  document.getElementById(\\'mov-quantita\\').value=\\'\\';
+  document.getElementById(\\'mov-causale\\').value=\\'\\';
+  toast(\\'Movimento registrato\\',\\'ok\\');
   caricaMovimenti(_magEditId);
   renderMagazzino();
   // Controlla sottoscorta
-  if(tipo===\'scarico\'&&giacenza<=parseFloat(art?.scorta_minima||0)){
-    toast(\'Attenzione: articolo sotto scorta!\',\'err\');
+  if(tipo===\\'scarico\\'&&giacenza<=parseFloat(art?.scorta_minima||0)){
+    toast(\\'Attenzione: articolo sotto scorta!\\',\\'err\\');
   }
 }
 
@@ -3852,80 +3852,80 @@ function selAccQta(){
 
 // Pannello blindato: senso apertura + misure + intero/taglio a misura
 async function cfgAccPannello(){
-  const {data:imp}=await sb.from(\'impostazioni\').select(\'valore\').eq(\'chiave\',\'supplemento_taglio_pannello\').maybeSingle();
+  const {data:imp}=await sb.from(\\'impostazioni\\').select(\\'valore\\').eq(\\'chiave\\',\\'supplemento_taglio_pannello\\').maybeSingle();
   CFG._suppTaglioPannello=parseFloat(imp?.valore||0);
-  const {data:magP}=await sb.from(\'magazzino\')
-    .select(\'altezza_mm,larghezza_mm,giacenza\')
-    .eq(\'categoria\',\'PAN-BL\').eq(\'codice_finitura\',CFG.finitura||\'\').order(\'altezza_mm\',{ascending:false});
+  const {data:magP}=await sb.from(\\'magazzino\\')
+    .select(\\'altezza_mm,larghezza_mm,giacenza\\')
+    .eq(\\'categoria\\',\\'PAN-BL\\').eq(\\'codice_finitura\\',CFG.finitura||\\'\\').order(\\'altezza_mm\\',{ascending:false});
   CFG._panMag=magP?.[0]||null;
   const hMag=CFG._panMag?.altezza_mm||0;
   const lMax=CFG._panMag?.larghezza_mm||0;
-  const sensi=[\'Interno DX\',\'Esterno DX\',\'Interno SX\',\'Esterno SX\',\'Nessuno\'];
-  const sensoSel=CFG.senso||\'\' ;
+  const sensi=[\\'Interno DX\\',\\'Esterno DX\\',\\'Interno SX\\',\\'Esterno SX\\',\\'Nessuno\\'];
+  const sensoSel=CFG.senso||\\'\\' ;
   var infoMag=CFG._panMag
-    ?\'<div style="background:var(--beige);border-radius:var(--radius);padding:10px 14px;font-size:12px;margin-bottom:14px;border:0.5px solid var(--border)">\'+
-      \'<strong>Pannello a magazzino:</strong> \'+hMag+\' x \'+lMax+\' mm\'+
-      (CFG._panMag.giacenza!=null?\' &mdash; Giacenza: <strong>\'+CFG._panMag.giacenza+\' pz</strong>\':\'\')+\'</div>\'
-    :\'<div style="background:var(--amber-bg);border-radius:var(--radius);padding:10px 14px;font-size:12px;margin-bottom:14px;color:var(--amber-tx)">\'+
-      \'Nessun pannello per la finitura <strong>\'+( CFG.finitura||\'\' )+\'</strong>.</div>\';
+    ?\\'<div style="background:var(--beige);border-radius:var(--radius);padding:10px 14px;font-size:12px;margin-bottom:14px;border:0.5px solid var(--border)">\\'+
+      \\'<strong>Pannello a magazzino:</strong> \\'+hMag+\\' x \\'+lMax+\\' mm\\'+
+      (CFG._panMag.giacenza!=null?\\' &mdash; Giacenza: <strong>\\'+CFG._panMag.giacenza+\\' pz</strong>\\':\\'\\')+\\'</div>\\'
+    :\\'<div style="background:var(--amber-bg);border-radius:var(--radius);padding:10px 14px;font-size:12px;margin-bottom:14px;color:var(--amber-tx)">\\'+
+      \\'Nessun pannello per la finitura <strong>\\'+( CFG.finitura||\\'\\' )+\\'</strong>.</div>\\';
   var sensiHtml=sensi.map(function(s){
     var att=s===sensoSel;
-    return \'<div onclick="selSensoPannello(\\\'\'+ s +\'\\\')" id="senso-\'+s.replace(/ /g,\'-\')+\'"\'+
-      \' style="padding:8px;border-radius:var(--radius);border:\'+( att?\'2px solid var(--red)\':\'0.5px solid var(--border)\')+\';\'+ 
-      \'cursor:pointer;text-align:center;font-size:12px;background:\'+( att?\'var(--red-bg)\':\'var(--white)\')+\';color:\'+( att?\'var(--red)\':\'var(--dark)\')+\'">\'+ s +\'</div>\';
-  }).join(\'\');
-  document.getElementById(\'cfg-body\').innerHTML=
-    \'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">\'+
-    \'<div style="font-size:13px;font-weight:500">Configurazione pannello <span style="color:var(--mid);font-weight:400">&mdash; \'+CFG.nome_modello+\'</span></div>\'+
-    \'<button class="btn btn-sm" onclick="renderCfgStep(&apos;finitura&apos;)">&larr; Indietro</button>\'+
-    \'</div>\'+infoMag+
-    \'<div style="display:grid;gap:14px;max-width:440px">\'+
-    \'<div><label style="font-size:12px;color:var(--mid);display:block;margin-bottom:6px">Senso apertura</label>\'+
-    \'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px" id="sensi-grid">\'+sensiHtml+\'</div>\'+
-    \'<input type="hidden" id="pannello-senso" value="\'+sensoSel+\'"></div>\'+
-    \'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">\'+
-    \'<div><label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Larghezza (mm)\'+( lMax?\' &mdash; max \'+lMax+\' mm\':\'\')+\'</label>\'+
-    \'<input type="number" id="pan-l" value="\'+( CFG.larghezza||\'\' )+\'" placeholder="es. 900"\'+
-    \' style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px"\'+
-    \' oninput="checkLarghezzaPan(this.value)"></div>\'+
-    \'<div><label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Altezza richiesta (mm)</label>\'+
-    \'<input type="number" id="pan-a" value="\'+( CFG.altezza||\'\' )+\'" placeholder="es. 2200"\'+
-    \' style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px"\'+
-    \' oninput="aggiornaZoccoliPreview(this.value)"></div></div>\'+
-    \'<div id="zoccoli-preview"></div>\'+
-    \'<button class="btn btn-red" onclick="selAccPannello()">Avanti &rarr;</button></div>\';
+    return \\'<div onclick="selSensoPannello(\\\'\\'+ s +\\'\\\')" id="senso-\\'+s.replace(/ /g,\\'-\\')+\\'"\\'+
+      \\' style="padding:8px;border-radius:var(--radius);border:\\'+( att?\\'2px solid var(--red)\\':\\'0.5px solid var(--border)\\')+\\';\\'+ 
+      \\'cursor:pointer;text-align:center;font-size:12px;background:\\'+( att?\\'var(--red-bg)\\':\\'var(--white)\\')+\\';color:\\'+( att?\\'var(--red)\\':\\'var(--dark)\\')+\\'">\\'+ s +\\'</div>\\';
+  }).join(\\'\\');
+  document.getElementById(\\'cfg-body\\').innerHTML=
+    \\'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">\\'+
+    \\'<div style="font-size:13px;font-weight:500">Configurazione pannello <span style="color:var(--mid);font-weight:400">&mdash; \\'+CFG.nome_modello+\\'</span></div>\\'+
+    \\'<button class="btn btn-sm" onclick="renderCfgStep(&apos;finitura&apos;)">&larr; Indietro</button>\\'+
+    \\'</div>\\'+infoMag+
+    \\'<div style="display:grid;gap:14px;max-width:440px">\\'+
+    \\'<div><label style="font-size:12px;color:var(--mid);display:block;margin-bottom:6px">Senso apertura</label>\\'+
+    \\'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px" id="sensi-grid">\\'+sensiHtml+\\'</div>\\'+
+    \\'<input type="hidden" id="pannello-senso" value="\\'+sensoSel+\\'"></div>\\'+
+    \\'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">\\'+
+    \\'<div><label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Larghezza (mm)\\'+( lMax?\\' &mdash; max \\'+lMax+\\' mm\\':\\'\\')+\\'</label>\\'+
+    \\'<input type="number" id="pan-l" value="\\'+( CFG.larghezza||\\'\\' )+\\'" placeholder="es. 900"\\'+
+    \\' style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px"\\'+
+    \\' oninput="checkLarghezzaPan(this.value)"></div>\\'+
+    \\'<div><label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Altezza richiesta (mm)</label>\\'+
+    \\'<input type="number" id="pan-a" value="\\'+( CFG.altezza||\\'\\' )+\\'" placeholder="es. 2200"\\'+
+    \\' style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px"\\'+
+    \\' oninput="aggiornaZoccoliPreview(this.value)"></div></div>\\'+
+    \\'<div id="zoccoli-preview"></div>\\'+
+    \\'<button class="btn btn-red" onclick="selAccPannello()">Avanti &rarr;</button></div>\\';
   if(CFG.altezza) aggiornaZoccoliPreview(CFG.altezza);
 }
 
 function checkLarghezzaPan(val){
   const lMax=CFG._panMag?.larghezza_mm||0;
-  const warn=document.getElementById(\'pan-l-warn\');
-  if(warn) warn.style.display=(lMax>0&&parseFloat(val)>lMax)?\'block\':\'none\';
+  const warn=document.getElementById(\\'pan-l-warn\\');
+  if(warn) warn.style.display=(lMax>0&&parseFloat(val)>lMax)?\\'block\\':\\'none\\';
 }
 
 function aggiornaZoccoliPreview(hStr){
-  const el=document.getElementById(\'zoccoli-preview\');
+  const el=document.getElementById(\\'zoccoli-preview\\');
   if(!el) return;
   const h=parseFloat(hStr||0);
   const hMag=CFG._panMag?.altezza_mm||0;
-  if(!h){el.innerHTML=\'\';return;}
+  if(!h){el.innerHTML=\\'\\';return;}
   if(!hMag){
-    el.innerHTML=\'<div style="font-size:12px;color:var(--mid)">Altezza registrata senza calcolo zoccoli.</div>\';
+    el.innerHTML=\\'<div style="font-size:12px;color:var(--mid)">Altezza registrata senza calcolo zoccoli.</div>\\';
     return;
   }
   if(h<=hMag){
-    el.innerHTML=\'<div style="background:var(--green-bg);border-radius:var(--radius);padding:10px 12px;font-size:12px;color:var(--green-tx)">\'+
-      \'&#10003; Taglio diretto: pannello H \'+hMag+\' mm &rarr; <strong>\'+h+\' mm</strong></div>\';
+    el.innerHTML=\\'<div style="background:var(--green-bg);border-radius:var(--radius);padding:10px 12px;font-size:12px;color:var(--green-tx)">\\'+
+      \\'&#10003; Taglio diretto: pannello H \\'+hMag+\\' mm &rarr; <strong>\\'+h+\\' mm</strong></div>\\';
   } else {
     let z=0;
     while(hMag+z*80<h) z++;
     const hT=h-z*80;
     if(hT<=0){
-      el.innerHTML=\'<div style="background:var(--red-bg);border-radius:var(--radius);padding:10px 12px;font-size:12px;color:var(--red)">Altezza non raggiungibile.</div>\';
+      el.innerHTML=\\'<div style="background:var(--red-bg);border-radius:var(--radius);padding:10px 12px;font-size:12px;color:var(--red)">Altezza non raggiungibile.</div>\\';
     } else {
-      el.innerHTML=\'<div style="background:var(--amber-bg);border-radius:var(--radius);padding:10px 12px;font-size:12px;color:var(--amber-tx)">\'+
-        \'<strong>\'+z+\' zoccolo\'+( z>1?\'li\':\'\')+\'</strong> da 80 mm &mdash; \'+
-        \'pannello tagliato a <strong>\'+hT+\' mm</strong> + \'+z+\' x 80 mm = \'+h+\' mm</div>\';
+      el.innerHTML=\\'<div style="background:var(--amber-bg);border-radius:var(--radius);padding:10px 12px;font-size:12px;color:var(--amber-tx)">\\'+
+        \\'<strong>\\'+z+\\' zoccolo\\'+( z>1?\\'li\\':\\'\\')+\\'</strong> da 80 mm &mdash; \\'+
+        \\'pannello tagliato a <strong>\\'+hT+\\' mm</strong> + \\'+z+\\' x 80 mm = \\'+h+\\' mm</div>\\';
     }
   }
 }
@@ -3956,22 +3956,22 @@ function selTipoPannello(tipo){
 }
 
 async function selAccPannello(){
-  const senso=document.getElementById(\'pannello-senso\')?.value;
-  if(!senso){toast(\'Seleziona il senso di apertura\',\'err\');return;}
-  const l=parseInt(document.getElementById(\'pan-l\')?.value||0);
-  const a=parseInt(document.getElementById(\'pan-a\')?.value||0);
-  if(!l||!a){toast(\'Inserisci larghezza e altezza\',\'err\');return;}
+  const senso=document.getElementById(\\'pannello-senso\\')?.value;
+  if(!senso){toast(\\'Seleziona il senso di apertura\\',\\'err\\');return;}
+  const l=parseInt(document.getElementById(\\'pan-l\\')?.value||0);
+  const a=parseInt(document.getElementById(\\'pan-a\\')?.value||0);
+  if(!l||!a){toast(\\'Inserisci larghezza e altezza\\',\\'err\\');return;}
   const panMag=CFG._panMag;
   const hMag=panMag?.altezza_mm||0;
   const lMax=panMag?.larghezza_mm||0;
-  if(lMax>0&&l>lMax){toast(\'Larghezza massima: \'+lMax+\' mm\',\'err\');return;}
+  if(lMax>0&&l>lMax){toast(\\'Larghezza massima: \\'+lMax+\\' mm\\',\\'err\\');return;}
   CFG.senso=senso;CFG.larghezza=l;CFG.altezza=a;CFG.misura_custom=false;
   CFG.p_extra=CFG._suppTaglioPannello||0;
   CFG._zoccoliAuto=0;CFG._hTaglioPannello=a;CFG._hMagPannello=hMag;
   if(hMag>0&&a>hMag){
     let z=0; while(hMag+z*80<a) z++;
     const hT=a-z*80;
-    if(hT<=0||hT>hMag){toast(\'Altezza non raggiungibile con i pannelli disponibili\',\'err\');return;}
+    if(hT<=0||hT>hMag){toast(\\'Altezza non raggiungibile con i pannelli disponibili\\',\\'err\\');return;}
     CFG._zoccoliAuto=z;CFG._hTaglioPannello=hT;
   }
   cfgUpdatePrice();cfgRiepilogo();
@@ -4656,12 +4656,12 @@ async function renderOrdiniDiretti(){
       '</div>'+
       '<div class="card">'+
         '<div class="card-header">'+
-          '<span class="card-title">Conferme d&#39;ordine</span>'+
+          '<span class="card-title">Conferme d\\'ordine</span>'+
           '<div style="display:flex;gap:8px;align-items:center">'+
             '<input type="text" id="ord-cerca" placeholder="Cerca numero, cliente, riferimento..." '+
               'style="padding:6px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;width:340px" '+
               'oninput="filtraOrd(this.value)">'+
-            '<button class="btn btn-red btn-sm" onclick="nuovoOrdineDiretto()">+ Nuova conferma d&#39;ordine</button>'+
+            '<button class="btn btn-red btn-sm" onclick="nuovoOrdineDiretto()">+ Nuova conferma d\\'ordine</button>'+
           '</div>'+
         '</div>'+
         '<table>'+
@@ -4674,7 +4674,7 @@ async function renderOrdiniDiretti(){
     console.error('renderOrdiniDiretti error:',e);
     document.getElementById('main-content').innerHTML='<div class="card"><div style="padding:20px">'+
       '<p style="color:var(--red);margin-bottom:12px">Errore: '+e.message+'</p>'+
-      '<button class="btn btn-red btn-sm" onclick="nuovoOrdineDiretto()">+ Nuova conferma d&#39;ordine</button>'+
+      '<button class="btn btn-red btn-sm" onclick="nuovoOrdineDiretto()">+ Nuova conferma d\\'ordine</button>'+
       '</div></div>';
   }
 }
@@ -4690,7 +4690,7 @@ function filtraOrd(filtro){
   var tbody=document.getElementById('ord-tbody');
   if(!tbody)return;
   if(!filtered.length){
-    tbody.innerHTML='<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--mid);font-style:italic">'+(termini.length?'Nessun risultato':'Nessuna conferma d&#39;ordine')+'</td></tr>';
+    tbody.innerHTML='<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--mid);font-style:italic">'+(termini.length?'Nessun risultato':'Nessuna conferma d\\'ordine')+'</td></tr>';
     return;
   }
   tbody.innerHTML=filtered.map(function(o){
@@ -4718,7 +4718,7 @@ async function apriModificaOrdine(id){
   const modal=ensureModalInBody('modal-nuovo-doc');
   modal.dataset.mode='ordine';
   modal.dataset.editId=id;
-  document.getElementById('ndoc-title').textContent='Modifica conferma d&#39;ordine';
+  document.getElementById('ndoc-title').textContent='Modifica conferma d\\'ordine';
   document.getElementById('ndoc-clienti').innerHTML='<option value="">Seleziona...</option>'+(clienti||[]).map(function(c){
     return '<option value="'+c.id+'"'+(c.id===ord.anagrafica_id?' selected':'')+
       ' data-listino="'+(c.listino||'A')+'" data-sa="'+(c.sconto_dedicato_A||0)+
@@ -4757,7 +4757,7 @@ async function nuovoOrdineDiretto(){
     if(!modal){ toast('Errore: modal non trovato','err'); return; }
     modal.dataset.mode='ordine';
     delete modal.dataset.editId;
-    document.getElementById('ndoc-title').textContent="Nuova conferma d&#39;ordine";
+    document.getElementById('ndoc-title').textContent="Nuova conferma d\\'ordine";
     document.getElementById('ndoc-clienti').innerHTML='<option value="">Seleziona cliente...</option>'+(clienti||[]).map(function(c){
       return '<option value="'+c.id+'" data-listino="'+(c.listino||'A')+'" data-sa="'+(c.sconto_dedicato_A||0)+
         '" data-sp="'+(c.sconto_dedicato_P||0)+'" data-ind="'+(c.indirizzo||'')+
@@ -4806,34 +4806,34 @@ async function renderOrdineDetail(id){
       '<td style="text-align:center">'+r.quantita+'</td>'+
       '<td style="text-align:right">'+fmtEuro(r.prezzo_unitario)+'</td>'+
       '<td style="text-align:right;font-weight:500">'+fmtEuro(r.prezzo_totale_riga)+'</td>'+
-      '<td><button class="btn btn-sm" style="color:var(--red)" onclick="eliminaRiga(\'righe_ordine\',\''+r.id+'\',\''+id+'\',\'ordine\')">\xc3\x97</button></td>'+
+      '<td><button class="btn btn-sm" style="color:var(--red)" onclick="eliminaRiga(\\'righe_ordine\\',\\''+r.id+'\\',\\''+id+'\\',\\'ordine\\')">\xc3\x97</button></td>'+
       '</tr>';
   }).join('');
 
   var bottoniApprovazione='';
   if(ord.stato==='in_attesa'&&possoApprovareComm){
-    bottoniApprovazione='<button class="btn btn-red btn-sm" onclick="approvaOrdine(\''+id+'\',\'comm\')">Approva (commerciale)</button> '+
-      '<button class="btn btn-sm" onclick="cambiaStato(\'ordini_vendita\',\''+id+'\',\'bloccato\',\'renderOrdineDetail\')">Blocca</button>';
+    bottoniApprovazione='<button class="btn btn-red btn-sm" onclick="approvaOrdine(\\''+id+'\\',\\'comm\\')">Approva (commerciale)</button> '+
+      '<button class="btn btn-sm" onclick="cambiaStato(\\'ordini_vendita\\',\\''+id+'\\',\\'bloccato\\',\\'renderOrdineDetail\\')">Blocca</button>';
   }
   if(ord.stato==='approvato_comm'&&ord.richiede_approvazione_tecnica&&possoApprovaTec){
-    bottoniApprovazione+='<button class="btn btn-red btn-sm" onclick="approvaOrdine(\''+id+'\',\'tec\')">Approva (tecnico)</button>';
+    bottoniApprovazione+='<button class="btn btn-red btn-sm" onclick="approvaOrdine(\\''+id+'\\',\\'tec\\')">Approva (tecnico)</button>';
   }
   if((ord.stato==='approvato_comm'&&!ord.richiede_approvazione_tecnica)||(ord.stato==='approvato_tec')){
-    bottoniApprovazione+='<button class="btn btn-red btn-sm" onclick="cambiaStato(\'ordini_vendita\',\''+id+'\',\'in_produzione\',\'renderOrdineDetail\')">Lancia in produzione</button>';
+    bottoniApprovazione+='<button class="btn btn-red btn-sm" onclick="cambiaStato(\\'ordini_vendita\\',\\''+id+'\\',\\'in_produzione\\',\\'renderOrdineDetail\\')">Lancia in produzione</button>';
   }
 
   var puoModificare = ord.stato==='in_attesa';
 
   document.getElementById('main-content').innerHTML=
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'+
-    '<div><button class="btn btn-sm" onclick="renderOrdiniDiretti()">← Tutte le conferme d&#39;ordine</button></div>'+
+    '<div><button class="btn btn-sm" onclick="renderOrdiniDiretti()">← Tutte le conferme d\\'ordine</button></div>'+
     '<div style="display:flex;gap:8px">'+
       (puoModificare?
-        '<button class="btn btn-sm" onclick="openConfiguratore(\'ordine\',\''+id+'\',\''+ord.listino+'\')">+ Aggiungi porta</button>'+
-        '<button class="btn btn-sm" onclick="esportaPDF(\'ordine\',\''+id+'\')">&#128196; Esporta PDF</button>'+
-        '<button class="btn btn-sm" onclick="apriModificaOrdine(\''+id+'\')" style="display:inline-flex;align-items:center;gap:5px">'+
+        '<button class="btn btn-sm" onclick="openConfiguratore(\\'ordine\\',\\''+id+'\\',\\''+ord.listino+'\\')">+ Aggiungi porta</button>'+
+        '<button class="btn btn-sm" onclick="esportaPDF(\\'ordine\\',\\''+id+'\\')">&#128196; Esporta PDF</button>'+
+        '<button class="btn btn-sm" onclick="apriModificaOrdine(\\''+id+'\\')" style="display:inline-flex;align-items:center;gap:5px">'+
         '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Modifica</button>'+
-        '<button class="btn btn-sm" style="color:var(--red);display:inline-flex;align-items:center;gap:5px" onclick="eliminaOrdineDiretto(\''+id+'\')">'+
+        '<button class="btn btn-sm" style="color:var(--red);display:inline-flex;align-items:center;gap:5px" onclick="eliminaOrdineDiretto(\\''+id+'\\')">'+
         '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>Elimina</button>'
       :'')+
       bottoniApprovazione+
@@ -4875,7 +4875,7 @@ async function renderOrdineDetail(id){
 }
 
 async function eliminaOrdineDiretto(id){
-  if(!confirm('Eliminare definitivamente questa conferma d&#39;ordine?'))return;
+  if(!confirm('Eliminare definitivamente questa conferma d\\'ordine?'))return;
   await sb.from('righe_ordine').delete().eq('ordine_id',id);
   const {error}=await sb.from('ordini_vendita').delete().eq('id',id);
   if(error){toast('Errore: '+error.message,'err');return;}
@@ -5906,9 +5906,9 @@ async function eliminaDistinta(id){
 // AGENTI
 // ══════════════════════════════════════════════════════
 async function adminMagazzino(){
-  document.getElementById(\'admin-main\').innerHTML=
-    adminSubTabs([{id:\'categorie\',label:\'Categorie\'}],\'categorie\',\'switchMagSub\')+
-    \'<div id="admin-sub"></div>\';
+  document.getElementById(\\'admin-main\\').innerHTML=
+    adminSubTabs([{id:\\'categorie\\',label:\\'Categorie\\'}],\\'categorie\\',\\'switchMagSub\\')+
+    \\'<div id="admin-sub"></div>\\';
   adminCategorieMag();
 }
 
@@ -5917,170 +5917,170 @@ function switchMagSub(sub){
 }
 
 async function adminCategorieMag(){
-  const {data,error}=await sb.from(\'categorie_magazzino\').select(\'*\').order(\'nome\');
-  if(error){document.getElementById(\'admin-sub\').innerHTML=\'<p style="color:var(--red)">Errore.</p>\';return;}
+  const {data,error}=await sb.from(\\'categorie_magazzino\\').select(\\'*\\').order(\\'nome\\');
+  if(error){document.getElementById(\\'admin-sub\\').innerHTML=\\'<p style="color:var(--red)">Errore.</p>\\';return;}
   const rows=(data||[]).map(function(c){
     function flagBtn(campo,label,val){
       var on=!!val;
-      return \'<span data-tabella="categorie_magazzino" data-id="\'+c.id+\'" data-campo="\'+campo+\'" data-val="\'+on+\'"\'+
-        \' onclick="toggleCampo(this.dataset.tabella,this.dataset.id,this.dataset.campo,this.dataset.val)"\'+
-        \' style="cursor:pointer;padding:2px 7px;border-radius:4px;font-size:11px;font-weight:600;margin-right:3px;\'+
-        \'background:\'+( on?\'var(--red)\':\'var(--border)\')+\';color:\'+( on?\'#fff\':\'var(--mid)\')+\'">\'+ label +\'</span>\';
+      return \\'<span data-tabella="categorie_magazzino" data-id="\\'+c.id+\\'" data-campo="\\'+campo+\\'" data-val="\\'+on+\\'"\\'+
+        \\' onclick="toggleCampo(this.dataset.tabella,this.dataset.id,this.dataset.campo,this.dataset.val)"\\'+
+        \\' style="cursor:pointer;padding:2px 7px;border-radius:4px;font-size:11px;font-weight:600;margin-right:3px;\\'+
+        \\'background:\\'+( on?\\'var(--red)\\':\\'var(--border)\\')+\\';color:\\'+( on?\\'#fff\\':\\'var(--mid)\\')+\\'">\\'+ label +\\'</span>\\';
     }
-    return \'<tr>\'+
-      \'<td><input type="text" value="\'+c.nome+\'" data-id="\'+c.id+\'" data-campo="nome"\'+
-      \' style="border:none;background:transparent;width:180px;font-size:13px" onchange="adminSalvaCatMag(this)"></td>\'+
-      \'<td><input type="text" value="\'+c.codice+\'" data-id="\'+c.id+\'" data-campo="codice"\'+
-      \' style="border:none;background:transparent;width:120px;font-size:13px;font-family:monospace" onchange="adminSalvaCatMag(this)"></td>\'+
-      \'<td>\'+
-        flagBtn(\'colori_laminato\',\'LAM\',c.colori_laminato)+
-        flagBtn(\'colori_laccato\',\'LAC\',c.colori_laccato)+
-        flagBtn(\'colori_ferramenta\',\'FER\',c.colori_ferramenta)+
-      \'</td>\'+
-      \'<td><input type="text" value="\'+( c.descrizione||\'\')+\'" data-id="\'+c.id+\'" data-campo="descrizione"\'+
-      \' placeholder="Descrizione" style="border:none;background:transparent;width:200px;font-size:13px" onchange="adminSalvaCatMag(this)"></td>\'+
-      \'<td style="text-align:right"><button class="btn btn-sm" style="color:var(--red)" data-cid="\'+c.id+\'" onclick="eliminaCategoriaMag(this.dataset.cid)">×</button></td>\'+
-      \'</tr>\';
-  }).join(\'\');
-  var html=\'<table style="width:100%"><thead><tr><th>Nome</th><th>Codice</th><th>Colori</th><th>Descrizione</th><th></th></tr></thead>\'+
-    \'<tbody>\'+rows+\'</tbody></table>\';
-  document.getElementById(\'admin-sub\').innerHTML=adminCard(\'Categorie magazzino\',html,
-    \'<button class="btn btn-sm btn-red" onclick="aggiungiCategoriaMag()">+ Nuova categoria</button>\');
+    return \\'<tr>\\'+
+      \\'<td><input type="text" value="\\'+c.nome+\\'" data-id="\\'+c.id+\\'" data-campo="nome"\\'+
+      \\' style="border:none;background:transparent;width:180px;font-size:13px" onchange="adminSalvaCatMag(this)"></td>\\'+
+      \\'<td><input type="text" value="\\'+c.codice+\\'" data-id="\\'+c.id+\\'" data-campo="codice"\\'+
+      \\' style="border:none;background:transparent;width:120px;font-size:13px;font-family:monospace" onchange="adminSalvaCatMag(this)"></td>\\'+
+      \\'<td>\\'+
+        flagBtn(\\'colori_laminato\\',\\'LAM\\',c.colori_laminato)+
+        flagBtn(\\'colori_laccato\\',\\'LAC\\',c.colori_laccato)+
+        flagBtn(\\'colori_ferramenta\\',\\'FER\\',c.colori_ferramenta)+
+      \\'</td>\\'+
+      \\'<td><input type="text" value="\\'+( c.descrizione||\\'\\')+\\'" data-id="\\'+c.id+\\'" data-campo="descrizione"\\'+
+      \\' placeholder="Descrizione" style="border:none;background:transparent;width:200px;font-size:13px" onchange="adminSalvaCatMag(this)"></td>\\'+
+      \\'<td style="text-align:right"><button class="btn btn-sm" style="color:var(--red)" data-cid="\\'+c.id+\\'" onclick="eliminaCategoriaMag(this.dataset.cid)">×</button></td>\\'+
+      \\'</tr>\\';
+  }).join(\\'\\');
+  var html=\\'<table style="width:100%"><thead><tr><th>Nome</th><th>Codice</th><th>Colori</th><th>Descrizione</th><th></th></tr></thead>\\'+
+    \\'<tbody>\\'+rows+\\'</tbody></table>\\';
+  document.getElementById(\\'admin-sub\\').innerHTML=adminCard(\\'Categorie magazzino\\',html,
+    \\'<button class="btn btn-sm btn-red" onclick="aggiungiCategoriaMag()">+ Nuova categoria</button>\\');
 }
 
 async function adminSalvaCatMag(el){
   const id=el.dataset.id,campo=el.dataset.campo,valore=el.value.trim();
   if(!id||!campo) return;
-  const {error}=await sb.from(\'categorie_magazzino\').update({[campo]:valore}).eq(\'id\',id);
-  if(error){toast(\'Errore: \'+error.message,\'err\');return;}
-  toast(\'Salvato\',\'ok\');
-  if(el.tagName!==\'SELECT\'){el.style.background=\'var(--green-bg)\';setTimeout(function(){el.style.background=\'transparent\';},1500);}
+  const {error}=await sb.from(\\'categorie_magazzino\\').update({[campo]:valore}).eq(\\'id\\',id);
+  if(error){toast(\\'Errore: \\'+error.message,\\'err\\');return;}
+  toast(\\'Salvato\\',\\'ok\\');
+  if(el.tagName!==\\'SELECT\\'){el.style.background=\\'var(--green-bg)\\';setTimeout(function(){el.style.background=\\'transparent\\';},1500);}
 }
 
 async function aggiungiCategoriaMag(){
-  const nome=prompt(\'Nome categoria (es. Pannello blindato):\');
+  const nome=prompt(\\'Nome categoria (es. Pannello blindato):\\');
   if(!nome||!nome.trim()) return;
-  const codice=(prompt(\'Codice (es. PAN-BL):\')||nome.trim().toLowerCase().replace(/ /g,\'-\')).trim();
+  const codice=(prompt(\\'Codice (es. PAN-BL):\\')||nome.trim().toLowerCase().replace(/ /g,\\'-\\')).trim();
   if(!codice) return;
-  const {error}=await sb.from(\'categorie_magazzino\').insert([{nome:nome.trim(),codice,tipo_colori:\'nessuno\'}]);
-  if(error){toast(\'Errore: \'+error.message,\'err\');return;}
-  toast(\'Categoria aggiunta\',\'ok\');
+  const {error}=await sb.from(\\'categorie_magazzino\\').insert([{nome:nome.trim(),codice,tipo_colori:\\'nessuno\\'}]);
+  if(error){toast(\\'Errore: \\'+error.message,\\'err\\');return;}
+  toast(\\'Categoria aggiunta\\',\\'ok\\');
   adminCategorieMag();
 }
 
 async function eliminaCategoriaMag(id){
-  if(!confirm(\'Eliminare questa categoria?\')) return;
-  const {error}=await sb.from(\'categorie_magazzino\').delete().eq(\'id\',id);
-  if(error){toast(\'Errore: \'+error.message,\'err\');return;}
-  toast(\'Eliminata\',\'ok\');
+  if(!confirm(\\'Eliminare questa categoria?\\')) return;
+  const {error}=await sb.from(\\'categorie_magazzino\\').delete().eq(\\'id\\',id);
+  if(error){toast(\\'Errore: \\'+error.message,\\'err\\');return;}
+  toast(\\'Eliminata\\',\\'ok\\');
   adminCategorieMag();
 }
 
 async function adminDistinteRegole(){
-  const {data:regole}=await sb.from(\'distinta_regole\').select(\'*\').order(\'codice_serie\').order(\'nome\');
+  const {data:regole}=await sb.from(\\'distinta_regole\\').select(\\'*\\').order(\\'codice_serie\\').order(\\'nome\\');
   const rows=(regole||[]).map(function(r){
-    var conds=[r.codice_serie,r.codice_modello,r.tipologia,r.codice_finitura,r.colore_ferramenta].filter(Boolean).join(\' / \');
-    var stato=r.attiva?\'<span class="badge bg">Attiva</span>\':\'<span class="badge br">Inattiva</span>\';
-    return \'<tr>\'+
-      \'<td><strong>\'+r.nome+\'</strong></td>\'+
-      \'<td style="font-size:12px;color:var(--mid)">\'+( conds||\' &mdash; qualsiasi &mdash;\')+\'</td>\'+
-      \'<td>\'+stato+\'</td>\'+
-      \'<td style="text-align:right">\'+
-        \'<button class="btn btn-sm" title="Componenti" data-rid="\'+r.id+\'" onclick="apriRegola(this.dataset.rid)" style="padding:4px 6px">\'+
-        \'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></button> \'+
-        \'<button class="btn btn-sm" title="Modifica" data-rid="\'+r.id+\'" onclick="modificaRegola(this.dataset.rid)" style="padding:4px 6px">\'+
-        \'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button> \'+
-        \'<button class="btn btn-sm" title="Duplica" data-rid="\'+r.id+\'" onclick="duplicaRegola(this.dataset.rid)" style="padding:4px 6px">\'+
-        \'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button> \'+
-        \'<button class="btn btn-sm" title="Elimina" style="color:var(--red)" data-rid="\'+r.id+\'" onclick="eliminaRegola(this.dataset.rid)" style="padding:4px 6px">\'+
-        \'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg></button>\'+
-      \'</td>\'+
-      \'</tr>\';
-  }).join(\'\');
-  var html=\'<table style="width:100%"><thead><tr>\'+
-    \'<th>Nome regola</th><th>Condizioni</th><th>Stato</th><th></th></tr></thead>\'+
-    \'<tbody>\'+(rows||\'<tr><td colspan="4" style="text-align:center;color:var(--mid);padding:20px">Nessuna regola</td></tr>\')+\'</tbody></table>\';
-  document.getElementById(\'distinte-sub\').innerHTML=adminCard(\'Regole distinta dinamica\',html,
-    \'<button class="btn btn-sm btn-red" onclick="nuovaRegola()">+ Nuova regola</button>\');
+    var conds=[r.codice_serie,r.codice_modello,r.tipologia,r.codice_finitura,r.colore_ferramenta].filter(Boolean).join(\\' / \\');
+    var stato=r.attiva?\\'<span class="badge bg">Attiva</span>\\':\\'<span class="badge br">Inattiva</span>\\';
+    return \\'<tr>\\'+
+      \\'<td><strong>\\'+r.nome+\\'</strong></td>\\'+
+      \\'<td style="font-size:12px;color:var(--mid)">\\'+( conds||\\' &mdash; qualsiasi &mdash;\\')+\\'</td>\\'+
+      \\'<td>\\'+stato+\\'</td>\\'+
+      \\'<td style="text-align:right">\\'+
+        \\'<button class="btn btn-sm" title="Componenti" data-rid="\\'+r.id+\\'" onclick="apriRegola(this.dataset.rid)" style="padding:4px 6px">\\'+
+        \\'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></button> \\'+
+        \\'<button class="btn btn-sm" title="Modifica" data-rid="\\'+r.id+\\'" onclick="modificaRegola(this.dataset.rid)" style="padding:4px 6px">\\'+
+        \\'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button> \\'+
+        \\'<button class="btn btn-sm" title="Duplica" data-rid="\\'+r.id+\\'" onclick="duplicaRegola(this.dataset.rid)" style="padding:4px 6px">\\'+
+        \\'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button> \\'+
+        \\'<button class="btn btn-sm" title="Elimina" style="color:var(--red)" data-rid="\\'+r.id+\\'" onclick="eliminaRegola(this.dataset.rid)" style="padding:4px 6px">\\'+
+        \\'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg></button>\\'+
+      \\'</td>\\'+
+      \\'</tr>\\';
+  }).join(\\'\\');
+  var html=\\'<table style="width:100%"><thead><tr>\\'+
+    \\'<th>Nome regola</th><th>Condizioni</th><th>Stato</th><th></th></tr></thead>\\'+
+    \\'<tbody>\\'+(rows||\\'<tr><td colspan="4" style="text-align:center;color:var(--mid);padding:20px">Nessuna regola</td></tr>\\')+\\'</tbody></table>\\';
+  document.getElementById(\\'distinte-sub\\').innerHTML=adminCard(\\'Regole distinta dinamica\\',html,
+    \\'<button class="btn btn-sm btn-red" onclick="nuovaRegola()">+ Nuova regola</button>\\');
 }
 
 async function nuovaRegola(){
-  const {data:serie}=await sb.from(\'serie\').select(\'codice,nome\').order(\'nome\');
-  var serieOpts=(serie||[]).map(function(s){return \'<option value="\'+s.codice+\'">\'+ s.codice+\' - \'+s.nome+\'</option>\';}).join(\'\');
-  var tipoOpts=[\'BAT\',\'CS\',\'FM\',\'BAT2A\',\'CS2A\',\'ROTO\',\'SE\',\'PAS\',\'SOP\'].map(function(t){return \'<option value="\'+t+\'">\'+ t+\'</option>\';}).join(\'\');
-  document.getElementById(\'modal-regola-body\').innerHTML=
-    \'<div class="form-field"><label>Nome regola *</label><input id="reg-nome" type="text" placeholder="es. TAM Allori BAT"></div>\'+
-    \'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">\'+
-    \'<div class="form-field"><label>Serie</label><select id="reg-serie"><option value="">&mdash; tutte &mdash;</option>\'+serieOpts+\'</select></div>\'+
-    \'<div class="form-field"><label>Modello (codice)</label><input id="reg-modello" type="text" placeholder="es. Allori1A"></div>\'+
-    \'<div class="form-field"><label>Tipologia</label><select id="reg-tipologia"><option value="">&mdash; tutte &mdash;</option>\'+tipoOpts+\'</select></div>\'+
-    \'<div class="form-field"><label>Finitura (codice)</label><input id="reg-finitura" type="text" placeholder="vuoto=tutte"></div>\'+
-    \'<div class="form-field"><label>Colore ferramenta</label><input id="reg-ferramenta" type="text" placeholder="vuoto=tutti"></div>\'+
-    \'</div>\'+
-    \'<div class="form-field"><label>Note</label><input id="reg-note" type="text"></div>\'+
-    \'<label style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:4px">\'+
-    \'<input type="checkbox" id="reg-attiva" checked> Regola attiva</label>\';
+  const {data:serie}=await sb.from(\\'serie\\').select(\\'codice,nome\\').order(\\'nome\\');
+  var serieOpts=(serie||[]).map(function(s){return \\'<option value="\\'+s.codice+\\'">\\'+ s.codice+\\' - \\'+s.nome+\\'</option>\\';}).join(\\'\\');
+  var tipoOpts=[\\'BAT\\',\\'CS\\',\\'FM\\',\\'BAT2A\\',\\'CS2A\\',\\'ROTO\\',\\'SE\\',\\'PAS\\',\\'SOP\\'].map(function(t){return \\'<option value="\\'+t+\\'">\\'+ t+\\'</option>\\';}).join(\\'\\');
+  document.getElementById(\\'modal-regola-body\\').innerHTML=
+    \\'<div class="form-field"><label>Nome regola *</label><input id="reg-nome" type="text" placeholder="es. TAM Allori BAT"></div>\\'+
+    \\'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">\\'+
+    \\'<div class="form-field"><label>Serie</label><select id="reg-serie"><option value="">&mdash; tutte &mdash;</option>\\'+serieOpts+\\'</select></div>\\'+
+    \\'<div class="form-field"><label>Modello (codice)</label><input id="reg-modello" type="text" placeholder="es. Allori1A"></div>\\'+
+    \\'<div class="form-field"><label>Tipologia</label><select id="reg-tipologia"><option value="">&mdash; tutte &mdash;</option>\\'+tipoOpts+\\'</select></div>\\'+
+    \\'<div class="form-field"><label>Finitura (codice)</label><input id="reg-finitura" type="text" placeholder="vuoto=tutte"></div>\\'+
+    \\'<div class="form-field"><label>Colore ferramenta</label><input id="reg-ferramenta" type="text" placeholder="vuoto=tutti"></div>\\'+
+    \\'</div>\\'+
+    \\'<div class="form-field"><label>Note</label><input id="reg-note" type="text"></div>\\'+
+    \\'<label style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:4px">\\'+
+    \\'<input type="checkbox" id="reg-attiva" checked> Regola attiva</label>\\';
   _regolaEditId=null;
-  document.getElementById(\'modal-regola-title\').textContent=\'Nuova regola\';
-  const mo=ensureModalInBody(\'modal-regola\');if(mo)mo.classList.add(\'open\');
+  document.getElementById(\\'modal-regola-title\\').textContent=\\'Nuova regola\\';
+  const mo=ensureModalInBody(\\'modal-regola\\');if(mo)mo.classList.add(\\'open\\');
 }
 
 var _regolaEditId=null;
 
 async function salvaRegola(){
   const d={
-    nome:document.getElementById(\'reg-nome\')?.value?.trim(),
-    codice_serie:document.getElementById(\'reg-serie\')?.value?.trim()||null,
-    codice_modello:document.getElementById(\'reg-modello\')?.value?.trim()||null,
-    tipologia:document.getElementById(\'reg-tipologia\')?.value?.trim()||null,
-    codice_finitura:document.getElementById(\'reg-finitura\')?.value?.trim()||null,
-    colore_ferramenta:document.getElementById(\'reg-ferramenta\')?.value?.trim()||null,
-    note:document.getElementById(\'reg-note\')?.value?.trim()||null,
-    attiva:document.getElementById(\'reg-attiva\')?.checked??true,
+    nome:document.getElementById(\\'reg-nome\\')?.value?.trim(),
+    codice_serie:document.getElementById(\\'reg-serie\\')?.value?.trim()||null,
+    codice_modello:document.getElementById(\\'reg-modello\\')?.value?.trim()||null,
+    tipologia:document.getElementById(\\'reg-tipologia\\')?.value?.trim()||null,
+    codice_finitura:document.getElementById(\\'reg-finitura\\')?.value?.trim()||null,
+    colore_ferramenta:document.getElementById(\\'reg-ferramenta\\')?.value?.trim()||null,
+    note:document.getElementById(\\'reg-note\\')?.value?.trim()||null,
+    attiva:document.getElementById(\\'reg-attiva\\')?.checked??true,
   };
-  if(!d.nome){toast(\'Inserisci il nome della regola\',\'err\');return;}
+  if(!d.nome){toast(\\'Inserisci il nome della regola\\',\\'err\\');return;}
   var er;
-  if(_regolaEditId){const r=await sb.from(\'distinta_regole\').update(d).eq(\'id\',_regolaEditId);er=r.error;}
-  else{const r=await sb.from(\'distinta_regole\').insert([d]);er=r.error;}
-  if(er){toast(\'Errore: \'+er.message,\'err\');return;}
-  toast(\'Salvato\',\'ok\');closeForm(\'modal-regola\');adminDistinteRegole();
+  if(_regolaEditId){const r=await sb.from(\\'distinta_regole\\').update(d).eq(\\'id\\',_regolaEditId);er=r.error;}
+  else{const r=await sb.from(\\'distinta_regole\\').insert([d]);er=r.error;}
+  if(er){toast(\\'Errore: \\'+er.message,\\'err\\');return;}
+  toast(\\'Salvato\\',\\'ok\\');closeForm(\\'modal-regola\\');adminDistinteRegole();
 }
 
 async function modificaRegola(id){
-  const {data:r}=await sb.from(\'distinta_regole\').select(\'*\').eq(\'id\',id).single();
+  const {data:r}=await sb.from(\\'distinta_regole\\').select(\\'*\\').eq(\\'id\\',id).single();
   if(!r) return;
-  const {data:serie}=await sb.from(\'serie\').select(\'codice,nome\').order(\'nome\');
-  var serieOpts=(serie||[]).map(function(s){return \'<option value="\'+s.codice+\'"\'+( r.codice_serie===s.codice?\' selected\':\'\')+\'>\'+ s.codice+\' - \'+s.nome+\'</option>\';}).join(\'\');
-  var tipoOpts=[\'BAT\',\'CS\',\'FM\',\'BAT2A\',\'CS2A\',\'ROTO\',\'SE\',\'PAS\',\'SOP\'].map(function(t){return \'<option value="\'+t+\'"\'+( r.tipologia===t?\' selected\':\'\')+\'>\'+ t+\'</option>\';}).join(\'\');
-  document.getElementById(\'modal-regola-body\').innerHTML=
-    \'<div class="form-field"><label>Nome regola *</label><input id="reg-nome" type="text" value="\'+r.nome+\'"></div>\'+
-    \'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">\'+
-    \'<div class="form-field"><label>Serie</label><select id="reg-serie"><option value="">&mdash; tutte &mdash;</option>\'+serieOpts+\'</select></div>\'+
-    \'<div class="form-field"><label>Modello (codice)</label><input id="reg-modello" type="text" value="\'+( r.codice_modello||\'\')+\'" placeholder="vuoto=tutti"></div>\'+
-    \'<div class="form-field"><label>Tipologia</label><select id="reg-tipologia"><option value="">&mdash; tutte &mdash;</option>\'+tipoOpts+\'</select></div>\'+
-    \'<div class="form-field"><label>Finitura (codice)</label><input id="reg-finitura" type="text" value="\'+( r.codice_finitura||\'\')+\'" placeholder="vuoto=tutte"></div>\'+
-    \'<div class="form-field"><label>Colore ferramenta</label><input id="reg-ferramenta" type="text" value="\'+( r.colore_ferramenta||\'\')+\'" placeholder="vuoto=tutti"></div>\'+
-    \'</div>\'+
-    \'<div class="form-field"><label>Note</label><input id="reg-note" type="text" value="\'+( r.note||\'\')+\'"></div>\'+
-    \'<label style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:4px">\'+
-    \'<input type="checkbox" id="reg-attiva"\'+( r.attiva?\' checked\':\'\')+\'> Regola attiva</label>\';
+  const {data:serie}=await sb.from(\\'serie\\').select(\\'codice,nome\\').order(\\'nome\\');
+  var serieOpts=(serie||[]).map(function(s){return \\'<option value="\\'+s.codice+\\'"\\'+( r.codice_serie===s.codice?\\' selected\\':\\'\\')+\\'>\\'+ s.codice+\\' - \\'+s.nome+\\'</option>\\';}).join(\\'\\');
+  var tipoOpts=[\\'BAT\\',\\'CS\\',\\'FM\\',\\'BAT2A\\',\\'CS2A\\',\\'ROTO\\',\\'SE\\',\\'PAS\\',\\'SOP\\'].map(function(t){return \\'<option value="\\'+t+\\'"\\'+( r.tipologia===t?\\' selected\\':\\'\\')+\\'>\\'+ t+\\'</option>\\';}).join(\\'\\');
+  document.getElementById(\\'modal-regola-body\\').innerHTML=
+    \\'<div class="form-field"><label>Nome regola *</label><input id="reg-nome" type="text" value="\\'+r.nome+\\'"></div>\\'+
+    \\'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">\\'+
+    \\'<div class="form-field"><label>Serie</label><select id="reg-serie"><option value="">&mdash; tutte &mdash;</option>\\'+serieOpts+\\'</select></div>\\'+
+    \\'<div class="form-field"><label>Modello (codice)</label><input id="reg-modello" type="text" value="\\'+( r.codice_modello||\\'\\')+\\'" placeholder="vuoto=tutti"></div>\\'+
+    \\'<div class="form-field"><label>Tipologia</label><select id="reg-tipologia"><option value="">&mdash; tutte &mdash;</option>\\'+tipoOpts+\\'</select></div>\\'+
+    \\'<div class="form-field"><label>Finitura (codice)</label><input id="reg-finitura" type="text" value="\\'+( r.codice_finitura||\\'\\')+\\'" placeholder="vuoto=tutte"></div>\\'+
+    \\'<div class="form-field"><label>Colore ferramenta</label><input id="reg-ferramenta" type="text" value="\\'+( r.colore_ferramenta||\\'\\')+\\'" placeholder="vuoto=tutti"></div>\\'+
+    \\'</div>\\'+
+    \\'<div class="form-field"><label>Note</label><input id="reg-note" type="text" value="\\'+( r.note||\\'\\')+\\'"></div>\\'+
+    \\'<label style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:4px">\\'+
+    \\'<input type="checkbox" id="reg-attiva"\\'+( r.attiva?\\' checked\\':\\'\\')+\\'> Regola attiva</label>\\';
   _regolaEditId=id;
-  document.getElementById(\'modal-regola-title\').textContent=\'Modifica regola\';
-  const mo=ensureModalInBody(\'modal-regola\');if(mo)mo.classList.add(\'open\');
+  document.getElementById(\\'modal-regola-title\\').textContent=\\'Modifica regola\\';
+  const mo=ensureModalInBody(\\'modal-regola\\');if(mo)mo.classList.add(\\'open\\');
 }
 
 async function duplicaRegola(id){
   const [{data:regola},{data:comps}]=await Promise.all([
-    sb.from(\'distinta_regole\').select(\'*\').eq(\'id\',id).single(),
-    sb.from(\'distinta_componenti\').select(\'*\').eq(\'regola_id\',id).order(\'ordine\'),
+    sb.from(\\'distinta_regole\\').select(\\'*\\').eq(\\'id\\',id).single(),
+    sb.from(\\'distinta_componenti\\').select(\\'*\\').eq(\\'regola_id\\',id).order(\\'ordine\\'),
   ]);
-  if(!regola){toast(\'Regola non trovata\',\'err\');return;}
+  if(!regola){toast(\\'Regola non trovata\\',\\'err\\');return;}
   const nuovaRegola={...regola};
   delete nuovaRegola.id;
   delete nuovaRegola.created_at;
-  nuovaRegola.nome=regola.nome+\' (copia)\';
-  const {data:nr,error:e1}=await sb.from(\'distinta_regole\').insert([nuovaRegola]).select().single();
-  if(e1){toast(\'Errore duplicazione regola: \'+e1.message,\'err\');return;}
+  nuovaRegola.nome=regola.nome+\\' (copia)\\';
+  const {data:nr,error:e1}=await sb.from(\\'distinta_regole\\').insert([nuovaRegola]).select().single();
+  if(e1){toast(\\'Errore duplicazione regola: \\'+e1.message,\\'err\\');return;}
   if(comps&&comps.length){
     const nuoviComps=comps.map(function(c){
       const nc={...c};
@@ -6089,96 +6089,96 @@ async function duplicaRegola(id){
       nc.regola_id=nr.id;
       return nc;
     });
-    const {error:e2}=await sb.from(\'distinta_componenti\').insert(nuoviComps);
-    if(e2){toast(\'Errore duplicazione componenti: \'+e2.message,\'err\');return;}
+    const {error:e2}=await sb.from(\\'distinta_componenti\\').insert(nuoviComps);
+    if(e2){toast(\\'Errore duplicazione componenti: \\'+e2.message,\\'err\\');return;}
   }
-  toast(\'Regola duplicata\',\'ok\');
+  toast(\\'Regola duplicata\\',\\'ok\\');
   adminDistinteRegole();
 }
 
 async function eliminaRegola(id){
-  if(!confirm(\'Eliminare questa regola e tutti i suoi componenti?\')) return;
-  await sb.from(\'distinta_componenti\').delete().eq(\'regola_id\',id);
-  const {error}=await sb.from(\'distinta_regole\').delete().eq(\'id\',id);
-  if(error){toast(\'Errore: \'+error.message,\'err\');return;}
-  toast(\'Eliminata\',\'ok\');adminDistinteRegole();
+  if(!confirm(\\'Eliminare questa regola e tutti i suoi componenti?\\')) return;
+  await sb.from(\\'distinta_componenti\\').delete().eq(\\'regola_id\\',id);
+  const {error}=await sb.from(\\'distinta_regole\\').delete().eq(\\'id\\',id);
+  if(error){toast(\\'Errore: \\'+error.message,\\'err\\');return;}
+  toast(\\'Eliminata\\',\\'ok\\');adminDistinteRegole();
 }
 
 async function apriRegola(id){
   _regolaEditId=id;
   const [{data:regola},{data:comps}]=await Promise.all([
-    sb.from(\'distinta_regole\').select(\'*\').eq(\'id\',id).single(),
-    sb.from(\'distinta_componenti\').select(\'*\').eq(\'regola_id\',id).order(\'ordine\'),
+    sb.from(\\'distinta_regole\\').select(\\'*\\').eq(\\'id\\',id).single(),
+    sb.from(\\'distinta_componenti\\').select(\\'*\\').eq(\\'regola_id\\',id).order(\\'ordine\\'),
   ]);
   if(!regola) return;
-  var conds=[regola.codice_serie,regola.codice_modello,regola.tipologia].filter(Boolean).join(\' / \');
-  var tipiRicerca=[\'codice_fisso\',\'query_magazzino\',\'dal_configuratore\'];
-  var coloriDa=[\'nessuno\',\'finitura\',\'ferramenta\',\'inserto\',\'dal_configuratore\'];
+  var conds=[regola.codice_serie,regola.codice_modello,regola.tipologia].filter(Boolean).join(\\' / \\');
+  var tipiRicerca=[\\'codice_fisso\\',\\'query_magazzino\\',\\'dal_configuratore\\'];
+  var coloriDa=[\\'nessuno\\',\\'finitura\\',\\'ferramenta\\',\\'inserto\\',\\'dal_configuratore\\'];
   var compRows=(comps||[]).map(function(c){
-    var tipoOpts=tipiRicerca.map(function(t){return \'<option value="\'+t+\'"\'+( c.tipo_ricerca===t?\' selected\':\'\')+\'>\'+t+\'</option>\';}).join(\'\');
-    var coloreOpts=coloriDa.map(function(t){return \'<option value="\'+t+\'"\'+( c.colore_da===t?\' selected\':\'\')+\'>\'+t+\'</option>\';}).join(\'\');
-    return \'<tr>\'+
-      \'<td><input type="text" value="\'+( c.codice_componente||\'\')+\'" data-id="\'+c.id+\'" data-campo="codice_componente"\'+
-      \' placeholder="es. CERNIERE" style="border:none;background:transparent;width:90px;font-size:12px;font-family:monospace" onchange="adminSalvaComp(this)"></td>\'+
-      \'<td><input type="text" value="\'+( c.descrizione||\'\')+\'" data-id="\'+c.id+\'" data-campo="descrizione"\'+
-      \' style="border:none;background:transparent;width:140px;font-size:12px" onchange="adminSalvaComp(this)"></td>\'+
-      \'<td><select data-id="\'+c.id+\'" data-campo="tipo_ricerca" onchange="adminSalvaComp(this)"\'+
-      \' style="border:none;background:transparent;font-size:12px">\'+tipoOpts+\'</select></td>\'+
-      \'<td><input type="text" value="\'+( c.categoria_mp||\'\')+\'" data-id="\'+c.id+\'" data-campo="categoria_mp"\'+
-      \' placeholder="es. AN-BAT" style="border:none;background:transparent;width:90px;font-size:12px" onchange="adminSalvaComp(this)"></td>\'+
-      \'<td><input type="text" value="\'+( c.codice_mp||\'\')+\'" data-id="\'+c.id+\'" data-campo="codice_mp"\'+
-      \' placeholder="es. VIT-3520" style="border:none;background:transparent;width:90px;font-size:12px" onchange="adminSalvaComp(this)"></td>\'+
-      \'<td><select data-id="\'+c.id+\'" data-campo="colore_da" onchange="adminSalvaComp(this)"\'+
-      \' style="border:none;background:transparent;font-size:12px">\'+coloreOpts+\'</select></td>\'+
-      \'<td><input type="text" value="\'+( c.formula_larghezza||\'\')+\'" data-id="\'+c.id+\'" data-campo="formula_larghezza"\'+
-      \' placeholder="L+32" style="border:none;background:transparent;width:70px;font-size:12px" onchange="adminSalvaComp(this)"></td>\'+
-      \'<td><input type="text" value="\'+( c.formula_altezza||\'\')+\'" data-id="\'+c.id+\'" data-campo="formula_altezza"\'+
-      \' placeholder="H+13" style="border:none;background:transparent;width:70px;font-size:12px" onchange="adminSalvaComp(this)"></td>\'+
-      \'<td><input type="text" value="\'+( c.formula_larghezza_taglio||\'\')+\'" data-id="\'+c.id+\'" data-campo="formula_larghezza_taglio"\'+
-      \' placeholder="L+37" style="border:none;background:transparent;width:70px;font-size:12px" onchange="adminSalvaComp(this)"></td>\'+
-      \'<td><input type="text" value="\'+( c.formula_altezza_taglio||\'\')+\'" data-id="\'+c.id+\'" data-campo="formula_altezza_taglio"\'+
-      \' placeholder="H+13" style="border:none;background:transparent;width:70px;font-size:12px" onchange="adminSalvaComp(this)"></td>\'+
-      \'<td><input type="text" value="\'+( c.formula_qta||\'\')+\'" data-id="\'+c.id+\'" data-campo="formula_qta"\'+
-      \' placeholder="es. 2.5" style="border:none;background:transparent;width:80px;font-size:12px" onchange="adminSalvaComp(this)"></td>\'+
-      \'<td><input type="text" value="\'+( c.unita||\'\')+\'" data-id="\'+c.id+\'" data-campo="unita"\'+
-      \' placeholder="pz" style="border:none;background:transparent;width:40px;font-size:12px" onchange="adminSalvaComp(this)"></td>\'+
-      \'<td><input type="text" value="\'+( c.condizione||\'\')+\'" data-id="\'+c.id+\'" data-campo="condizione"\'+
-      \' placeholder="es. ha_vetro" style="border:none;background:transparent;width:110px;font-size:12px" onchange="adminSalvaComp(this)"></td>\'+
-      \'<td><input type="text" value="\'+( c.note||\'\')+\'" data-id="\'+c.id+\'" data-campo="note"\'+
-      \' placeholder="note" style="border:none;background:transparent;width:100px;font-size:12px" onchange="adminSalvaComp(this)"></td>\'+
-      \'<td><button class="btn btn-sm" style="color:var(--red)" data-cid="\'+c.id+\'" onclick="eliminaComp(this.dataset.cid)">&times;</button></td>\'+
-      \'</tr>\';
-  }).join(\'\');
-  if(!compRows) compRows=\'<tr><td colspan="15" style="text-align:center;color:var(--mid);padding:16px">Nessun componente &mdash; aggiungi il primo</td></tr>\';
-  var html=\'<div style="margin-bottom:10px;font-size:12px;color:var(--mid)">Regola: <strong>\'+regola.nome+\'</strong>\'+
-    ( conds?\' &mdash; \'+conds:\'\')+\'</div>\'+
-    \'<div style="overflow-x:auto"><table style="width:100%;white-space:nowrap"><thead><tr>\'+
-    \'<th>Cod.comp.</th><th>Descrizione</th><th>Tipo ricerca</th><th>Categoria MP</th><th>Codice MP</th><th>Colore da</th><th>L finita</th><th>H finita</th><th>L taglio</th><th>H taglio</th><th>Q.t&agrave;</th><th>UM</th><th>Condizione</th><th>Note</th><th></th>\'+
-    \'</tr></thead><tbody>\'+compRows+\'</tbody></table></div>\';
-  document.getElementById(\'distinte-sub\').innerHTML=adminCard(\'Componenti: \'+regola.nome,html,
-    \'<button class="btn btn-sm" onclick="adminDistinteRegole()">&larr; Regole</button> \'+
-    \'<button class="btn btn-sm btn-red" data-rid="\'+id+\'" onclick="nuovoComp(this.dataset.rid)">+ Componente</button>\');
+    var tipoOpts=tipiRicerca.map(function(t){return \\'<option value="\\'+t+\\'"\\'+( c.tipo_ricerca===t?\\' selected\\':\\'\\')+\\'>\\'+t+\\'</option>\\';}).join(\\'\\');
+    var coloreOpts=coloriDa.map(function(t){return \\'<option value="\\'+t+\\'"\\'+( c.colore_da===t?\\' selected\\':\\'\\')+\\'>\\'+t+\\'</option>\\';}).join(\\'\\');
+    return \\'<tr>\\'+
+      \\'<td><input type="text" value="\\'+( c.codice_componente||\\'\\')+\\'" data-id="\\'+c.id+\\'" data-campo="codice_componente"\\'+
+      \\' placeholder="es. CERNIERE" style="border:none;background:transparent;width:90px;font-size:12px;font-family:monospace" onchange="adminSalvaComp(this)"></td>\\'+
+      \\'<td><input type="text" value="\\'+( c.descrizione||\\'\\')+\\'" data-id="\\'+c.id+\\'" data-campo="descrizione"\\'+
+      \\' style="border:none;background:transparent;width:140px;font-size:12px" onchange="adminSalvaComp(this)"></td>\\'+
+      \\'<td><select data-id="\\'+c.id+\\'" data-campo="tipo_ricerca" onchange="adminSalvaComp(this)"\\'+
+      \\' style="border:none;background:transparent;font-size:12px">\\'+tipoOpts+\\'</select></td>\\'+
+      \\'<td><input type="text" value="\\'+( c.categoria_mp||\\'\\')+\\'" data-id="\\'+c.id+\\'" data-campo="categoria_mp"\\'+
+      \\' placeholder="es. AN-BAT" style="border:none;background:transparent;width:90px;font-size:12px" onchange="adminSalvaComp(this)"></td>\\'+
+      \\'<td><input type="text" value="\\'+( c.codice_mp||\\'\\')+\\'" data-id="\\'+c.id+\\'" data-campo="codice_mp"\\'+
+      \\' placeholder="es. VIT-3520" style="border:none;background:transparent;width:90px;font-size:12px" onchange="adminSalvaComp(this)"></td>\\'+
+      \\'<td><select data-id="\\'+c.id+\\'" data-campo="colore_da" onchange="adminSalvaComp(this)"\\'+
+      \\' style="border:none;background:transparent;font-size:12px">\\'+coloreOpts+\\'</select></td>\\'+
+      \\'<td><input type="text" value="\\'+( c.formula_larghezza||\\'\\')+\\'" data-id="\\'+c.id+\\'" data-campo="formula_larghezza"\\'+
+      \\' placeholder="L+32" style="border:none;background:transparent;width:70px;font-size:12px" onchange="adminSalvaComp(this)"></td>\\'+
+      \\'<td><input type="text" value="\\'+( c.formula_altezza||\\'\\')+\\'" data-id="\\'+c.id+\\'" data-campo="formula_altezza"\\'+
+      \\' placeholder="H+13" style="border:none;background:transparent;width:70px;font-size:12px" onchange="adminSalvaComp(this)"></td>\\'+
+      \\'<td><input type="text" value="\\'+( c.formula_larghezza_taglio||\\'\\')+\\'" data-id="\\'+c.id+\\'" data-campo="formula_larghezza_taglio"\\'+
+      \\' placeholder="L+37" style="border:none;background:transparent;width:70px;font-size:12px" onchange="adminSalvaComp(this)"></td>\\'+
+      \\'<td><input type="text" value="\\'+( c.formula_altezza_taglio||\\'\\')+\\'" data-id="\\'+c.id+\\'" data-campo="formula_altezza_taglio"\\'+
+      \\' placeholder="H+13" style="border:none;background:transparent;width:70px;font-size:12px" onchange="adminSalvaComp(this)"></td>\\'+
+      \\'<td><input type="text" value="\\'+( c.formula_qta||\\'\\')+\\'" data-id="\\'+c.id+\\'" data-campo="formula_qta"\\'+
+      \\' placeholder="es. 2.5" style="border:none;background:transparent;width:80px;font-size:12px" onchange="adminSalvaComp(this)"></td>\\'+
+      \\'<td><input type="text" value="\\'+( c.unita||\\'\\')+\\'" data-id="\\'+c.id+\\'" data-campo="unita"\\'+
+      \\' placeholder="pz" style="border:none;background:transparent;width:40px;font-size:12px" onchange="adminSalvaComp(this)"></td>\\'+
+      \\'<td><input type="text" value="\\'+( c.condizione||\\'\\')+\\'" data-id="\\'+c.id+\\'" data-campo="condizione"\\'+
+      \\' placeholder="es. ha_vetro" style="border:none;background:transparent;width:110px;font-size:12px" onchange="adminSalvaComp(this)"></td>\\'+
+      \\'<td><input type="text" value="\\'+( c.note||\\'\\')+\\'" data-id="\\'+c.id+\\'" data-campo="note"\\'+
+      \\' placeholder="note" style="border:none;background:transparent;width:100px;font-size:12px" onchange="adminSalvaComp(this)"></td>\\'+
+      \\'<td><button class="btn btn-sm" style="color:var(--red)" data-cid="\\'+c.id+\\'" onclick="eliminaComp(this.dataset.cid)">&times;</button></td>\\'+
+      \\'</tr>\\';
+  }).join(\\'\\');
+  if(!compRows) compRows=\\'<tr><td colspan="15" style="text-align:center;color:var(--mid);padding:16px">Nessun componente &mdash; aggiungi il primo</td></tr>\\';
+  var html=\\'<div style="margin-bottom:10px;font-size:12px;color:var(--mid)">Regola: <strong>\\'+regola.nome+\\'</strong>\\'+
+    ( conds?\\' &mdash; \\'+conds:\\'\\')+\\'</div>\\'+
+    \\'<div style="overflow-x:auto"><table style="width:100%;white-space:nowrap"><thead><tr>\\'+
+    \\'<th>Cod.comp.</th><th>Descrizione</th><th>Tipo ricerca</th><th>Categoria MP</th><th>Codice MP</th><th>Colore da</th><th>L finita</th><th>H finita</th><th>L taglio</th><th>H taglio</th><th>Q.t&agrave;</th><th>UM</th><th>Condizione</th><th>Note</th><th></th>\\'+
+    \\'</tr></thead><tbody>\\'+compRows+\\'</tbody></table></div>\\';
+  document.getElementById(\\'distinte-sub\\').innerHTML=adminCard(\\'Componenti: \\'+regola.nome,html,
+    \\'<button class="btn btn-sm" onclick="adminDistinteRegole()">&larr; Regole</button> \\'+
+    \\'<button class="btn btn-sm btn-red" data-rid="\\'+id+\\'" onclick="nuovoComp(this.dataset.rid)">+ Componente</button>\\');
 }
 
 async function adminSalvaComp(el){
   const id=el.dataset.id,campo=el.dataset.campo,valore=el.value.trim();
   if(!id||!campo) return;
-  const {error}=await sb.from(\'distinta_componenti\').update({[campo]:valore}).eq(\'id\',id);
-  if(error){toast(\'Errore: \'+error.message,\'err\');return;}
-  toast(\'OK\',\'ok\');
+  const {error}=await sb.from(\\'distinta_componenti\\').update({[campo]:valore}).eq(\\'id\\',id);
+  if(error){toast(\\'Errore: \\'+error.message,\\'err\\');return;}
+  toast(\\'OK\\',\\'ok\\');
 }
 
 async function nuovoComp(regolaId){
-  const {error}=await sb.from(\'distinta_componenti\').insert([{
-    regola_id:regolaId,descrizione:\'Nuovo componente\',tipo_ricerca:\'codice_fisso\',formula_qta:\'1\',unita:\'pz\',colore_da:\'nessuno\',ordine:99
+  const {error}=await sb.from(\\'distinta_componenti\\').insert([{
+    regola_id:regolaId,descrizione:\\'Nuovo componente\\',tipo_ricerca:\\'codice_fisso\\',formula_qta:\\'1\\',unita:\\'pz\\',colore_da:\\'nessuno\\',ordine:99
   }]);
-  if(error){toast(\'Errore: \'+error.message,\'err\');return;}
+  if(error){toast(\\'Errore: \\'+error.message,\\'err\\');return;}
   apriRegola(regolaId);
 }
 
 async function eliminaComp(id){
-  if(!confirm(\'Eliminare questo componente?\')) return;
-  await sb.from(\'distinta_componenti\').delete().eq(\'id\',id);
+  if(!confirm(\\'Eliminare questo componente?\\')) return;
+  await sb.from(\\'distinta_componenti\\').delete().eq(\\'id\\',id);
   if(_regolaEditId) apriRegola(_regolaEditId);
 }
 
