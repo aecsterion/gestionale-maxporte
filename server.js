@@ -1812,7 +1812,13 @@ async function renderMagazzino(){
       \'<td>\'+(m.codice_finitura?\'<span class="tag">\'+m.codice_finitura+\'</span>\':\'\xe2\x80\x94\')+\'</td>\'+
       \'<td>\'+dim+\'</td><td>\'+(m.giacenza||0)+\' \'+(m.unita||\'pz\')+\'</td>\'+
       \'<td>\'+(m.scorta_minima||0)+\'</td>\'+
-      \'<td>\'+(s?\'<span class="badge br">Sotto scorta</span>\':\'<span class="badge bg">OK</span>\')+\'</td></tr>\';
+      \'<td>\'+(s?\'<span class="badge br">Sotto scorta</span>\':\'<span class="badge bg">OK</span>\')+\'</td>\'+
+      \'<td style="text-align:right"><div style="display:flex;gap:4px;justify-content:flex-end">\'+
+        \'<button class="btn btn-sm" title="Modifica" data-mid="\'+m.id+\'" onclick="event.stopPropagation();apriDettaglioMagazzino(this.dataset.mid)" style="padding:4px 6px">\'+
+        \'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>\'+
+        \'<button class="btn btn-sm" title="Duplica" data-mid="\'+m.id+\'" onclick="event.stopPropagation();duplicaArticoloMag(this.dataset.mid)" style="padding:4px 6px">\'+
+        \'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>\'+
+        \'</div></td></tr>\';
   }).join(\'\');
   document.getElementById(\'main-content\').innerHTML=
     \'<div class="grid-4" style="margin-bottom:16px">\'+
@@ -1822,7 +1828,7 @@ async function renderMagazzino(){
     \'</div><div class="card"><div class="card-header"><span class="card-title">Magazzino</span>\'+
     \'<button class="btn btn-red btn-sm" onclick="apriNuovoArticoloMag()">+ Nuovo articolo</button></div>\'+
     \'<table><thead><tr><th>Codice MP</th><th>Descrizione</th><th>Categoria</th><th>Colore</th>\'+
-    \'<th>Dim.</th><th>Giacenza</th><th>Scorta min.</th><th>Stato</th></tr></thead>\'+
+    \'<th>Dim.</th><th>Giacenza</th><th>Scorta min.</th><th>Stato</th><th></th></tr></thead>\'+
     \'<tbody>\'+(rows||\'<tr><td colspan="8" style="text-align:center;color:var(--mid);padding:24px">Nessun articolo</td></tr>\')+
     \'</tbody></table></div>\';
 }
@@ -1998,6 +2004,18 @@ async function salvaMagazzino(){
   toast(_magEditId?\'Aggiornato\':\'Aggiunto\',\'ok\');
   closeForm(\'modal-magazzino\');
   renderMagazzino();
+}
+
+async function duplicaArticoloMag(id){
+  const {data:m}=await sb.from(\'magazzino\').select(\'*\').eq(\'id\',id).single();
+  if(!m){toast(\'Articolo non trovato\',\'err\');return;}
+  const nuovo={...m};
+  delete nuovo.id;delete nuovo.created_at;delete nuovo.updated_at;
+  nuovo.codice_mp=(m.codice_mp?m.codice_mp+\' (copia)\':null);
+  nuovo.giacenza=0;
+  const {error}=await sb.from(\'magazzino\').insert([nuovo]);
+  if(error){toast(\'Errore: \'+error.message,\'err\');return;}
+  toast(\'Articolo duplicato\',\'ok\');renderMagazzino();
 }
 
 async function eliminaArticoloMag(){
@@ -5849,10 +5867,14 @@ async function adminDistinteRegole(){
       \'<td style="font-size:12px;color:var(--mid)">\'+( conds||\' &mdash; qualsiasi &mdash;\')+\'</td>\'+
       \'<td>\'+stato+\'</td>\'+
       \'<td style="text-align:right">\'+
-        \'<button class="btn btn-sm" data-rid="\'+r.id+\'" onclick="apriRegola(this.dataset.rid)">Componenti</button> \'+
-        \'<button class="btn btn-sm" data-rid="\'+r.id+\'" onclick="modificaRegola(this.dataset.rid)">Modifica</button> \'+
-        \'<button class="btn btn-sm" data-rid="\'+r.id+\'" onclick="duplicaRegola(this.dataset.rid)">Duplica</button> \'+
-        \'<button class="btn btn-sm" style="color:var(--red)" data-rid="\'+r.id+\'" onclick="eliminaRegola(this.dataset.rid)">&times;</button>\'+
+        \'<button class="btn btn-sm" title="Componenti" data-rid="\'+r.id+\'" onclick="apriRegola(this.dataset.rid)" style="padding:4px 6px">\'+
+        \'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></button> \'+
+        \'<button class="btn btn-sm" title="Modifica" data-rid="\'+r.id+\'" onclick="modificaRegola(this.dataset.rid)" style="padding:4px 6px">\'+
+        \'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button> \'+
+        \'<button class="btn btn-sm" title="Duplica" data-rid="\'+r.id+\'" onclick="duplicaRegola(this.dataset.rid)" style="padding:4px 6px">\'+
+        \'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button> \'+
+        \'<button class="btn btn-sm" title="Elimina" style="color:var(--red)" data-rid="\'+r.id+\'" onclick="eliminaRegola(this.dataset.rid)" style="padding:4px 6px">\'+
+        \'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg></button>\'+
       \'</td>\'+
       \'</tr>\';
   }).join(\'\');
