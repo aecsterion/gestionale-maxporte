@@ -4644,38 +4644,106 @@ async function renderOrdiniDiretti(){
       .select('*,anagrafiche(ragione_sociale),agenti(nome,cognome)')
       .order('created_at',{ascending:false});
     if(error) throw error;
-
-  const rows=(data||[]).map(o=>\`<tr class="data-row" onclick="renderOrdineDetail('\${o.id}')">
-    <td><strong>\${o.numero}</strong></td>
-    <td>\${o.anagrafiche?.ragione_sociale||'—'}</td>
-    <td>\${o.agenti?o.agenti.nome+' '+o.agenti.cognome:'—'}</td>
-    <td>\${o.preventivo_id?'<span class="badge bb">Da prev.</span>':'<span class="badge bgr">Diretto</span>'}</td>
-    <td>\${fmtData(o.data_ordine)}</td>
-    <td>\${fmtEuro(o.totale_netto||o.totale_imponibile)}</td>
-    <td>\${badgeStato(o.stato)}</td>
-    <td>\${o.richiede_approvazione_tecnica?'<span class="badge br">Tecnica</span>':'<span class="badge bg">Standard</span>'}</td>
-  </tr>\`).join('');
-
-  document.getElementById('main-content').innerHTML=\`
-  <div class="card">
-    <div class="card-header">
-      <span class="card-title">Ordini</span>
-      <button class="btn btn-red btn-sm" onclick="nuovoOrdineDiretto()">+ Nuova conferma d'ordine</button>
-    </div>
-    <table>
-      <thead><tr><th>N°</th><th>Cliente</th><th>Agente</th><th>Origine</th><th>Data</th><th>Totale netto</th><th>Stato</th><th>Approvazione</th></tr></thead>
-      <tbody>\${rows||'<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--mid);font-style:italic">Nessun ordine ancora</td></tr>'}</tbody>
-    </table>
-  </div>\`;
+    window._ordData = data||[];
+    const stats={in_attesa:0,approvato_comm:0,approvato_tec:0,in_produzione:0,evaso:0,bloccato:0};
+    window._ordData.forEach(function(o){ if(stats[o.stato]!==undefined) stats[o.stato]++; });
+    document.getElementById('main-content').innerHTML=
+      '<div class="grid-4" style="margin-bottom:16px">'+
+      '<div class="metric"><div class="metric-label">In attesa</div><div class="metric-value">'+stats.in_attesa+'</div></div>'+
+      '<div class="metric"><div class="metric-label">Approvati</div><div class="metric-value" style="color:var(--green-tx)">'+(stats.approvato_comm+stats.approvato_tec)+'</div></div>'+
+      '<div class="metric"><div class="metric-label">In produzione</div><div class="metric-value" style="color:var(--red)">'+stats.in_produzione+'</div></div>'+
+      '<div class="metric"><div class="metric-label">Evasi</div><div class="metric-value">'+stats.evaso+'</div></div>'+
+      '</div>'+
+      '<div class="card">'+
+        '<div class="card-header">'+
+          '<span class="card-title">Conferme d\'ordine</span>'+
+          '<div style="display:flex;gap:8px;align-items:center">'+
+            '<input type="text" id="ord-cerca" placeholder="Cerca numero, cliente, riferimento..." '+
+              'style="padding:6px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;width:340px" '+
+              'oninput="filtraOrd(this.value)">'+
+            '<button class="btn btn-red btn-sm" onclick="nuovoOrdineDiretto()">+ Nuova conferma d\'ordine</button>'+
+          '</div>'+
+        '</div>'+
+        '<table>'+
+          '<thead><tr><th>N°</th><th>Cliente</th><th>Rif. cliente</th><th>Agente</th><th>Data</th><th>Listino</th><th>Totale netto</th><th>Stato</th></tr></thead>'+
+          '<tbody id="ord-tbody"></tbody>'+
+        '</table>'+
+      '</div>';
+    filtraOrd('');
   } catch(e) {
     console.error('renderOrdiniDiretti error:',e);
-    document.getElementById('main-content').innerHTML=\`<div class="card">
-      <div style="padding:20px">
-        <p style="color:var(--red);margin-bottom:12px">Errore caricamento ordini: \${e.message}</p>
-        <button class="btn btn-red btn-sm" onclick="nuovoOrdineDiretto()">+ Nuova conferma d'ordine</button>
-      </div>
-    </div>\`;
+    document.getElementById('main-content').innerHTML='<div class="card"><div style="padding:20px">'+
+      '<p style="color:var(--red);margin-bottom:12px">Errore: '+e.message+'</p>'+
+      '<button class="btn btn-red btn-sm" onclick="nuovoOrdineDiretto()">+ Nuova conferma d\'ordine</button>'+
+      '</div></div>';
   }
+}
+
+function filtraOrd(filtro){
+  var termini=(filtro||'').toLowerCase().split(/[\s,;]+/).filter(Boolean);
+  var data=window._ordData||[];
+  var filtered=termini.length?data.filter(function(o){
+    var h=[o.numero||'',o.anagrafiche&&o.anagrafiche.ragione_sociale||'',
+           o.riferimento_cliente||'',o.agenti?o.agenti.nome+' '+o.agenti.cognome:''].join(' ').toLowerCase();
+    return termini.every(function(t){return h.includes(t);});
+  }):data;
+  var tbody=document.getElementById('ord-tbody');
+  if(!tbody)return;
+  if(!filtered.length){
+    tbody.innerHTML='<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--mid);font-style:italic">'+(termini.length?'Nessun risultato':'Nessuna conferma d\'ordine')+'</td></tr>';
+    return;
+  }
+  tbody.innerHTML=filtered.map(function(o){
+    return '<tr class="data-row" onclick="renderOrdineDetail(this.dataset.id)" data-id="'+o.id+'">'+
+      '<td><strong>'+(o.numero||'')+'</strong></td>'+
+      '<td>'+(o.anagrafiche&&o.anagrafiche.ragione_sociale||'&#8212;')+'</td>'+
+      '<td>'+(o.riferimento_cliente||'&#8212;')+'</td>'+
+      '<td>'+(o.agenti?o.agenti.nome+' '+o.agenti.cognome:'&#8212;')+'</td>'+
+      '<td>'+fmtData(o.data_ordine||o.created_at)+'</td>'+
+      '<td><span class="tag">'+(o.listino||'')+'</span></td>'+
+      '<td>'+fmtEuro(o.totale_netto||o.totale_imponibile)+'</td>'+
+      '<td>'+badgeStato(o.stato)+'</td>'+
+      '</tr>';
+  }).join('');
+}
+
+async function apriModificaOrdine(id){
+  const {data:ord}=await sb.from('ordini_vendita').select('*').eq('id',id).single();
+  if(!ord){toast('Ordine non trovato','err');return;}
+  const [{data:clienti},{data:agenti}]=await Promise.all([
+    sb.from('anagrafiche').select('*').order('ragione_sociale'),
+    sb.from('agenti').select('*').eq('attivo',true).order('cognome'),
+  ]);
+  CFG_RIGHE=[];
+  const modal=ensureModalInBody('modal-nuovo-doc');
+  modal.dataset.mode='ordine';
+  modal.dataset.editId=id;
+  document.getElementById('ndoc-title').textContent='Modifica conferma d\'ordine';
+  document.getElementById('ndoc-clienti').innerHTML='<option value="">Seleziona...</option>'+(clienti||[]).map(function(c){
+    return '<option value="'+c.id+'"'+(c.id===ord.anagrafica_id?' selected':'')+
+      ' data-listino="'+(c.listino||'A')+'" data-sa="'+(c.sconto_dedicato_A||0)+
+      '" data-sp="'+(c.sconto_dedicato_P||0)+'" data-ind="'+(c.indirizzo||'')+
+      '" data-cap="'+(c.cap||'')+'" data-cit="'+(c.citta||'')+'" data-prv="'+(c.provincia||'')+'">'+
+      c.ragione_sociale+'</option>';
+  }).join('');
+  document.getElementById('ndoc-agenti').innerHTML='<option value="">Nessun agente</option>'+(agenti||[]).map(function(a){
+    return '<option value="'+a.id+'"'+(a.id===ord.agente_id?' selected':'')+'>'+a.cognome+' '+a.nome+'</option>';
+  }).join('');
+  document.getElementById('ndoc-listino').value=ord.listino||'A';
+  document.getElementById('ndoc-sconto1').value=ord.sconto1||0;
+  var s2=document.getElementById('ndoc-sconto2');if(s2)s2.value=ord.sconto2||0;
+  var tr=document.getElementById('ndoc-trasporto');if(tr)tr.value=ord.trasporto||'Max Porte';
+  var re=document.getElementById('ndoc-resa');if(re)re.value=ord.resa||'Franco fabbrica';
+  var rif=document.getElementById('ndoc-rif-cliente');if(rif)rif.value=ord.riferimento_cliente||'';
+  document.getElementById('ndoc-ind').value=ord.indirizzo_destinazione||'';
+  document.getElementById('ndoc-cap').value=ord.cap_destinazione||'';
+  document.getElementById('ndoc-cit').value=ord.citta_destinazione||'';
+  document.getElementById('ndoc-prv').value=ord.provincia_destinazione||'';
+  var no=document.getElementById('ndoc-note');if(no)no.value=ord.note||'';
+  const {data:righe}=await sb.from('righe_ordine').select('*').eq('ordine_id',id).order('riga_numero',{ascending:true});
+  CFG_RIGHE=(righe||[]).map(function(r){return Object.assign({},r);});
+  aggiornaTotaleNdoc();
+  modal.classList.add('open');
 }
 
 async function nuovoOrdineDiretto(){
@@ -4685,13 +4753,20 @@ async function nuovoOrdineDiretto(){
       sb.from('agenti').select('*').eq('attivo',true).order('cognome'),
     ]);
     CFG_RIGHE=[];
-    const modal=ensureModalInBody('modal-nuovo-doc');
+    const modal = ensureModalInBody('modal-nuovo-doc');
     if(!modal){ toast('Errore: modal non trovato','err'); return; }
     modal.dataset.mode='ordine';
-    document.getElementById('ndoc-title').textContent="Nuova conferma d'ordine";
-    document.getElementById('ndoc-clienti').innerHTML='<option value="">Seleziona cliente...</option>'+(clienti||[]).map(c=>\`<option value="\${c.id}" data-listino="\${c.listino||'A'}" data-sa="\${c.sconto_dedicato_A||0}" data-sp="\${c.sconto_dedicato_P||0}" data-ind="\${c.indirizzo||''}" data-cap="\${c.cap||''}" data-cit="\${c.citta||''}" data-prv="\${c.provincia||''}">\${c.ragione_sociale}</option>\`).join('');
-    document.getElementById('ndoc-agenti').innerHTML='<option value="">Nessun agente</option>'+(agenti||[]).map(a=>\`<option value="\${a.id}">\${a.cognome} \${a.nome}</option>\`).join('');
-    document.getElementById('ndoc-righe-list').innerHTML='<div style="text-align:center;padding:20px;color:var(--mid);font-size:13px;font-style:italic">Nessuna porta ancora</div>';
+    delete modal.dataset.editId;
+    document.getElementById('ndoc-title').textContent="Nuova conferma d\'ordine";
+    document.getElementById('ndoc-clienti').innerHTML='<option value="">Seleziona cliente...</option>'+(clienti||[]).map(function(c){
+      return '<option value="'+c.id+'" data-listino="'+(c.listino||'A')+'" data-sa="'+(c.sconto_dedicato_A||0)+
+        '" data-sp="'+(c.sconto_dedicato_P||0)+'" data-ind="'+(c.indirizzo||'')+
+        '" data-cap="'+(c.cap||'')+'" data-cit="'+(c.citta||'')+'" data-prv="'+(c.provincia||'')+'">'+c.ragione_sociale+'</option>';
+    }).join('');
+    document.getElementById('ndoc-agenti').innerHTML='<option value="">Nessun agente</option>'+(agenti||[]).map(function(a){
+      return '<option value="'+a.id+'">'+a.cognome+' '+a.nome+'</option>';
+    }).join('');
+    document.getElementById('ndoc-righe-list').innerHTML='<div style="text-align:center;padding:20px;color:var(--mid);font-size:13px;font-style:italic">Nessuna porta aggiunta ancora \xe2\x80\x94 clicca \"+ Aggiungi porta\"</div>';
     document.getElementById('ndoc-totale').textContent='€ 0,00';
     modal.classList.add('open');
   } catch(e) {
@@ -4702,82 +4777,111 @@ async function nuovoOrdineDiretto(){
 
 async function renderOrdineDetail(id){
   const [{data:ord},{data:righe}] = await Promise.all([
-    sb.from('ordini_vendita').select('*,anagrafiche(ragione_sociale),agenti(nome,cognome)').eq('id',id).single(),
+    sb.from('ordini_vendita').select('*,anagrafiche(ragione_sociale,partita_iva),agenti(nome,cognome)').eq('id',id).single(),
     sb.from('righe_ordine').select('*').eq('ordine_id',id).order('riga_numero'),
   ]);
   if(!ord) return;
   CFG_TARGET_ID=id; CFG_MODE='ordine';
   window._prevListino=ord.listino;
 
+  const sc1=ord.sconto1||0; const sc2=ord.sconto2||0;
+  const netto=ord.totale_imponibile*(1-sc1/100)*(1-sc2/100);
+
   const possoApprovareComm = isRespComm();
   const possoApprovaTec = isRespTec();
 
-  const rowsRighe=(righe||[]).map(r=>\`
-    <tr>
-      <td style="font-size:12px;font-weight:500">\${r.riga_numero}</td>
-      <td>
-        <div style="font-size:13px;font-weight:500">\${r.nome_modello||''}</div>
-        <div style="font-size:11px;color:var(--mid)">\${[r.nome_finitura,r.pannello_bugna,r.nome_apertura,r.senso_apertura,r.larghezza_mm&&r.larghezza_mm+'×'+r.altezza_mm+' mm','sp.'+(r.spessore_muro_mm||'?')+' mm',r.nome_ferramenta,r.nome_maniglia].filter(Boolean).join(' | ')}</div>
-        \${r.misura_custom?'<span style="font-size:10px;background:var(--red-bg);color:var(--red-tx);padding:1px 5px;border-radius:3px">Custom</span>':''}
-      </td>
-      <td style="text-align:center">\${r.quantita}</td>
-      <td style="text-align:right">\${fmtEuro(r.prezzo_unitario)}</td>
-      <td style="text-align:right;font-weight:500">\${fmtEuro(r.prezzo_totale_riga)}</td>
-    </tr>\`).join('');
+  const rowsRighe=(righe||[]).map(function(r){
+    return '<tr>'+
+      '<td style="font-size:12px;font-weight:500">'+r.riga_numero+'</td>'+
+      '<td>'+
+        '<div style="font-size:13px;font-weight:500">'+(r.nome_modello||'')+'</div>'+
+        '<div style="font-size:11px;color:var(--mid)">'+(
+          [r.nome_finitura,r.pannello_bugna,r.nome_apertura,r.senso_apertura,
+           r.larghezza_mm&&r.larghezza_mm+'×'+r.altezza_mm+' mm',
+           'sp.'+(r.spessore_muro_mm||'?')+' mm',r.nome_ferramenta,r.nome_maniglia
+          ].filter(Boolean).join(' | ')
+        )+'</div>'+
+        (r.misura_custom?'<span style="font-size:10px;background:var(--red-bg);color:var(--red-tx);padding:1px 5px;border-radius:3px">Custom</span>':'')+
+      '</td>'+
+      '<td style="text-align:center">'+r.quantita+'</td>'+
+      '<td style="text-align:right">'+fmtEuro(r.prezzo_unitario)+'</td>'+
+      '<td style="text-align:right;font-weight:500">'+fmtEuro(r.prezzo_totale_riga)+'</td>'+
+      '<td><button class="btn btn-sm" style="color:var(--red)" onclick="eliminaRiga(\'righe_ordine\',\''+r.id+'\',\''+id+'\',\'ordine\')">\xc3\x97</button></td>'+
+      '</tr>';
+  }).join('');
 
-  let bottoniApprovazione='';
+  var bottoniApprovazione='';
   if(ord.stato==='in_attesa'&&possoApprovareComm){
-    bottoniApprovazione=\`<button class="btn btn-red btn-sm" onclick="approvaOrdine('\${id}','comm')">Approva (commerciale)</button>
-    <button class="btn btn-sm" onclick="cambiaStato('ordini_vendita','\${id}','bloccato','renderOrdineDetail')">Blocca</button>\`;
+    bottoniApprovazione='<button class="btn btn-red btn-sm" onclick="approvaOrdine(\''+id+'\',\'comm\')">Approva (commerciale)</button> '+
+      '<button class="btn btn-sm" onclick="cambiaStato(\'ordini_vendita\',\''+id+'\',\'bloccato\',\'renderOrdineDetail\')">Blocca</button>';
   }
   if(ord.stato==='approvato_comm'&&ord.richiede_approvazione_tecnica&&possoApprovaTec){
-    bottoniApprovazione+=\`<button class="btn btn-red btn-sm" onclick="approvaOrdine('\${id}','tec')">Approva (tecnico)</button>\`;
+    bottoniApprovazione+='<button class="btn btn-red btn-sm" onclick="approvaOrdine(\''+id+'\',\'tec\')">Approva (tecnico)</button>';
   }
   if((ord.stato==='approvato_comm'&&!ord.richiede_approvazione_tecnica)||(ord.stato==='approvato_tec')){
-    bottoniApprovazione+=\`<button class="btn btn-red btn-sm" onclick="cambiaStato('ordini_vendita','\${id}','in_produzione','renderOrdineDetail')">Lancia in produzione</button>\`;
+    bottoniApprovazione+='<button class="btn btn-red btn-sm" onclick="cambiaStato(\'ordini_vendita\',\''+id+'\',\'in_produzione\',\'renderOrdineDetail\')">Lancia in produzione</button>';
   }
 
-  document.getElementById('main-content').innerHTML=\`
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-    <button class="btn btn-sm" onclick="renderOrdiniDiretti()">← Tutti gli ordini</button>
-    <div style="display:flex;gap:8px">
-      \${ord.stato==='in_attesa'?\`<button class="btn btn-sm" onclick="openConfiguratore('ordine','\${id}','\${ord.listino}')">+ Aggiungi porta</button>
-      <button class="btn btn-sm" onclick="esportaPDF('ordine','\${id}')">📄 Esporta PDF</button>\`:''}
-      \${bottoniApprovazione}
-    </div>
-  </div>
-  <div class="grid-2" style="margin-bottom:14px">
-    <div class="card">
-      <div class="card-title">Intestazione ordine</div>
-      <table style="font-size:13px">
-        <tr><td style="color:var(--mid);padding:3px 0;width:140px">N° Ordine</td><td><strong>\${ord.numero}</strong></td></tr>
-        <tr><td style="color:var(--mid);padding:3px 0">Cliente</td><td>\${ord.anagrafiche?.ragione_sociale||'—'}</td></tr>
-        <tr><td style="color:var(--mid);padding:3px 0">Agente</td><td>\${ord.agenti?ord.agenti.nome+' '+ord.agenti.cognome:'—'}</td></tr>
-        <tr><td style="color:var(--mid);padding:3px 0">Listino</td><td><span class="tag">\${ord.listino}</span></td></tr>
-        <tr><td style="color:var(--mid);padding:3px 0">Trasporto</td><td>\${ord.trasporto||'—'}</td></tr>
-        <tr><td style="color:var(--mid);padding:3px 0">Approvazione</td><td>\${ord.richiede_approvazione_tecnica?'<span class="badge br">Tecnica richiesta</span>':'<span class="badge bg">Solo commerciale</span>'}</td></tr>
-        <tr><td style="color:var(--mid);padding:3px 0">Stato</td><td>\${badgeStato(ord.stato)}</td></tr>
-        \${ord.nome_compilatore?\`<tr><td style="color:var(--mid);padding:3px 0">Compilato da</td><td style="font-size:12px">\${ord.nome_compilatore}</td></tr>\`:''}
-      </table>
-    </div>
-    <div class="card">
-      <div class="card-title">Riepilogo economico</div>
-      <table style="font-size:13px">
-        <tr><td style="color:var(--mid);padding:3px 0;width:140px">Imponibile</td><td style="text-align:right">\${fmtEuro(ord.totale_imponibile)}</td></tr>
-        <tr><td style="color:var(--mid);padding:3px 0">Sconto 1</td><td style="text-align:right">\${ord.sconto1||0}%</td></tr>
-        <tr><td style="color:var(--mid);padding:3px 0">Sconto 2</td><td style="text-align:right">\${ord.sconto2||0}%</td></tr>
-        <tr style="border-top:0.5px solid var(--border)"><td style="padding:6px 0;font-weight:500">Totale netto</td><td style="text-align:right;font-size:18px;font-weight:500;color:var(--red)">\${fmtEuro(ord.totale_netto||ord.totale_imponibile)}</td></tr>
-      </table>
-    </div>
-  </div>
-  <div class="card">
-    <div class="card-header"><span class="card-title">Righe ordine (\${righe?.length||0} porte)</span></div>
-    <table>
-      <thead><tr><th>#</th><th>Descrizione porta</th><th style="text-align:center">Q.tà</th><th style="text-align:right">Unitario</th><th style="text-align:right">Totale riga</th></tr></thead>
-      <tbody>\${rowsRighe||'<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--mid)">Nessuna porta</td></tr>'}</tbody>
-    </table>
-  </div>\`;
+  var puoModificare = ord.stato==='in_attesa';
+
+  document.getElementById('main-content').innerHTML=
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'+
+    '<div><button class="btn btn-sm" onclick="renderOrdiniDiretti()">← Tutte le conferme d\'ordine</button></div>'+
+    '<div style="display:flex;gap:8px">'+
+      (puoModificare?
+        '<button class="btn btn-sm" onclick="openConfiguratore(\'ordine\',\''+id+'\',\''+ord.listino+'\')">+ Aggiungi porta</button>'+
+        '<button class="btn btn-sm" onclick="esportaPDF(\'ordine\',\''+id+'\')">&#128196; Esporta PDF</button>'+
+        '<button class="btn btn-sm" onclick="apriModificaOrdine(\''+id+'\')" style="display:inline-flex;align-items:center;gap:5px">'+
+        '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Modifica</button>'+
+        '<button class="btn btn-sm" style="color:var(--red);display:inline-flex;align-items:center;gap:5px" onclick="eliminaOrdineDiretto(\''+id+'\')">'+
+        '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>Elimina</button>'
+      :'')+
+      bottoniApprovazione+
+    '</div></div>'+
+    '<div class="grid-2" style="margin-bottom:14px">'+
+      '<div class="card">'+
+        '<div class="card-title">Intestazione ordine</div>'+
+        '<table style="font-size:13px">'+
+          '<tr><td style="color:var(--mid);padding:3px 0;width:130px">N° Ordine</td><td><strong>'+(ord.numero||'')+'</strong></td></tr>'+
+          '<tr><td style="color:var(--mid);padding:3px 0">Cliente</td><td>'+(ord.anagrafiche?.ragione_sociale||'—')+'</td></tr>'+
+          '<tr><td style="color:var(--mid);padding:3px 0">Agente</td><td>'+(ord.agenti?ord.agenti.nome+' '+ord.agenti.cognome:'—')+'</td></tr>'+
+          (ord.preventivo_id?'<tr><td style="color:var(--mid);padding:3px 0">Da preventivo</td><td><span class="badge bb">Sì</span></td></tr>':'')+
+          '<tr><td style="color:var(--mid);padding:3px 0">Data</td><td>'+fmtData(ord.data_ordine||ord.created_at)+'</td></tr>'+
+          '<tr><td style="color:var(--mid);padding:3px 0">Listino</td><td><span class="tag">'+(ord.listino||'')+'</span></td></tr>'+
+          '<tr><td style="color:var(--mid);padding:3px 0">Trasporto</td><td>'+(ord.trasporto||'—')+'</td></tr>'+
+          '<tr><td style="color:var(--mid);padding:3px 0">Approvazione</td><td>'+(ord.richiede_approvazione_tecnica?'<span class="badge br">Tecnica richiesta</span>':'<span class="badge bg">Solo commerciale</span>')+'</td></tr>'+
+          '<tr><td style="color:var(--mid);padding:3px 0">Stato</td><td>'+badgeStato(ord.stato)+'</td></tr>'+
+          (ord.nome_compilatore?'<tr><td style="color:var(--mid);padding:3px 0">Compilato da</td><td style="font-size:12px">'+ord.nome_compilatore+'</td></tr>':'')+
+        '</table>'+
+      '</div>'+
+      '<div class="card">'+
+        '<div class="card-title">Riepilogo economico</div>'+
+        '<table style="font-size:13px">'+
+          '<tr><td style="color:var(--mid);padding:3px 0;width:130px">Imponibile</td><td style="text-align:right">'+fmtEuro(ord.totale_imponibile)+'</td></tr>'+
+          '<tr><td style="color:var(--mid);padding:3px 0">Sconto 1</td><td style="text-align:right">'+sc1+'%</td></tr>'+
+          '<tr><td style="color:var(--mid);padding:3px 0">Sconto 2</td><td style="text-align:right">'+(sc2||0)+'%</td></tr>'+
+          '<tr style="border-top:0.5px solid var(--border)"><td style="padding:6px 0;font-weight:500">Totale netto</td><td style="text-align:right;font-size:18px;font-weight:500;color:var(--red)">'+fmtEuro(netto)+'</td></tr>'+
+        '</table>'+
+        (ord.note?'<div style="margin-top:10px;font-size:12px;color:var(--mid)">'+ord.note+'</div>':'')+
+      '</div>'+
+    '</div>'+
+    '<div class="card">'+
+      '<div class="card-header"><span class="card-title">Righe ordine ('+(righe?.length||0)+' porte)</span></div>'+
+      '<table>'+
+        '<thead><tr><th>#</th><th>Descrizione</th><th style="text-align:center">Q.tà</th><th style="text-align:right">Unitario</th><th style="text-align:right">Totale riga</th><th></th></tr></thead>'+
+        '<tbody>'+(rowsRighe||'<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--mid);font-style:italic">Nessuna porta — clicca \"+ Aggiungi porta\"</td></tr>')+'</tbody>'+
+      '</table>'+
+    '</div>';
 }
+
+async function eliminaOrdineDiretto(id){
+  if(!confirm('Eliminare definitivamente questa conferma d\'ordine?'))return;
+  await sb.from('righe_ordine').delete().eq('ordine_id',id);
+  const {error}=await sb.from('ordini_vendita').delete().eq('id',id);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Ordine eliminato','ok');renderOrdiniDiretti();
+}
+
 
 async function approvaOrdine(id, tipo){
   const stato = tipo==='comm'?'approvato_comm':'approvato_tec';
