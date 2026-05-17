@@ -1517,6 +1517,22 @@ async function calcolaDistinta(cfg, sb) {
   // 2. Applica ereditarietà -- costruisce lista componenti finale
   const compsFinali = applicaEreditarieta(regole);
 
+  // 2b. Pre-calcola L_anta/H_anta dalla misura reale in magazzino
+  var antaComp = compsFinali.find(function(c){return c.codice_componente==='ANTA';});
+  if(antaComp && antaComp.formula_larghezza){
+    var varsBase = costruisciVariabili(cfg);
+    var lAntaCalc = valutaFormula(antaComp.formula_larghezza, varsBase);
+    var hAntaCalc = antaComp.formula_altezza ? valutaFormula(antaComp.formula_altezza, varsBase) : 0;
+    var antaQ = sb.from('magazzino').select('larghezza_mm,altezza_mm').gt('giacenza',0).order('created_at',{ascending:true});
+    if(antaComp.categoria_mp) antaQ=antaQ.eq('categoria',antaComp.categoria_mp);
+    if(cfg.finitura) antaQ=antaQ.eq('codice_finitura',cfg.finitura);
+    if(lAntaCalc) antaQ=antaQ.gte('larghezza_mm',lAntaCalc);
+    if(hAntaCalc) antaQ=antaQ.gte('altezza_mm',hAntaCalc);
+    var antaRes = await antaQ.limit(1).maybeSingle();
+    cfg._larghezza_reale_anta = antaRes&&antaRes.data ? antaRes.data.larghezza_mm : lAntaCalc;
+    cfg._altezza_reale_anta = antaRes&&antaRes.data ? antaRes.data.altezza_mm : hAntaCalc;
+  }
+
   // 3. Per ogni componente, valuta condizione, calcola misure e trova articolo
   for (const comp of compsFinali) {
     // Valuta condizione (es. ha_vetro, ha_inserto_alluminio)
