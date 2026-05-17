@@ -1725,13 +1725,13 @@ function costruisciVariabili(cfg) {
 // ── VALUTA FORMULA ───────────────────────────────────────────
 function valutaFormula(formula, vars) {
   if (!formula) return 1;
-  // Sostituisci le variabili nella formula
-  let expr = formula;
-  for (const [k, v] of Object.entries(vars)) {
-    expr = expr.replace(new RegExp(\'\\b\' + k + \'\\b\', \'g\'), v);
+  var expr = formula;
+  var keys = Object.keys(vars).sort(function(a,b){return b.length-a.length;});
+  for (var i=0; i<keys.length; i++) {
+    expr = expr.split(keys[i]).join(String(vars[keys[i]]));
   }
   try {
-    return Function(\'"use strict"; return (\' + expr + \')\')();
+    return Function(\'return (\' + expr + \')\')();
   } catch (e) {
     console.error(\'Errore formula:\', formula, e);
     return 0;
