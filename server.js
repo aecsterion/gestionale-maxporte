@@ -1671,24 +1671,22 @@ async function elaboraComponente(comp, cfg, sb) {
     }
 
   } else if (comp.tipo_ricerca === \'dal_configuratore\') {
-    // Prende il codice dal configuratore
-    codice_mp = determinaDalConfiguratoreCode(comp.codice_componente, cfg);
+    var codiceConf = determinaDalConfiguratoreCode(comp.codice_componente, cfg);
     descrizione_mp = comp.descrizione;
-    // Cerca in magazzino per colore
-    if (codice_mp) {
-      const colore = determinaColore(comp.colore_da, cfg);
-      let query = sb.from(\'magazzino\')
-        .select(\'id, codice_mp, descrizione, giacenza, larghezza_mm, altezza_mm, codice_finitura\')
-        .gt(\'giacenza\', 0)
-        .order(\'created_at\', { ascending: true });
-      if (codice_mp) query = query.ilike(\'codice_mp\', codice_mp + \'%\');
-      if (colore) query = query.eq(\'codice_finitura\', colore);
-      const { data } = await query.limit(1).maybeSingle();
-      articolo = data;
-      if (articolo) {
-        codice_mp = articolo.codice_mp;
-        descrizione_mp = articolo.descrizione || comp.descrizione;
-      }
+    var colore2 = determinaColore(comp.colore_da, cfg);
+    var query2 = sb.from(\'magazzino\')
+      .select(\'id, codice_mp, descrizione, giacenza, larghezza_mm, altezza_mm, codice_finitura\')
+      .gt(\'giacenza\', 0)
+      .order(\'created_at\', { ascending: true });
+    if (comp.categoria_mp) query2 = query2.eq(\'categoria\', comp.categoria_mp);
+    if (codiceConf) query2 = query2.ilike(\'codice_mp\', codiceConf + \'%\');
+    if (comp.codice_mp) query2 = query2.ilike(\'codice_mp\', comp.codice_mp + \'%\');
+    if (colore2) query2 = query2.eq(\'codice_finitura\', colore2);
+    var res2 = await query2.limit(1).maybeSingle();
+    articolo = res2 ? res2.data : null;
+    if (articolo) {
+      codice_mp = articolo.codice_mp;
+      descrizione_mp = articolo.descrizione || comp.descrizione;
     }
   }
 
@@ -1704,6 +1702,7 @@ async function elaboraComponente(comp, cfg, sb) {
     codice_componente: comp.codice_componente,
     descrizione: descrizione_mp || comp.descrizione,
     codice_mp,
+    codice_finitura: articolo?.codice_finitura || null,
     magazzino_id: articolo?.id || null,
     qta: Math.round(qta * 1000) / 1000,
     unita: comp.unita || \'pz\',
@@ -1767,8 +1766,8 @@ function determinaColore(colore_da, cfg) {
 // ── DETERMINA CODICE DAL CONFIGURATORE ──────────────────────
 function determinaDalConfiguratoreCode(codice_componente, cfg) {
   if (codice_componente === \'TELAIO\') return cfg.telaio || null;
-  if (codice_componente === \'SERRATURA\') return cfg.serratura || null;
-  if (codice_componente === \'MANIGLIA\') return cfg.maniglia || null;
+  if (codice_componente === \'SERRATURA\') return null;
+  if (codice_componente === \'MANIGLIA\') return null;
   return null;
 }
 
@@ -1807,7 +1806,7 @@ async function anteprimaDistinta(){
     errori.map(function(e){return \'<p style="margin:2px 0;color:var(--amber-tx)">⚠ \'+e+\'</p>\';}).join(\'\')+ \'</div>\':  \'\'
   body.innerHTML=erroriHtml+
     \'<table style="width:100%"><thead><tr>\'+
-    \'<th>Codice MP</th><th>Descrizione</th><th>Q.t&agrave;</th><th>Disponibilit&agrave;</th>\'+
+    \'<th>Codice MP</th><th>Descrizione</th><th>Colore</th><th>Q.t&agrave;</th><th>Disponibilit&agrave;</th>\'+
     \'</tr></thead><tbody>\'+rows+\'</tbody></table>\';
 }
 
