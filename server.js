@@ -4656,12 +4656,12 @@ async function renderOrdiniDiretti(){
       '</div>'+
       '<div class="card">'+
         '<div class="card-header">'+
-          '<span class="card-title">Conferme d\'ordine</span>'+
+          '<span class="card-title">Conferme d&#39;ordine</span>'+
           '<div style="display:flex;gap:8px;align-items:center">'+
             '<input type="text" id="ord-cerca" placeholder="Cerca numero, cliente, riferimento..." '+
               'style="padding:6px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;width:340px" '+
               'oninput="filtraOrd(this.value)">'+
-            '<button class="btn btn-red btn-sm" onclick="nuovoOrdineDiretto()">+ Nuova conferma d\'ordine</button>'+
+            '<button class="btn btn-red btn-sm" onclick="nuovoOrdineDiretto()">+ Nuova conferma d&#39;ordine</button>'+
           '</div>'+
         '</div>'+
         '<table>'+
@@ -4674,7 +4674,7 @@ async function renderOrdiniDiretti(){
     console.error('renderOrdiniDiretti error:',e);
     document.getElementById('main-content').innerHTML='<div class="card"><div style="padding:20px">'+
       '<p style="color:var(--red);margin-bottom:12px">Errore: '+e.message+'</p>'+
-      '<button class="btn btn-red btn-sm" onclick="nuovoOrdineDiretto()">+ Nuova conferma d\'ordine</button>'+
+      '<button class="btn btn-red btn-sm" onclick="nuovoOrdineDiretto()">+ Nuova conferma d&#39;ordine</button>'+
       '</div></div>';
   }
 }
@@ -4690,7 +4690,7 @@ function filtraOrd(filtro){
   var tbody=document.getElementById('ord-tbody');
   if(!tbody)return;
   if(!filtered.length){
-    tbody.innerHTML='<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--mid);font-style:italic">'+(termini.length?'Nessun risultato':'Nessuna conferma d\'ordine')+'</td></tr>';
+    tbody.innerHTML='<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--mid);font-style:italic">'+(termini.length?'Nessun risultato':'Nessuna conferma d&#39;ordine')+'</td></tr>';
     return;
   }
   tbody.innerHTML=filtered.map(function(o){
@@ -4718,7 +4718,7 @@ async function apriModificaOrdine(id){
   const modal=ensureModalInBody('modal-nuovo-doc');
   modal.dataset.mode='ordine';
   modal.dataset.editId=id;
-  document.getElementById('ndoc-title').textContent='Modifica conferma d\'ordine';
+  document.getElementById('ndoc-title').textContent='Modifica conferma d&#39;ordine';
   document.getElementById('ndoc-clienti').innerHTML='<option value="">Seleziona...</option>'+(clienti||[]).map(function(c){
     return '<option value="'+c.id+'"'+(c.id===ord.anagrafica_id?' selected':'')+
       ' data-listino="'+(c.listino||'A')+'" data-sa="'+(c.sconto_dedicato_A||0)+
@@ -4757,7 +4757,7 @@ async function nuovoOrdineDiretto(){
     if(!modal){ toast('Errore: modal non trovato','err'); return; }
     modal.dataset.mode='ordine';
     delete modal.dataset.editId;
-    document.getElementById('ndoc-title').textContent="Nuova conferma d\'ordine";
+    document.getElementById('ndoc-title').textContent="Nuova conferma d&#39;ordine";
     document.getElementById('ndoc-clienti').innerHTML='<option value="">Seleziona cliente...</option>'+(clienti||[]).map(function(c){
       return '<option value="'+c.id+'" data-listino="'+(c.listino||'A')+'" data-sa="'+(c.sconto_dedicato_A||0)+
         '" data-sp="'+(c.sconto_dedicato_P||0)+'" data-ind="'+(c.indirizzo||'')+
@@ -4826,7 +4826,7 @@ async function renderOrdineDetail(id){
 
   document.getElementById('main-content').innerHTML=
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'+
-    '<div><button class="btn btn-sm" onclick="renderOrdiniDiretti()">← Tutte le conferme d\'ordine</button></div>'+
+    '<div><button class="btn btn-sm" onclick="renderOrdiniDiretti()">← Tutte le conferme d&#39;ordine</button></div>'+
     '<div style="display:flex;gap:8px">'+
       (puoModificare?
         '<button class="btn btn-sm" onclick="openConfiguratore(\'ordine\',\''+id+'\',\''+ord.listino+'\')">+ Aggiungi porta</button>'+
@@ -4875,7 +4875,7 @@ async function renderOrdineDetail(id){
 }
 
 async function eliminaOrdineDiretto(id){
-  if(!confirm('Eliminare definitivamente questa conferma d\'ordine?'))return;
+  if(!confirm('Eliminare definitivamente questa conferma d&#39;ordine?'))return;
   await sb.from('righe_ordine').delete().eq('ordine_id',id);
   const {error}=await sb.from('ordini_vendita').delete().eq('id',id);
   if(error){toast('Errore: '+error.message,'err');return;}
