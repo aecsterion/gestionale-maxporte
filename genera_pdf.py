@@ -3,19 +3,24 @@
    Usa il template Excel come sorgente di stili, costruisce fogli dinamici
    con solo le righe valorizzate. Le posizioni si accorpano automaticamente.
 """
-import sys, json, os, subprocess, re, tempfile, shutil
+import sys, json, os, subprocess, re, tempfile, shutil, io
 from copy import copy
 from openpyxl import Workbook, load_workbook
 from openpyxl.cell.cell import MergedCell
 from openpyxl.utils import get_column_letter
 
-VERSION = "2026-05-25-v1"
+VERSION = "2026-05-25-v2"
 
 # ── Costanti impaginazione (pt) ────────────────────────────────────────────
 ROW_H = 13.9          # altezza riga default del template
-PAGE_H = 700           # altezza utile stimata per pagina (conservativa)
-HEADER_FIRST = 30      # righe header prima pagina (1-30)
-HEADER_INTER = 18      # righe header pagine intermedie (1-18)
+HEADER_FIRST_END = 30  # ultima riga header prima pagina
+HEADER_INTER_END = 18  # ultima riga header pagine intermedie
+
+# Logo
+LOGO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logo-report.png')
+if not os.path.exists(LOGO_PATH):
+    for c in ['/app/logo-report.png', os.path.join(os.getcwd(), 'logo-report.png')]:
+        if os.path.exists(c): LOGO_PATH = c; break
 
 # ── Mappa dettagli riga → (label, campo_valore, campo_prezzo, campo_netto, campo_totale)
 DETAIL_MAP = [
@@ -320,17 +325,29 @@ def genera_workbook(data, template_path):
     
     wb = Workbook()
     
+    # ── Calcola altezze reali header dai template ─────────────────────────
+    def real_header_h(ws_src, end_row):
+        h = 0
+        for r in range(1, end_row + 1):
+            rd = ws_src.row_dimensions.get(r)
+            h += rd.height if rd and rd.height else ROW_H
+        return h
+    
+    header_first_h = real_header_h(ws_prima, HEADER_FIRST_END)
+    header_inter_h = real_header_h(ws_inter, HEADER_INTER_END)
+    
+    # Capacità pagina effettiva (calibrata su output reale LibreOffice)
+    PAGE_H = 690
+    
     # ── Foglio 1: Prima pagina + posizioni ────────────────────────────────
     ws = wb.active
     ws.title = 'Pag1'
     setup_page(ws, ws_prima)
     
     # Copia header prima pagina (righe 1-30)
-    cur = copy_rows(ws_prima, ws, 1, 30, 1, m)
+    cur = copy_rows(ws_prima, ws, 1, HEADER_FIRST_END, 1, m)
     
-    # Calcola spazio disponibile sulla prima pagina
-    header_h = HEADER_FIRST * ROW_H
-    avail_h = PAGE_H - header_h
+    avail_h = PAGE_H - header_first_h
     used_h = 0
     page_num = 1
     pos_idx = 0
@@ -345,9 +362,9 @@ def genera_workbook(data, template_path):
             page_num += 1
             ws = wb.create_sheet(title=f'Pag{page_num}')
             setup_page(ws, ws_inter)
-            cur = copy_rows(ws_inter, ws, 1, 18, 1, m)
+            cur = copy_rows(ws_inter, ws, 1, HEADER_INTER_END, 1, m)
             used_h = 0
-            avail_h = PAGE_H - (HEADER_INTER * ROW_H)
+            avail_h = PAGE_H - header_inter_h
         
         cur, written = write_position(ws, ws_inter, cur, riga, sconto_str)
         used_h += written * ROW_H
@@ -363,6 +380,42 @@ def genera_workbook(data, template_path):
     copy_rows(ws_finale, ws_last, 1, max_row_finale, 1, m)
     
     return wb
+
+# ── Logo overlay sul PDF ──────────────────────────────────────────────────
+
+def aggiungi_logo(pdf_path, logo_path):
+    """Sovrappone il logo su ogni pagina del PDF."""
+    if not os.path.exists(logo_path):
+        print(f"Logo non trovato: {logo_path}", file=sys.stderr)
+        return
+    try:
+        from reportlab.pdfgen import canvas as rl_canvas
+        from reportlab.lib.units import mm
+        from pypdf import PdfReader, PdfWriter
+
+        reader = PdfReader(pdf_path)
+        writer = PdfWriter()
+
+        for page in reader.pages:
+            w = float(page.mediabox.width)
+            h = float(page.mediabox.height)
+            buf = io.BytesIO()
+            c = rl_canvas.Canvas(buf, pagesize=(w, h))
+            c.drawImage(logo_path, 14*mm, h - 35*mm,
+                        width=28*mm, height=28*mm,
+                        preserveAspectRatio=True, mask='auto')
+            c.save()
+            buf.seek(0)
+            overlay = PdfReader(buf).pages[0]
+            page.merge_page(overlay)
+            writer.add_page(page)
+
+        tmp = pdf_path + '_logo'
+        with open(tmp, 'wb') as f:
+            writer.write(f)
+        os.replace(tmp, pdf_path)
+    except Exception as e:
+        print(f"Logo warning: {e}", file=sys.stderr)
 
 # ── Conversione PDF ───────────────────────────────────────────────────────
 
@@ -416,6 +469,9 @@ def genera_preventivo(json_path, pdf_path):
     finally:
         try: os.unlink(tmp_xlsx)
         except: pass
+    
+    # Sovrapponi logo su ogni pagina
+    aggiungi_logo(pdf_path, LOGO_PATH)
     
     print(f"genera_pdf.py {VERSION} OK → {pdf_path}", file=sys.stderr)
 
