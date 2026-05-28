@@ -672,16 +672,17 @@ tr.data-row:hover td{background:var(--beige);cursor:pointer}
       <button class=\"form-close\" onclick=\"closeForm('modal-export')\">&times;</button>
     </div>
     <div class=\"form-modal-body\">
-      <div class=\"form-field\" style=\"display:flex;align-items:center;gap:10px\">
-        <input type=\"checkbox\" id=\"exp-solo-netti\" style=\"width:auto;margin:0\">
-        <label for=\"exp-solo-netti\" style=\"margin:0;cursor:pointer\">Mostra solo prezzi netti (nascondi listino e sconto)</label>
-      </div>
-      <div class=\"form-field\" style=\"display:flex;align-items:center;gap:10px;margin-top:14px\">
-        <input type=\"checkbox\" id=\"exp-arr-attivo\" style=\"width:auto;margin:0\" onchange=\"document.getElementById('exp-arr-valore').disabled=!this.checked\">
-        <label for=\"exp-arr-attivo\" style=\"margin:0;cursor:pointer\">Arrotonda imponibile a:</label>
-        <input type=\"number\" id=\"exp-arr-valore\" placeholder=\"es. 10\" step=\"1\" min=\"1\" disabled style=\"width:80px\">
-        <span style=\"font-size:13px;color:var(--mid)\">&euro;</span>
-      </div>
+      <label style=\"display:flex;align-items:center;gap:10px;cursor:pointer;padding:8px 0\">
+        <input type=\"checkbox\" id=\"exp-solo-netti\" style=\"width:18px;height:18px;margin:0;flex-shrink:0\">
+        <span style=\"font-size:14px\">Mostra solo prezzi netti (nascondi listino e sconto)</span>
+      </label>
+      <div style=\"border-top:0.5px solid var(--border);margin:8px 0\"></div>
+      <label style=\"display:flex;align-items:center;gap:10px;cursor:pointer;padding:8px 0\">
+        <input type=\"checkbox\" id=\"exp-arr-attivo\" style=\"width:18px;height:18px;margin:0;flex-shrink:0\" onchange=\"document.getElementById('exp-arr-valore').disabled=!this.checked\">
+        <span style=\"font-size:14px\">Arrotonda imponibile a</span>
+        <input type=\"number\" id=\"exp-arr-valore\" placeholder=\"10\" step=\"1\" min=\"1\" disabled style=\"width:70px;margin:0\">
+        <span style=\"font-size:14px;color:var(--mid)\">&euro;</span>
+      </label>
     </div>
     <div class=\"form-modal-foot\">
       <button class=\"btn\" onclick=\"closeForm('modal-export')\">Annulla</button>

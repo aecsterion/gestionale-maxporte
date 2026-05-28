@@ -60,16 +60,38 @@ def v(d, k, default=''):
     val = d.get(k, default)
     return str(val) if val is not None else ''
 
+def to_num(x):
+    """Converte in float gestendo numeri nativi e stringhe formattate IT."""
+    if isinstance(x, (int, float)):
+        return float(x)
+    if x is None:
+        return 0.0
+    s = str(x).replace('€', '').replace('\u00a0', '').strip()
+    if not s:
+        return 0.0
+    # Formato italiano: se c'è la virgola, punto=migliaia e virgola=decimale
+    if ',' in s:
+        s = s.replace('.', '').replace(',', '.')
+    try:
+        return float(s)
+    except:
+        return 0.0
+
 def has_val(val):
     """Valore è significativo (non vuoto/zero)?"""
     if val is None: return False
     s = str(val).strip()
     if not s: return False
+    # Se è testo non numerico, è significativo
+    f = to_num(val)
+    if f != 0:
+        return True
+    # Zero numerico → non significativo; testo non-numero → significativo
     try:
-        f = float(s.replace('€','').replace('.','').replace(',','.').strip())
-        return f != 0
+        float(s.replace('€','').replace('\u00a0','').replace('.','').replace(',','.').strip())
+        return False  # era un numero e vale 0
     except:
-        return bool(s)
+        return bool(s)  # è testo
 
 def fmt_eur(val):
     """Formatta come € 123,45 — stringa vuota se zero/None."""
@@ -188,7 +210,7 @@ def write_position(ws_dst, ws_tmpl_inter, cur_row, riga, sconto_str, sconto_pct=
         totale = ''
         if has_val(prezzo):
             try:
-                p = float(str(prezzo).replace('€','').replace('.','').replace(',','.').strip())
+                p = to_num(prezzo)
                 netto_n = round(p * (1 - sc/100), 2)
                 netto = netto_n
                 totale = netto_n  # quantità 1 per voce componente
@@ -352,23 +374,21 @@ def genera_workbook(data, template_path):
     }
     
     # ── Calcolo valori riepilogo ──────────────────────────────────────────
-    def num(x):
-        try: return float(str(x).replace('€','').replace('.','').replace(',','.').strip() or 0)
-        except: return 0.0
+    num = to_num
     
-    tot_lordo  = num(v(doc, 'totale_imponibile'))   # somma listini posizioni
-    tot_netto  = num(v(doc, 'totale_netto'))         # dopo sconto
+    tot_lordo  = num(doc.get('totale_imponibile'))   # somma listini posizioni
+    tot_netto  = num(doc.get('totale_netto'))         # dopo sconto
     if tot_netto == 0 and tot_lordo > 0:
         # fallback: applica sconto1 se netto non fornito
-        sc1n = num(v(doc, 'sconto1'))
+        sc1n = num(doc.get('sconto1'))
         tot_netto = round(tot_lordo * (1 - sc1n/100), 2)
     
     sconto_euro = round(tot_lordo - tot_netto, 2)
-    omaggi      = num(v(doc, 'omaggi'))
-    sconto_pag  = num(v(doc, 'sconto_pagamento'))
-    imballo     = num(v(doc, 'totale_imballo'))
-    trasporto   = num(v(doc, 'totale_trasporto'))
-    spese       = num(v(doc, 'totale_spese'))
+    omaggi      = num(doc.get('omaggi'))
+    sconto_pag  = num(doc.get('sconto_pagamento'))
+    imballo     = num(doc.get('totale_imballo'))
+    trasporto   = num(doc.get('totale_trasporto'))
+    spese       = num(doc.get('totale_spese'))
     
     imponibile  = round(tot_netto - omaggi - sconto_pag + imballo + trasporto + spese, 2)
     
