@@ -3924,7 +3924,7 @@ function aggiornaZoccoliPreview(hStr){
       el.innerHTML=\'<div style="background:var(--red-bg);border-radius:var(--radius);padding:10px 12px;font-size:12px;color:var(--red)">Altezza non raggiungibile.</div>\';
     } else {
       el.innerHTML=\'<div style="background:var(--amber-bg);border-radius:var(--radius);padding:10px 12px;font-size:12px;color:var(--amber-tx)">\'+
-        \'<strong>\'+z+\' zoccolo\'+( z>1?\'li\':\'\')+\'</strong> da 80 mm &mdash; \'+
+        \'<strong>\'+z+\' zoccol\'+( z>1?\'i\':\'o\')+\'</strong> da 80 mm &mdash; \'+
         \'pannello tagliato a <strong>\'+hT+\' mm</strong> + \'+z+\' x 80 mm = \'+h+\' mm</div>\';
     }
   }

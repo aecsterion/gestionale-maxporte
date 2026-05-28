@@ -154,7 +154,8 @@ def write_position(ws_dst, ws_tmpl_inter, cur_row, riga, sconto_str):
     # Abbrevia "Nessuno" → "N/D" per non sforare la cella
     if senso.strip().lower() == 'nessuno': senso = 'N/D'
     apertura = v(riga, 'codice_apertura', v(riga, 'apertura'))
-    ws_dst.cell(row=cur_row, column=16).value = f"{senso} {apertura}".strip()
+    ws_dst.cell(row=cur_row, column=16).value = senso       # cella stretta (COD_SENSO)
+    ws_dst.cell(row=cur_row, column=18).value = apertura    # cella larga (COD_APERTURA)
     ws_dst.cell(row=cur_row, column=23).value = v(riga, 'quantita', '1')
     ws_dst.cell(row=cur_row, column=25).value = v(riga, 'um', 'NR')
     
@@ -210,7 +211,12 @@ def write_position(ws_dst, ws_tmpl_inter, cur_row, riga, sconto_str):
         for mc, xc in merges:
             ws_dst.merge_cells(start_row=cur_row, start_column=mc, end_row=cur_row, end_column=xc)
         
-        # NON forzare altezza riga → si espande automaticamente con wrap_text
+        # LibreOffice non auto-espande righe con celle merged → calcolo altezza
+        # La cella valore (col 16-26) è larga ~11 colonne da 2.42 char ≈ 50 caratteri
+        CHARS_PER_LINE = 50
+        n_lines = max(1, -(-len(str(value)) // CHARS_PER_LINE))  # ceil division
+        if n_lines > 1:
+            ws_dst.row_dimensions[cur_row].height = ROW_H * n_lines
         cur_row += 1
     
     # Footer posizione (template riga 47)
