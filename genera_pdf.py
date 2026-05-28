@@ -133,9 +133,14 @@ def copy_rows(ws_src, ws_dst, src_start, src_end, dst_start, mapping=None):
 
 # ── Scrivi una posizione dinamica ─────────────────────────────────────────
 
-def write_position(ws_dst, ws_tmpl_inter, cur_row, riga, sconto_str):
+def write_position(ws_dst, ws_tmpl_inter, cur_row, riga, sconto_str, sconto_pct=0, solo_netti=False):
     """Scrive una posizione con solo righe valorizzate. Ritorna (next_row, num_rows_written)."""
     start_row = cur_row
+    try:
+        sc = float(sconto_pct)
+    except:
+        sc = 0
+    tot_netto_pos = 0.0  # accumula i netti delle voci
     
     # Riga top (template PAGINE_INTERMEDIE riga 19)
     for cell in ws_tmpl_inter[19]:
@@ -173,12 +178,23 @@ def write_position(ws_dst, ws_tmpl_inter, cur_row, riga, sconto_str):
             value = f"{value} - {v(riga, 'versione_maniglia')}"
         
         prezzo = v(riga, campo_prz) if campo_prz else ''
-        netto = v(riga, campo_net) if campo_net else ''
-        totale = v(riga, campo_tot) if campo_tot else ''
         
         # Salta riga se non ha né valore né prezzo
         if not has_val(value) and not has_val(prezzo):
             continue
+        
+        # Calcola netto e totale dal prezzo di listino e dallo sconto
+        netto = ''
+        totale = ''
+        if has_val(prezzo):
+            try:
+                p = float(str(prezzo).replace('€','').replace('.','').replace(',','.').strip())
+                netto_n = round(p * (1 - sc/100), 2)
+                netto = netto_n
+                totale = netto_n  # quantità 1 per voce componente
+                tot_netto_pos += netto_n
+            except:
+                pass
         
         # Scegli stile template: riga 22 (con prezzi) o 21 (senza)
         has_price = has_val(prezzo)
@@ -201,10 +217,15 @@ def write_position(ws_dst, ws_tmpl_inter, cur_row, riga, sconto_str):
             indent=old_al.indent, text_rotation=old_al.text_rotation)
         
         if has_price:
-            ws_dst.cell(row=cur_row, column=28).value = fmt_eur(prezzo)
-            ws_dst.cell(row=cur_row, column=31).value = sconto_str
-            ws_dst.cell(row=cur_row, column=33).value = fmt_eur(netto)
-            ws_dst.cell(row=cur_row, column=36).value = fmt_eur(totale)
+            if solo_netti:
+                # Solo Pr. Netto e Totale — nascondo Prezzo (listino) e Sconto
+                ws_dst.cell(row=cur_row, column=33).value = fmt_eur(netto)
+                ws_dst.cell(row=cur_row, column=36).value = fmt_eur(totale)
+            else:
+                ws_dst.cell(row=cur_row, column=28).value = fmt_eur(prezzo)
+                ws_dst.cell(row=cur_row, column=31).value = sconto_str
+                ws_dst.cell(row=cur_row, column=33).value = fmt_eur(netto)
+                ws_dst.cell(row=cur_row, column=36).value = fmt_eur(totale)
         
         # Merge
         merges = get_merges_for_row(ws_tmpl_inter, src_row)
@@ -227,7 +248,13 @@ def write_position(ws_dst, ws_tmpl_inter, cur_row, riga, sconto_str):
     
     ws_dst.cell(row=cur_row, column=2).value = "** L'immagine è puramente rappresentativa"
     ws_dst.cell(row=cur_row, column=22).value = "Totale posizione (IVA esclusa)"
-    ws_dst.cell(row=cur_row, column=36).value = fmt_eur(v(riga, 'totale_posizione', v(riga, 'prezzo_unitario')))
+    # Totale posizione = somma dei netti delle voci × quantità
+    try:
+        qta = float(v(riga, 'quantita', '1') or 1)
+    except:
+        qta = 1
+    tot_pos = round(tot_netto_pos * qta, 2)
+    ws_dst.cell(row=cur_row, column=36).value = fmt_eur(tot_pos)
     
     for mc, xc in get_merges_for_row(ws_tmpl_inter, 47):
         ws_dst.merge_cells(start_row=cur_row, start_column=mc, end_row=cur_row, end_column=xc)
@@ -276,6 +303,11 @@ def genera_workbook(data, template_path):
     sconto_pct = v(doc, 'sconto1', '0')
     sconto_str = f"{sconto_pct}%" if sconto_pct and sconto_pct != '0' else ''
     
+    # ── Opzioni di esportazione ───────────────────────────────────────────
+    opzioni = data.get('opzioni', {})
+    solo_netti = bool(opzioni.get('solo_netti', False))          # nascondi listino+sconto
+    arrotonda  = opzioni.get('arrotonda')                          # None o valore (es. 5, 10)
+    
     # Mapping placeholder → valori per header/cliente
     tipo_doc = v(doc, 'tipo_documento', 'PREVENTIVO')
     codice_campo = 'codice_preventivo' if 'preventivo' in tipo_doc.lower() else 'codice_ordine'
@@ -317,19 +349,58 @@ def genera_workbook(data, template_path):
         '*PEC_FATTURAZIONE*': v(doc, 'pec_fatturazione', v(doc, 'pec')),
         '*GIORNI_VALIDITÀ_OFFERTA*': v(doc, 'validita_offerta', '30'),
         '*BARCODE_DOCUMENTO*': '',
-        # Riepilogo
-        '*SOMMA_TOTALI_POSIZIONI*': fmt_eur(v(doc, 'totale_imponibile')),
-        '*SCONTO*': fmt_eur(v(doc, 'sconto_euro', v(doc, 'totale_sconto'))),
-        '*OMAGGI*': fmt_eur(v(doc, 'omaggi')),
-        '*SCONTO_PAGAMENTO*': fmt_eur(v(doc, 'sconto_pagamento')),
-        '*TOTALE_MERCE_SCONTATO*': fmt_eur(v(doc, 'totale_netto')),
-        '*TOTALE_IMPONIBILE*': fmt_eur(v(doc, 'totale_imponibile_netto', v(doc, 'totale_netto'))),
-        '*TOTALE_IVA*': fmt_eur(v(doc, 'totale_iva')),
-        '*TOTALE_IMBALLO*': fmt_eur(v(doc, 'totale_imballo')),
-        '*TOTALE_TRASPORTO*': fmt_eur(v(doc, 'totale_trasporto')),
-        '*TOTALE_SPESE*': fmt_eur(v(doc, 'totale_spese')),
-        '*SOMMA_RIEPILOGO_OFFERTA*': fmt_eur(v(doc, 'totale_documento')),
     }
+    
+    # ── Calcolo valori riepilogo ──────────────────────────────────────────
+    def num(x):
+        try: return float(str(x).replace('€','').replace('.','').replace(',','.').strip() or 0)
+        except: return 0.0
+    
+    tot_lordo  = num(v(doc, 'totale_imponibile'))   # somma listini posizioni
+    tot_netto  = num(v(doc, 'totale_netto'))         # dopo sconto
+    if tot_netto == 0 and tot_lordo > 0:
+        # fallback: applica sconto1 se netto non fornito
+        sc1n = num(v(doc, 'sconto1'))
+        tot_netto = round(tot_lordo * (1 - sc1n/100), 2)
+    
+    sconto_euro = round(tot_lordo - tot_netto, 2)
+    omaggi      = num(v(doc, 'omaggi'))
+    sconto_pag  = num(v(doc, 'sconto_pagamento'))
+    imballo     = num(v(doc, 'totale_imballo'))
+    trasporto   = num(v(doc, 'totale_trasporto'))
+    spese       = num(v(doc, 'totale_spese'))
+    
+    imponibile  = round(tot_netto - omaggi - sconto_pag + imballo + trasporto + spese, 2)
+    
+    # ── Arrotondamento del totale imponibile (opzionale) ──────────────────
+    arrotondamento = 0.0
+    if arrotonda:
+        try:
+            step = float(arrotonda)
+            if step > 0:
+                imponibile_arr = round(imponibile / step) * step
+                arrotondamento = round(imponibile_arr - imponibile, 2)
+                imponibile = round(imponibile_arr, 2)
+        except:
+            pass
+    
+    iva         = round(imponibile * 0.22, 2)
+    totale_finale = round(imponibile + iva, 2)
+    
+    m.update({
+        '*SOMMA_TOTALI_POSIZIONI*': fmt_eur(tot_lordo),
+        '*SCONTO*': fmt_eur(sconto_euro),
+        '*OMAGGI*': fmt_eur(omaggi),
+        '*SCONTO_PAGAMENTO*': fmt_eur(sconto_pag),
+        '*TOTALE_MERCE_SCONTATO*': fmt_eur(tot_netto),
+        '*ARROTONDAMENTO*': fmt_eur(arrotondamento) if arrotondamento else '',
+        '*TOTALE_IMPONIBILE*': fmt_eur(imponibile),
+        '*TOTALE_IVA*': fmt_eur(iva),
+        '*TOTALE_IMBALLO*': fmt_eur(imballo),
+        '*TOTALE_TRASPORTO*': fmt_eur(trasporto),
+        '*TOTALE_SPESE*': fmt_eur(spese),
+        '*SOMMA_RIEPILOGO_OFFERTA*': fmt_eur(totale_finale),
+    })
     
     wb = Workbook()
     
@@ -374,7 +445,7 @@ def genera_workbook(data, template_path):
             used_h = 0
             avail_h = PAGE_H - header_inter_h
         
-        cur, written = write_position(ws, ws_inter, cur, riga, sconto_str)
+        cur, written = write_position(ws, ws_inter, cur, riga, sconto_str, sconto_pct, solo_netti)
         used_h += written * ROW_H
         pos_idx += 1
     
