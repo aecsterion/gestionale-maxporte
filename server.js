@@ -664,6 +664,32 @@ tr.data-row:hover td{background:var(--beige);cursor:pointer}
   </div>
 </div>
 
+<!-- MODAL OPZIONI EXPORT PDF -->
+<div id=\"modal-export\" class=\"form-overlay\" style=\"justify-content:center;align-items:flex-start;padding:20px\">
+  <div class=\"form-modal\" style=\"max-width:480px\">
+    <div class=\"form-modal-head\">
+      <span class=\"form-modal-title\">Opzioni esportazione PDF</span>
+      <button class=\"form-close\" onclick=\"closeForm('modal-export')\">&times;</button>
+    </div>
+    <div class=\"form-modal-body\">
+      <div class=\"form-field\" style=\"display:flex;align-items:center;gap:10px\">
+        <input type=\"checkbox\" id=\"exp-solo-netti\" style=\"width:auto;margin:0\">
+        <label for=\"exp-solo-netti\" style=\"margin:0;cursor:pointer\">Mostra solo prezzi netti (nascondi listino e sconto)</label>
+      </div>
+      <div class=\"form-field\" style=\"display:flex;align-items:center;gap:10px;margin-top:14px\">
+        <input type=\"checkbox\" id=\"exp-arr-attivo\" style=\"width:auto;margin:0\" onchange=\"document.getElementById('exp-arr-valore').disabled=!this.checked\">
+        <label for=\"exp-arr-attivo\" style=\"margin:0;cursor:pointer\">Arrotonda imponibile a:</label>
+        <input type=\"number\" id=\"exp-arr-valore\" placeholder=\"es. 10\" step=\"1\" min=\"1\" disabled style=\"width:80px\">
+        <span style=\"font-size:13px;color:var(--mid)\">&euro;</span>
+      </div>
+    </div>
+    <div class=\"form-modal-foot\">
+      <button class=\"btn\" onclick=\"closeForm('modal-export')\">Annulla</button>
+      <button class=\"btn btn-red\" onclick=\"eseguiEsportaPDF()\">Genera PDF</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL MAGAZZINO -->
 <div id="modal-magazzino" class="form-modal-overlay">
   <div class="form-modal" style="max-width:680px">
@@ -6798,6 +6824,21 @@ function ensureModalInBody(id) {
 
 // ── ESPORTA PDF ───────────────────────────────────────
 async function esportaPDF(tipo, id) {
+  // Apri modal opzioni export
+  _exportTipo = tipo;
+  _exportId = id;
+  const mo = ensureModalInBody('modal-export');
+  if(mo) mo.classList.add('open');
+}
+
+var _exportTipo=null, _exportId=null;
+
+async function eseguiEsportaPDF() {
+  const tipo = _exportTipo, id = _exportId;
+  const soloNetti = document.getElementById('exp-solo-netti')?.checked || false;
+  const arrAttivo = document.getElementById('exp-arr-attivo')?.checked || false;
+  const arrValore = parseFloat(document.getElementById('exp-arr-valore')?.value) || 0;
+  closeForm('modal-export');
   toast('Generazione PDF in corso...', 'ok');
   try {
     const tabDoc = tipo==='preventivo' ? 'preventivi' : 'ordini_vendita';
@@ -6925,6 +6966,12 @@ async function esportaPDF(tipo, id) {
         fuori_misura_h: r.fuori_misura_h ? 'Sì' : '',
         immagine_url: r.immagine_url || '',
       }))
+    };
+
+    // Opzioni di esportazione
+    payload.opzioni = {
+      solo_netti: soloNetti,
+      arrotonda: (arrAttivo && arrValore > 0) ? arrValore : null
     };
 
     // Chiama il server per generare il PDF
