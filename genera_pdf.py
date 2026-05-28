@@ -123,14 +123,20 @@ def get_merges_range(ws, min_r, max_r):
 
 # ── Copia blocco di righe dal template ────────────────────────────────────
 
-def copy_rows(ws_src, ws_dst, src_start, src_end, dst_start, mapping=None):
+def copy_rows(ws_src, ws_dst, src_start, src_end, dst_start, mapping=None, skip_rows=None):
     """Copia righe src_start..src_end dal template a ws_dst a partire da dst_start.
-       Applica mapping per sostituire placeholder *NOME* con valori."""
+       Applica mapping per sostituire placeholder *NOME* con valori.
+       skip_rows: set di righe (numerazione template) da nascondere (altezza 0, vuote)."""
+    skip_rows = skip_rows or set()
     cur = dst_start
     for sr in range(src_start, src_end + 1):
+        nascondi = sr in skip_rows
         for cell in ws_src[sr]:
             if isinstance(cell, MergedCell): continue
             dst_cell = ws_dst.cell(row=cur, column=cell.column)
+            if nascondi:
+                dst_cell.value = None
+                continue
             val = cell.value
             if val and isinstance(val, str) and mapping:
                 for k, repl in mapping.items():
@@ -140,13 +146,18 @@ def copy_rows(ws_src, ws_dst, src_start, src_end, dst_start, mapping=None):
                 if not val.strip(): val = None
             dst_cell.value = val
             copy_style(cell, dst_cell)
-        h = ws_src.row_dimensions.get(sr)
-        if h and h.height:
-            ws_dst.row_dimensions[cur].height = h.height
+        if nascondi:
+            ws_dst.row_dimensions[cur].height = 0
+        else:
+            h = ws_src.row_dimensions.get(sr)
+            if h and h.height:
+                ws_dst.row_dimensions[cur].height = h.height
         cur += 1
-    # Merge
+    # Merge (salta quelli sulle righe nascoste)
     for mr in ws_src.merged_cells.ranges:
         if mr.min_row >= src_start and mr.max_row <= src_end:
+            if mr.min_row in skip_rows:
+                continue
             offset = dst_start - src_start
             ws_dst.merge_cells(
                 start_row=mr.min_row + offset, end_row=mr.max_row + offset,
@@ -474,6 +485,11 @@ def genera_workbook(data, template_path):
     page_num += 1
     ws_last = wb.create_sheet(title=f'Pag{page_num}')
     setup_page(ws_last, ws_finale)
+    
+    # Con "solo netti": etichette TOTALE MERCE e SCONTO restano, ma importo vuoto
+    if solo_netti:
+        m['*SOMMA_TOTALI_POSIZIONI*'] = ''
+        m['*SCONTO*'] = ''
     
     # Copia tutto il contenuto della pagina finale
     max_row_finale = ws_finale.max_row
