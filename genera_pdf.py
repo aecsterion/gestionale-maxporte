@@ -94,13 +94,13 @@ def has_val(val):
         return bool(s)  # è testo
 
 def fmt_eur(val):
-    """Formatta come € 123,45 — stringa vuota se zero/None."""
+    """Formatta il numero come 1.234,56 (senza €, che è già fisso nel template).
+       Stringa vuota se zero/None."""
     if val is None or val == '' or val == 0: return ''
     try:
-        f = float(val)
+        f = to_num(val) if isinstance(val, str) else float(val)
         if f == 0: return ''
-        s = f"{f:,.2f}".replace(',','X').replace('.',',').replace('X','.')
-        return f"€ {s}"
+        return f"{f:,.2f}".replace(',','X').replace('.',',').replace('X','.')
     except:
         return str(val) if val else ''
 
@@ -239,15 +239,16 @@ def write_position(ws_dst, ws_tmpl_inter, cur_row, riga, sconto_str, sconto_pct=
             indent=old_al.indent, text_rotation=old_al.text_rotation)
         
         if has_price:
+            eur = lambda x: ('€ ' + fmt_eur(x)) if fmt_eur(x) else ''
             if solo_netti:
                 # Solo Pr. Netto e Totale — nascondo Prezzo (listino) e Sconto
-                ws_dst.cell(row=cur_row, column=33).value = fmt_eur(netto)
-                ws_dst.cell(row=cur_row, column=36).value = fmt_eur(totale)
+                ws_dst.cell(row=cur_row, column=33).value = eur(netto)
+                ws_dst.cell(row=cur_row, column=36).value = eur(totale)
             else:
-                ws_dst.cell(row=cur_row, column=28).value = fmt_eur(prezzo)
+                ws_dst.cell(row=cur_row, column=28).value = eur(prezzo)
                 ws_dst.cell(row=cur_row, column=31).value = sconto_str
-                ws_dst.cell(row=cur_row, column=33).value = fmt_eur(netto)
-                ws_dst.cell(row=cur_row, column=36).value = fmt_eur(totale)
+                ws_dst.cell(row=cur_row, column=33).value = eur(netto)
+                ws_dst.cell(row=cur_row, column=36).value = eur(totale)
         
         # Merge
         merges = get_merges_for_row(ws_tmpl_inter, src_row)
@@ -276,7 +277,7 @@ def write_position(ws_dst, ws_tmpl_inter, cur_row, riga, sconto_str, sconto_pct=
     except:
         qta = 1
     tot_pos = round(tot_netto_pos * qta, 2)
-    ws_dst.cell(row=cur_row, column=36).value = fmt_eur(tot_pos)
+    ws_dst.cell(row=cur_row, column=36).value = ('€ ' + fmt_eur(tot_pos)) if fmt_eur(tot_pos) else ''
     
     for mc, xc in get_merges_for_row(ws_tmpl_inter, 47):
         ws_dst.merge_cells(start_row=cur_row, start_column=mc, end_row=cur_row, end_column=xc)
