@@ -151,6 +151,8 @@ def write_position(ws_dst, ws_tmpl_inter, cur_row, riga, sconto_str):
     ws_dst.cell(row=cur_row, column=14).value = v(riga, 'spessore')
     
     senso = v(riga, 'senso')
+    # Abbrevia "Nessuno" → "N/D" per non sforare la cella
+    if senso.strip().lower() == 'nessuno': senso = 'N/D'
     apertura = v(riga, 'codice_apertura', v(riga, 'apertura'))
     ws_dst.cell(row=cur_row, column=16).value = f"{senso} {apertura}".strip()
     ws_dst.cell(row=cur_row, column=23).value = v(riga, 'quantita', '1')
@@ -223,7 +225,7 @@ def write_position(ws_dst, ws_tmpl_inter, cur_row, riga, sconto_str):
     
     for mc, xc in get_merges_for_row(ws_tmpl_inter, 47):
         ws_dst.merge_cells(start_row=cur_row, start_column=mc, end_row=cur_row, end_column=xc)
-    ws_dst.row_dimensions[cur_row].height = ws_tmpl_inter.row_dimensions[47].height or ROW_H
+    # NON forzare altezza footer — si espande se le note sono lunghe
     cur_row += 1
     
     rows_written = cur_row - start_row
@@ -337,7 +339,7 @@ def genera_workbook(data, template_path):
     header_inter_h = real_header_h(ws_inter, HEADER_INTER_END)
     
     # Capacità pagina effettiva (calibrata su output reale LibreOffice)
-    PAGE_H = 690
+    PAGE_H = 760
     
     # ── Foglio 1: Prima pagina + posizioni ────────────────────────────────
     ws = wb.active
