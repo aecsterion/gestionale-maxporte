@@ -1289,7 +1289,7 @@ async function buildPreventivoPayload(id){
     var tot=r.prezzo_totale_riga||r.prezzo_unitario||r.prezzo_base||0;
     return {posizione:String(i+1).padStart(3,'0'),
       larghezza:r.larghezza_mm||'',altezza:r.altezza_mm||'',
-      spessore:r.spessore_muro_mm||(r.spessore_muro_cm?r.spessore_muro_cm*10:''),
+      spessore:r.spessore_mm||r.spessore_muro_mm||(r.spessore_muro_cm?r.spessore_muro_cm*10:''),
       senso:r.senso_apertura||'',
       codice_apertura:r.codice_apertura||'',
       apertura:r.nome_apertura||'',nome_apertura:r.nome_apertura||'',
@@ -3855,7 +3855,7 @@ async function cfgAccPannello(){
   const {data:imp}=await sb.from(\'impostazioni\').select(\'valore\').eq(\'chiave\',\'supplemento_taglio_pannello\').maybeSingle();
   CFG._suppTaglioPannello=parseFloat(imp?.valore||0);
   const {data:magP}=await sb.from(\'magazzino\')
-    .select(\'altezza_mm,larghezza_mm,giacenza\')
+    .select(\'altezza_mm,larghezza_mm,spessore_mm,giacenza\')
     .eq(\'categoria\',\'PAN-BL\').eq(\'codice_finitura\',CFG.finitura||\'\').order(\'altezza_mm\',{ascending:false});
   CFG._panMag=magP?.[0]||null;
   const hMag=CFG._panMag?.altezza_mm||0;
@@ -4074,6 +4074,7 @@ async function aggiungiRigaAlDocumento(){
     senso_apertura:CFG.senso,
     larghezza_mm:CFG.larghezza, altezza_mm:CFG.altezza,
     misura_custom:CFG.misura_custom, spessore_muro_cm:CFG.spessore,
+    spessore_mm:(CFG._panMag&&CFG._panMag.spessore_mm)||null,
     codice_spalla:CFG.spalla, tipo_accessorio_telaio:CFG.accessorio_telaio,
     codice_ferramenta:CFG.ferramenta, nome_ferramenta:CFG.nome_ferramenta,
     codice_maniglia:CFG.maniglia, nome_maniglia:CFG.nome_maniglia,
@@ -4353,7 +4354,7 @@ function aggiornaTotaleNdoc(){
     <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid var(--border)">
       <div>
         <div style="font-size:13px;font-weight:500">\${r.nome_serie||''} \${r.nome_modello||''} — \${r.nome_finitura||''}</div>
-        <div style="font-size:11px;color:var(--mid)">\${[r.nome_apertura,r.senso_apertura,r.larghezza_mm&&r.larghezza_mm+'×'+r.altezza_mm+' mm','sp.'+(r.spessore_muro_mm||'?')+' mm'].filter(Boolean).join(' | ')}</div>
+        <div style="font-size:11px;color:var(--mid)">\${[r.nome_apertura,r.senso_apertura,r.larghezza_mm&&r.larghezza_mm+'×'+r.altezza_mm+' mm','sp.'+(r.spessore_mm||r.spessore_muro_mm||'?')+' mm'].filter(Boolean).join(' | ')}</div>
       </div>
       <div style="display:flex;align-items:center;gap:12px">
         <div style="text-align:right">
@@ -4500,7 +4501,7 @@ async function renderPreventivoDetail(id){
       <td style="font-size:12px;font-weight:500">\${r.riga_numero}</td>
       <td>
         <div style="font-size:13px;font-weight:500">\${r.nome_modello||''}</div>
-        <div style="font-size:11px;color:var(--mid)">\${[r.nome_finitura,r.pannello_bugna,r.nome_apertura,r.senso_apertura,r.larghezza_mm&&r.larghezza_mm+'×'+r.altezza_mm+' mm','sp.'+(r.spessore_muro_mm||'?')+' mm',r.nome_ferramenta,r.nome_maniglia].filter(Boolean).join(' | ')}</div>
+        <div style="font-size:11px;color:var(--mid)">\${[r.nome_finitura,r.pannello_bugna,r.nome_apertura,r.senso_apertura,r.larghezza_mm&&r.larghezza_mm+'×'+r.altezza_mm+' mm','sp.'+(r.spessore_mm||r.spessore_muro_mm||'?')+' mm',r.nome_ferramenta,r.nome_maniglia].filter(Boolean).join(' | ')}</div>
         \${r.misura_custom?'<span style="font-size:10px;background:var(--red-bg);color:var(--red-tx);padding:1px 5px;border-radius:3px">Custom</span>':''}
       </td>
       <td style="text-align:center">\${r.quantita}</td>
@@ -4798,7 +4799,7 @@ async function renderOrdineDetail(id){
         '<div style="font-size:11px;color:var(--mid)">'+(
           [r.nome_finitura,r.pannello_bugna,r.nome_apertura,r.senso_apertura,
            r.larghezza_mm&&r.larghezza_mm+'×'+r.altezza_mm+' mm',
-           'sp.'+(r.spessore_muro_mm||'?')+' mm',r.nome_ferramenta,r.nome_maniglia
+           'sp.'+(r.spessore_mm||r.spessore_muro_mm||'?')+' mm',r.nome_ferramenta,r.nome_maniglia
           ].filter(Boolean).join(' | ')
         )+'</div>'+
         (r.misura_custom?'<span style="font-size:10px;background:var(--red-bg);color:var(--red-tx);padding:1px 5px;border-radius:3px">Custom</span>':'')+
@@ -6877,7 +6878,7 @@ async function esportaPDF(tipo, id) {
         posizione: String(i+1).padStart(3,'0'),
         larghezza: r.larghezza_mm || '',
         altezza: r.altezza_mm || '',
-        spessore: r.spessore_muro_cm || '',
+        spessore: r.spessore_mm || r.spessore_muro_cm || '',
         senso: r.senso_apertura || '',
         apertura: r.nome_apertura || '',
         codice_apertura: r.codice_apertura || '',
