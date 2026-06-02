@@ -676,13 +676,7 @@ tr.data-row:hover td{background:var(--beige);cursor:pointer}
         <input type=\"checkbox\" id=\"exp-solo-netti\" style=\"width:18px;height:18px;margin:0;flex-shrink:0\">
         <span style=\"font-size:14px\">Mostra solo prezzi netti (nascondi listino e sconto)</span>
       </label>
-      <div style=\"border-top:0.5px solid var(--border);margin:8px 0\"></div>
-      <label style=\"display:flex;align-items:center;gap:10px;cursor:pointer;padding:8px 0\">
-        <input type=\"checkbox\" id=\"exp-arr-attivo\" style=\"width:18px;height:18px;margin:0;flex-shrink:0\" onchange=\"document.getElementById('exp-arr-valore').disabled=!this.checked\">
-        <span style=\"font-size:14px\">Arrotonda imponibile a</span>
-        <input type=\"number\" id=\"exp-arr-valore\" placeholder=\"10\" step=\"1\" min=\"1\" disabled style=\"width:70px;margin:0\">
-        <span style=\"font-size:14px;color:var(--mid)\">&euro;</span>
-      </label>
+      
     </div>
     <div class=\"form-modal-foot\">
       <button class=\"btn\" onclick=\"closeForm('modal-export')\">Annulla</button>
@@ -4574,7 +4568,7 @@ async function renderPreventivoDetail(id){
         <tr><td style="color:var(--mid);padding:3px 0;width:130px">Imponibile</td><td style="text-align:right">\${fmtEuro(prev.totale_imponibile)}</td></tr>
         <tr><td style="color:var(--mid);padding:3px 0">Sconto 1</td><td style="text-align:right">\${sc1}%</td></tr>
         <tr><td style="color:var(--mid);padding:3px 0">Sconto 2</td><td style="text-align:right">\${sc2||0}%</td></tr>
-        <tr style="border-top:0.5px solid var(--border)"><td style="padding:6px 0;font-weight:500">Totale netto</td><td style="text-align:right;font-size:18px;font-weight:500;color:var(--red)">\${fmtEuro(netto)}</td></tr>
+        <tr style="border-top:0.5px solid var(--border)"><td style="padding:6px 0;font-weight:500">Totale netto</td><td style="text-align:right;font-size:18px;font-weight:500;color:var(--mid)">\${fmtEuro(netto)}</td></tr>\${prev.totale_arrotondato?\`<tr><td style="color:var(--mid);padding:3px 0">Arrotondamento</td><td style="text-align:right">\${(prev.arrotondamento_euro>=0?'+':'')+fmtEuro(prev.arrotondamento_euro)}</td></tr><tr style="border-top:0.5px solid var(--border)"><td style="padding:6px 0;font-weight:500">Totale arrotondato</td><td style="text-align:right;font-size:18px;font-weight:500;color:var(--red)">\${fmtEuro(prev.totale_arrotondato)}</td></tr>\`:''}
       </table>
       \${prev.note?\`<div style="margin-top:10px;font-size:12px;color:var(--mid)">\${prev.note}</div>\`:''}
     </div>
@@ -4621,6 +4615,30 @@ async function cambiaStatoPreventivo(id,nuovoStato){
   toast("Stato aggiornato","ok");renderPreventivoDetail(id);
 }
 
+async function salvaArrotondamento(id, netto){
+  const val = parseFloat(document.getElementById('arr-totale-voluto')?.value);
+  if(!val || val <= 0){ toast('Inserisci un importo valido','err'); return; }
+  if(val > netto){ toast('Il totale arrotondato non puo superare il netto','err'); return; }
+  const arrEuro = Math.round((val - netto) * 100) / 100;
+  const { error } = await sb.from('preventivi').update({
+    totale_arrotondato: val,
+    arrotondamento_euro: arrEuro
+  }).eq('id', id);
+  if(error){ toast('Errore salvataggio: '+error.message,'err'); return; }
+  toast('Arrotondamento salvato','ok');
+  renderPreventivoDetail(id);
+}
+
+async function rimuoviArrotondamento(id){
+  const { error } = await sb.from('preventivi').update({
+    totale_arrotondato: null,
+    arrotondamento_euro: null
+  }).eq('id', id);
+  if(error){ toast('Errore: '+error.message,'err'); return; }
+  toast('Arrotondamento rimosso','ok');
+  renderPreventivoDetail(id);
+}
+
 async function eliminaPreventivo(id){
   if(!confirm("Eliminare definitivamente questo preventivo?"))return;
   await sb.from("righe_preventivo").delete().eq("preventivo_id",id);
@@ -4646,6 +4664,8 @@ async function firmaPreventivo(prevId){
     trasporto:prev.trasporto, note:prev.note,
     totale_imponibile:prev.totale_imponibile,
     totale_netto:prev.totale_netto||prev.totale_imponibile,
+    totale_arrotondato:prev.totale_arrotondato||null,
+    arrotondamento_euro:prev.arrotondamento_euro||null,
     richiede_approvazione_tecnica:haCustom,
     stato:'in_attesa', creato_da:currentUser?.id, nome_compilatore:currentNomeUtente||currentUser?.email||'—'
   }]).select().single();
@@ -6837,8 +6857,6 @@ var _exportTipo=null, _exportId=null;
 async function eseguiEsportaPDF() {
   const tipo = _exportTipo, id = _exportId;
   const soloNetti = document.getElementById('exp-solo-netti')?.checked || false;
-  const arrAttivo = document.getElementById('exp-arr-attivo')?.checked || false;
-  const arrValore = parseFloat(document.getElementById('exp-arr-valore')?.value) || 0;
   closeForm('modal-export');
   toast('Generazione PDF in corso...', 'ok');
   try {
@@ -6914,7 +6932,9 @@ async function eseguiEsportaPDF() {
         sconto1: doc.sconto1 || 0,
         sconto2: doc.sconto2 || 0,
         totale_imponibile: doc.totale_imponibile || 0,
-        totale_netto: doc.totale_netto || 0,
+        totale_netto: Math.round((doc.totale_imponibile||0)*(1-(doc.sconto1||0)/100)*(1-(doc.sconto2||0)/100)*100)/100,
+        arrotondamento: doc.arrotondamento_euro || 0,
+        totale_netto_arrotondato: doc.totale_arrotondato || 0,
       },
       righe: (righe||[]).map((r,i) => ({
         posizione: String(i+1).padStart(3,'0'),
@@ -6971,8 +6991,7 @@ async function eseguiEsportaPDF() {
 
     // Opzioni di esportazione
     payload.opzioni = {
-      solo_netti: soloNetti,
-      arrotonda: (arrAttivo && arrValore > 0) ? arrValore : null
+      solo_netti: soloNetti
     };
 
     // Chiama il server per generare il PDF

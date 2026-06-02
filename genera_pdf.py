@@ -402,19 +402,26 @@ def genera_workbook(data, template_path):
     trasporto   = num(doc.get('totale_trasporto'))
     spese       = num(doc.get('totale_spese'))
     
-    imponibile  = round(tot_netto - omaggi - sconto_pag + imballo + trasporto + spese, 2)
-    
-    # ── Arrotondamento del totale imponibile (opzionale) ──────────────────
-    arrotondamento = 0.0
-    if arrotonda:
+    # ── Arrotondamento: usa i valori già calcolati dal server (preferito) ──
+    # Il server applica l'arrotondamento sul totale scontato del riepilogo
+    # gestionale e manda netto arrotondato + differenza già pronti.
+    arrotondamento = num(doc.get('arrotondamento'))
+    netto_arr = num(doc.get('totale_netto_arrotondato'))
+    if netto_arr > 0:
+        tot_netto = netto_arr  # il netto mostrato è quello arrotondato
+    elif arrotonda:
+        # Fallback: il server non ha pre-calcolato, arrotondo qui sul netto
         try:
             step = float(arrotonda)
             if step > 0:
-                imponibile_arr = round(imponibile / step) * step
-                arrotondamento = round(imponibile_arr - imponibile, 2)
-                imponibile = round(imponibile_arr, 2)
+                netto_round = round(tot_netto / step) * step
+                if netto_round > 0:
+                    arrotondamento = round(netto_round - tot_netto, 2)
+                    tot_netto = round(netto_round, 2)
         except:
             pass
+    
+    imponibile  = round(tot_netto - omaggi - sconto_pag + imballo + trasporto + spese, 2)
     
     iva         = round(imponibile * 0.22, 2)
     totale_finale = round(imponibile + iva, 2)
