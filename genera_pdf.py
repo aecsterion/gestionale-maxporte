@@ -402,26 +402,30 @@ def genera_workbook(data, template_path):
     trasporto   = num(doc.get('totale_trasporto'))
     spese       = num(doc.get('totale_spese'))
     
-    # ── Arrotondamento: usa i valori già calcolati dal server (preferito) ──
-    # Il server applica l'arrotondamento sul totale scontato del riepilogo
-    # gestionale e manda netto arrotondato + differenza già pronti.
+    # ── Arrotondamento ─────────────────────────────────────────────────────
+    # VALORE NETTO resta il netto reale (non arrotondato).
+    # L'arrotondamento si applica solo al TOTALE IMPONIBILE.
     arrotondamento = num(doc.get('arrotondamento'))
     netto_arr = num(doc.get('totale_netto_arrotondato'))
+    
+    # imponibile di partenza = netto reale +/- voci accessorie
+    imponibile  = round(tot_netto - omaggi - sconto_pag + imballo + trasporto + spese, 2)
+    
     if netto_arr > 0:
-        tot_netto = netto_arr  # il netto mostrato è quello arrotondato
+        # Il server ha pre-calcolato: l'imponibile diventa il netto arrotondato
+        # (+ eventuali accessori, che qui di norma sono 0)
+        imponibile = round(netto_arr - omaggi - sconto_pag + imballo + trasporto + spese, 2)
     elif arrotonda:
-        # Fallback: il server non ha pre-calcolato, arrotondo qui sul netto
+        # Fallback: arrotondo qui
         try:
             step = float(arrotonda)
             if step > 0:
-                netto_round = round(tot_netto / step) * step
-                if netto_round > 0:
-                    arrotondamento = round(netto_round - tot_netto, 2)
-                    tot_netto = round(netto_round, 2)
+                imp_round = round(imponibile / step) * step
+                if imp_round > 0:
+                    arrotondamento = round(imp_round - imponibile, 2)
+                    imponibile = round(imp_round, 2)
         except:
             pass
-    
-    imponibile  = round(tot_netto - omaggi - sconto_pag + imballo + trasporto + spese, 2)
     
     iva         = round(imponibile * 0.22, 2)
     totale_finale = round(imponibile + iva, 2)
