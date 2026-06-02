@@ -4616,28 +4616,34 @@ async function cambiaStatoPreventivo(id,nuovoStato){
   toast("Stato aggiornato","ok");renderPreventivoDetail(id);
 }
 
-async function salvaArrotondamento(id, netto){
+async function salvaArrotondamento(id, netto, tipo){
+  tipo = tipo || 'preventivo';
+  const tab = tipo==='ordine' ? 'ordini_vendita' : 'preventivi';
+  const refresh = tipo==='ordine' ? renderOrdineDetail : renderPreventivoDetail;
   const val = parseFloat(document.getElementById('arr-totale-voluto')?.value);
   if(!val || val <= 0){ toast('Inserisci un importo valido','err'); return; }
   if(val > netto){ toast('Il totale arrotondato non puo superare il netto','err'); return; }
   const arrEuro = Math.round((val - netto) * 100) / 100;
-  const { error } = await sb.from('preventivi').update({
+  const { error } = await sb.from(tab).update({
     totale_arrotondato: val,
     arrotondamento_euro: arrEuro
   }).eq('id', id);
   if(error){ toast('Errore salvataggio: '+error.message,'err'); return; }
   toast('Arrotondamento salvato','ok');
-  renderPreventivoDetail(id);
+  refresh(id);
 }
 
-async function rimuoviArrotondamento(id){
-  const { error } = await sb.from('preventivi').update({
+async function rimuoviArrotondamento(id, tipo){
+  tipo = tipo || 'preventivo';
+  const tab = tipo==='ordine' ? 'ordini_vendita' : 'preventivi';
+  const refresh = tipo==='ordine' ? renderOrdineDetail : renderPreventivoDetail;
+  const { error } = await sb.from(tab).update({
     totale_arrotondato: null,
     arrotondamento_euro: null
   }).eq('id', id);
   if(error){ toast('Errore: '+error.message,'err'); return; }
   toast('Arrotondamento rimosso','ok');
-  renderPreventivoDetail(id);
+  refresh(id);
 }
 
 async function eliminaPreventivo(id){
@@ -4909,8 +4915,10 @@ async function renderOrdineDetail(id){
           '<tr><td style="color:var(--mid);padding:3px 0;width:130px">Imponibile</td><td style="text-align:right">'+fmtEuro(ord.totale_imponibile)+'</td></tr>'+
           '<tr><td style="color:var(--mid);padding:3px 0">Sconto 1</td><td style="text-align:right">'+sc1+'%</td></tr>'+
           '<tr><td style="color:var(--mid);padding:3px 0">Sconto 2</td><td style="text-align:right">'+(sc2||0)+'%</td></tr>'+
-          '<tr style="border-top:0.5px solid var(--border)"><td style="padding:6px 0;font-weight:500">Totale netto</td><td style="text-align:right;font-size:18px;font-weight:500;color:var(--red)">'+fmtEuro(netto)+'</td></tr>'+
+          '<tr style="border-top:0.5px solid var(--border)"><td style="padding:6px 0;font-weight:500">Totale netto</td><td style="text-align:right;font-size:'+(ord.totale_arrotondato?'14px':'18px')+';font-weight:500;color:'+(ord.totale_arrotondato?'var(--mid)':'var(--red)')+'">'+fmtEuro(netto)+'</td></tr>'+
+          (ord.totale_arrotondato?'<tr><td style="color:var(--mid);padding:3px 0">Arrotondamento</td><td style="text-align:right">'+(ord.arrotondamento_euro>=0?'+':'')+fmtEuro(ord.arrotondamento_euro)+'</td></tr><tr style="border-top:0.5px solid var(--border)"><td style="padding:6px 0;font-weight:500">Totale arrotondato</td><td style="text-align:right;font-size:18px;font-weight:500;color:var(--red)">'+fmtEuro(ord.totale_arrotondato)+'</td></tr>':'')+
         '</table>'+
+        ((!ord.preventivo_id && ord.stato!=='confermato')?'<div style="margin-top:10px;padding-top:10px;border-top:0.5px solid var(--border);display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:12px;color:var(--mid)">Arrotonda netto a:</span><input type="number" id="arr-totale-voluto" step="0.01" placeholder="'+netto.toFixed(2)+'" value="'+(ord.totale_arrotondato||'')+'" style="width:100px;font-size:13px;padding:3px 6px"><span style="font-size:12px;color:var(--mid)">&euro;</span><button class="btn btn-sm" onclick="salvaArrotondamento(\\''+id+'\\','+netto+',\\'ordine\\')">Salva</button>'+(ord.totale_arrotondato?'<button class="btn btn-sm" style="color:var(--red)" onclick="rimuoviArrotondamento(\\''+id+'\\',\\'ordine\\')">Rimuovi</button>':'')+'</div>':'')+
         (ord.note?'<div style="margin-top:10px;font-size:12px;color:var(--mid)">'+ord.note+'</div>':'')+
       '</div>'+
     '</div>'+
