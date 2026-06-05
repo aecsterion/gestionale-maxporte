@@ -4169,7 +4169,18 @@ async function ricalcolaTotale(docId, mode){
   const tabDoc = mode==='preventivo'?'preventivi':'ordini_vendita';
   const {data:righe} = await sb.from(tabRighe).select('prezzo_totale_riga').eq(fk,docId);
   const totImponibile = (righe||[]).reduce((s,r)=>s+(r.prezzo_totale_riga||0),0);
-  await sb.from(tabDoc).update({totale_imponibile:totImponibile}).eq('id',docId);
+  // Le righe sono cambiate: se c'era un arrotondamento salvato va azzerato,
+  // altrimenti resterebbe calcolato sul vecchio totale (rischio di sottostimare il prezzo).
+  const {data:docCorr} = await sb.from(tabDoc).select('totale_arrotondato').eq('id',docId).single();
+  const avevaArr = docCorr && docCorr.totale_arrotondato != null;
+  await sb.from(tabDoc).update({
+    totale_imponibile:totImponibile,
+    totale_arrotondato:null,
+    arrotondamento_euro:null
+  }).eq('id',docId);
+  if(avevaArr){
+    toast('Arrotondamento azzerato: il totale e cambiato, reimpostalo se necessario','err');
+  }
 }
 
 // ══════════════════════════════════════════════════════
