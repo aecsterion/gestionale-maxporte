@@ -2505,9 +2505,9 @@ async function selModello(cod, nome, prezzo, vetroIncluso, haExtraIncisioni){
   };
   CFG._tipoAccessorio = ACC_TIPO[cod] || (CFG._isPannelloBlindato ? 'pannello' : null);
 
-  // Quantità minima per certi accessori
-  const QTA_MIN = {'FPAN':3,'IMB':3,'AL100':3,'AL230':3};
-  CFG._qtaMin = QTA_MIN[cod] || 1;
+  // Quantità minima e step dal modello (gestiti dal pannello admin)
+  CFG._qtaMin = (m && m.qta_minima) || 1;
+  CFG._qtaStep = (m && m.step_quantita) || 1;
 
   await renderCfgStep('finitura');
 }
@@ -3845,7 +3845,9 @@ function selAccSpessore(salta){
 // Accessori semplici / coprifili: solo quantità
 async function cfgAccQta(){
   const qMin = CFG._qtaMin||1;
+  const qStep = CFG._qtaStep||1;
   const qta = CFG.quantita||qMin;
+  const ammezzi = qStep<1;
   document.getElementById('cfg-body').innerHTML=\`
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
       <div style="font-size:13px;font-weight:500">Quantità <span style="color:var(--mid);font-weight:400">— \${CFG.nome_modello}</span></div>
@@ -3854,8 +3856,8 @@ async function cfgAccQta(){
     <div style="display:grid;gap:14px;max-width:280px">
       \${qMin>1?\`<div style="background:var(--beige2);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--mid)">Quantità minima: <strong style="color:var(--dark)">\${qMin} pz</strong></div>\`:''}
       <div>
-        <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Quantità (minimo \${qMin} pz)</label>
-        <input type="number" id="acc-qta" value="\${qta}" min="\${qMin}" step="1"
+        <label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Quantità (minimo \${qMin} pz\${ammezzi?', anche mezze':''})</label>
+        <input type="number" id="acc-qta" value="\${qta}" min="\${qMin}" step="\${qStep}"
           style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:18px;font-weight:600;text-align:center">
       </div>
       <button class="btn btn-red" onclick="selAccQta()">Avanti →</button>
@@ -3863,10 +3865,12 @@ async function cfgAccQta(){
 }
 
 function selAccQta(){
-  const q = parseInt(document.getElementById('acc-qta')?.value||0);
+  const q = parseFloat(document.getElementById('acc-qta')?.value||0);
   const qMin = CFG._qtaMin||1;
+  const qStep = CFG._qtaStep||1;
   if(!q||q<qMin){toast(\`Quantità minima: \${qMin} pz\`,'err');return;}
-  if(q!==Math.floor(q)||isNaN(q)){toast('Inserisci un numero intero','err');return;}
+  if(qStep>=1 && q!==Math.floor(q)){toast('Inserisci un numero intero','err');return;}
+  if(qStep<1 && Math.round(q*2)!==q*2){toast('Sono ammesse solo quantità intere o mezze (es. 1,5)','err');return;}
   CFG.quantita=q;
   cfgUpdatePrice(); cfgRiepilogo();
 }
@@ -5159,6 +5163,11 @@ async function adminModelli(){
       <td>\${pa?.ha_extra_incisioni?inlineInput(pa?.prezzo_extra_incisioni||'',\`salvaPrezzo('\${m.codice}','A','prezzo_extra_incisioni',this.value)\`,'65px'):'<span style="font-size:11px;color:var(--mid)">No</span>'}</td>
       <td>\${inlineInput(m.supplemento_staffe_a??0,\`adminSalva('modelli','\${m.id}','supplemento_staffe_a',this.value)\`,'65px','number','€ A')}</td>
       <td>\${inlineInput(m.supplemento_staffe_p??0,\`adminSalva('modelli','\${m.id}','supplemento_staffe_p',this.value)\`,'65px','number','€ P')}</td>
+      <td>\${inlineInput(m.qta_minima??1,\`adminSalva('modelli','\${m.id}','qta_minima',this.value)\`,'50px','number','min')}</td>
+      <td><select onchange=\"adminSalva('modelli','\${m.id}','step_quantita',this.value)\" style=\"padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:11px\">
+        <option value=\"1\" \${(Number(m.step_quantita)||1)===1?'selected':''}>Intere</option>
+        <option value=\"0.5\" \${Number(m.step_quantita)===0.5?'selected':''}>Anche mezze</option>
+      </select></td>
       <td>
         \${m.immagine_url?\`<img src="\${m.immagine_url}" style="width:32px;height:32px;object-fit:cover;border-radius:4px;margin-right:4px">\`:''}
         <label style="cursor:pointer"><input type="file" accept="image/*" style="display:none" onchange="uploadImmagine('modelli','\${m.id}',this)"><span style="font-size:11px;cursor:pointer;color:var(--red)">📷</span></label>
@@ -5180,7 +5189,7 @@ async function adminModelli(){
   \${adminCard(\`Modelli — \${serieFilter}\`,\`
     <div style="font-size:11px;color:var(--mid);margin-bottom:8px">Flag cliccabili: <b>V</b>=vetro <b>P</b>=pannello/bugna <b>A</b>=inserto alluminio <b>I</b>=inserto pietra <b>T</b>=pantografatura</div>
     <div style="overflow-x:auto"><table>
-      <thead><tr><th>Codice</th><th>Nome</th><th>Serie</th><th>Variante</th><th>Flag</th><th>Prezzo A</th><th>Prezzo P</th><th>Vetro A</th><th>Extra incis.</th><th>Staffe A</th><th>Staffe P</th><th>Img</th><th>Stato</th><th></th></tr></thead>
+      <thead><tr><th>Codice</th><th>Nome</th><th>Serie</th><th>Variante</th><th>Flag</th><th>Prezzo A</th><th>Prezzo P</th><th>Vetro A</th><th>Extra incis.</th><th>Staffe A</th><th>Staffe P</th><th>Q.min</th><th>Step</th><th>Img</th><th>Stato</th><th></th></tr></thead>
       <tbody>\${rows}</tbody>
     </table></div>\`)}\`;
 }
