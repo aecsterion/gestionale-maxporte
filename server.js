@@ -5246,6 +5246,8 @@ async function adminFiniture(){
     <td><span class="badge \${f.consente_bugna?'bg':'br'}" style="cursor:pointer" onclick="toggleCampo('finiture','\${f.id}','consente_bugna',\${f.consente_bugna})">\${f.consente_bugna?'Sì':'No'}</span></td>
     <td>\${inlineInput(f.sovrapprezzo_bugna_a??0,\`adminSalva('finiture','\${f.id}','sovrapprezzo_bugna_a',this.value)\`,'55px','number')}</td>
     <td>\${inlineInput(f.sovrapprezzo_bugna_p??0,\`adminSalva('finiture','\${f.id}','sovrapprezzo_bugna_p',this.value)\`,'55px','number')}</td>
+    <td><span class="badge \${f.telaio_da_laccare?'bg':'br'}" style="cursor:pointer" onclick="toggleCampo('finiture','\${f.id}','telaio_da_laccare',\${!!f.telaio_da_laccare})">\${f.telaio_da_laccare?'Sì':'No'}</span></td>
+    <td><span class="badge \${f.coprifili_da_laccare?'bg':'br'}" style="cursor:pointer" onclick="toggleCampo('finiture','\${f.id}','coprifili_da_laccare',\${!!f.coprifili_da_laccare})">\${f.coprifili_da_laccare?'Sì':'No'}</span></td>
     <td>\${adminToggle(f.attiva,\`toggleCampo('finiture','\${f.id}','attiva',\${f.attiva})\`)}</td>
     <td><button onclick="eliminaRigaAdmin('finiture','\${f.id}','adminFiniture')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px" title="Elimina">×</button></td>
   </tr>\`).join('');
@@ -5262,7 +5264,7 @@ async function adminFiniture(){
     <button class="btn btn-red btn-sm" onclick="nuovaFinitura('\${serieFilter}')">+ Aggiungi finitura</button>
   </div>
   \${adminCard(\`Finiture — \${serieFilter}\`,\`<div style="overflow-x:auto"><table>
-    <thead><tr><th>Codice</th><th>Nome</th><th>Modello</th>\${theadLaccata}<th>Bugna</th><th>Bugna A</th><th>Bugna P</th><th>Stato</th><th></th></tr></thead>
+    <thead><tr><th>Codice</th><th>Nome</th><th>Modello</th>\${theadLaccata}<th>Bugna</th><th>Bugna A</th><th>Bugna P</th><th>Telaio lacc.</th><th>Coprif. lacc.</th><th>Stato</th><th></th></tr></thead>
     <tbody>\${rows}</tbody>
   </table></div>\`)}\`;
 }
