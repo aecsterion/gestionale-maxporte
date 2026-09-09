@@ -2440,6 +2440,8 @@ function updateCfgStepper(current){
 
 async function cfgSerie(){
   const {data} = await sb.from('serie').select('*').order('nome');
+  // Popola la cache delle serie laccate dai dati appena letti
+  window._serieLaccate = new Set((data||[]).filter(s=>s.e_laccata).map(s=>s.codice));
   const cards = (data||[]).map(s=>\`
     <div onclick="selSerie('\${s.codice}','\${s.nome}')"
       style="border:\${CFG.serie===s.codice?'2px solid var(--red)':'0.5px solid var(--border)'};
@@ -2967,12 +2969,27 @@ async function selApertura(cod, nome, logica, sovr, doppio, magg){
   await cfgSenso(sensi);
 }
 
+// Cache dei codici serie "laccate" (usano fascia/pct). Popolata dal DB in cfgSerie/loadSerieLaccate.
+// Fallback ai codici storici finché la cache non è pronta.
+window._serieLaccate = null;
+function isSerieLaccata(cod){
+  if(!cod) return false;
+  if(window._serieLaccate) return window._serieLaccate.has(cod);
+  return ['LAC','GEO','GL','JAD','ACC','PAN-BL'].includes(cod);
+}
+async function loadSerieLaccate(){
+  try{
+    const {data} = await sb.from('serie').select('codice,e_laccata');
+    window._serieLaccate = new Set((data||[]).filter(s=>s.e_laccata).map(s=>s.codice));
+  }catch(e){ /* resta il fallback */ }
+}
+
 // Determina famiglia serie per COM/FM
 function famigliaSerie(){
   const s=CFG.serie||'';
   const f=CFG.finitura||'';
   if(f==='GREZZA') return 'GREZZA';
-  if(['LAC','GEO','GL','JAD','ACC','PAN-BL'].includes(s)) return 'LACCATA';
+  if(isSerieLaccata(s)) return 'LACCATA';
   return 'TAM_MAS';
 }
 
@@ -3119,7 +3136,7 @@ async function avanzaASpessore(){
 
   const isFuoriH = !altezzeStd.has(CFG.altezza);
   const isFuoriL = !larghezzeStd.has(CFG.larghezza);
-  const isLaccata = ['LAC','GEO','GL','JAD','ACC','PAN-BL'].includes(CFG.serie||'');
+  const isLaccata = isSerieLaccata(CFG.serie||'');
   const isMassellata = CFG.serie==='MAS';
   const isModelloCLLCL = ['CL','LCL'].includes(CFG.modello||'');
   const isScorrevole = ['SI','SE'].some(x=>(CFG.apertura||'').startsWith(x));
@@ -5213,7 +5230,9 @@ async function nuovoModello(seriePreselezionata){
 
 // FINITURE
 async function adminFiniture(){
-  const {data:serie} = await sb.from('serie').select('codice').order('codice');
+  const {data:serie} = await sb.from('serie').select('codice,e_laccata').order('codice');
+  // Popola la cache delle serie laccate
+  window._serieLaccate = new Set((serie||[]).filter(s=>s.e_laccata).map(s=>s.codice));
   const serieFilter = window._adminFinSerie || document.getElementById('admin-serie-filter')?.value || 'TAM';
   window._adminFinSerie = serieFilter;
 
@@ -5221,7 +5240,7 @@ async function adminFiniture(){
   const serieOpts=(serie||[]).map(s=>\`<option value="\${s.codice}" \${s.codice===serieFilter?'selected':''}>\${s.codice}</option>\`).join('');
 
   // Serie laccate che usano fascia e pct
-  const isLaccata = ['LAC','GEO','GL','JAD','ACC','PAN-BL'].includes(serieFilter);
+  const isLaccata = isSerieLaccata(serieFilter);
 
   const rows=(data||[]).map(f=>\`<tr>
     <td>\${inlineInput(f.codice_finitura,\`adminSalva('finiture','\${f.id}','codice_finitura',this.value)\`,'60px','text')}</td>
