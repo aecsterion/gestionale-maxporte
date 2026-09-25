@@ -4712,11 +4712,17 @@ async function firmaPreventivo(prevId){
 
   if(ord?.data||ord){
     const ordId = ord.data?.id||ord.id;
-    const righeOrd=(righe||[]).map(r=>({
-      ...r, id:undefined, ordine_id:ordId,
-      riga_preventivo_id:r.id, preventivo_id:undefined
-    }));
-    await sb.from('righe_ordine').insert(righeOrd);
+    const righeOrd=(righe||[]).map(r=>{
+      // Escludo i campi che non appartengono a righe_ordine (id, preventivo_id, created_at)
+      const {id, preventivo_id, created_at, ...campiComuni} = r;
+      return {
+        ...campiComuni,
+        ordine_id: ordId,
+        riga_preventivo_id: r.id
+      };
+    });
+    const {error:errRighe} = await sb.from('righe_ordine').insert(righeOrd);
+    if(errRighe){ toast('Errore copia righe: '+errRighe.message,'err'); return; }
     await sb.from('preventivi').update({stato:'firmato'}).eq('id',prevId);
     toast(numero+' creato — in attesa di approvazione','ok');
     renderPreventivi();
@@ -4865,7 +4871,7 @@ async function nuovoOrdineDiretto(){
 
 async function renderOrdineDetail(id){
   const [{data:ord},{data:righe}] = await Promise.all([
-    sb.from('ordini_vendita').select('*,anagrafiche(ragione_sociale,partita_iva),agenti(nome,cognome)').eq('id',id).single(),
+    sb.from('ordini_vendita').select('*,anagrafiche(ragione_sociale,partita_iva),agenti(nome,cognome),preventivi(numero)').eq('id',id).single(),
     sb.from('righe_ordine').select('*').eq('ordine_id',id).order('riga_numero'),
   ]);
   if(!ord) return;
@@ -4934,7 +4940,7 @@ async function renderOrdineDetail(id){
           '<tr><td style="color:var(--mid);padding:3px 0">Cliente</td><td>'+(ord.anagrafiche?.ragione_sociale||'—')+'</td></tr>'+
           '<tr><td style="color:var(--mid);padding:3px 0">Vostro riferimento</td><td><input type="text" value="'+((ord.riferimento_cliente||'').replace(/"/g,'&quot;'))+'" placeholder="—" onblur="salvaRiferimento(\\'ordine\\',\\''+id+'\\',this.value)" style="width:100%;font-size:12px;padding:2px 6px;border:0.5px solid var(--border);border-radius:4px"></td></tr>'+
           '<tr><td style="color:var(--mid);padding:3px 0">Agente</td><td>'+(ord.agenti?ord.agenti.nome+' '+ord.agenti.cognome:'—')+'</td></tr>'+
-          (ord.preventivo_id?'<tr><td style="color:var(--mid);padding:3px 0">Da preventivo</td><td><span class="badge bb">Sì</span></td></tr>':'')+
+          (ord.preventivo_id?'<tr><td style="color:var(--mid);padding:3px 0">Da preventivo</td><td><span class="badge bb" style="cursor:pointer" onclick="renderPreventivoDetail(\\''+ord.preventivo_id+'\\')">'+(ord.preventivi?.numero||'Sì')+'</span></td></tr>':'')+
           '<tr><td style="color:var(--mid);padding:3px 0">Data</td><td>'+fmtData(ord.data_ordine||ord.created_at)+'</td></tr>'+
           '<tr><td style="color:var(--mid);padding:3px 0">Listino</td><td><span class="tag">'+(ord.listino||'')+'</span></td></tr>'+
           '<tr><td style="color:var(--mid);padding:3px 0">Trasporto</td><td>'+(ord.trasporto||'—')+'</td></tr>'+
