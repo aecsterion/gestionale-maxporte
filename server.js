@@ -4586,7 +4586,7 @@ async function renderPreventivoDetail(id){
         <tr><td style="color:var(--mid);padding:3px 0;width:130px">N° Preventivo</td><td><strong>\${prev.numero}</strong></td></tr>
         <tr><td style="color:var(--mid);padding:3px 0">Cliente</td><td>\${prev.anagrafiche?.ragione_sociale||'—'}</td></tr>
         <tr><td style="color:var(--mid);padding:3px 0">Agente</td><td>\${prev.agenti?prev.agenti.nome+' '+prev.agenti.cognome:'—'}</td></tr>
-        <tr><td style="color:var(--mid);padding:3px 0">Vostro riferimento</td><td><input type="text" value="\${(prev.riferimento_cliente||'').replace(/"/g,'&quot;')}" placeholder="—" onblur="salvaRiferimento('preventivo','\${id}',this.value)" style="width:100%;font-size:12px;padding:2px 6px;border:0.5px solid var(--border);border-radius:4px"></td></tr>
+        <tr><td style="color:var(--mid);padding:3px 0">Riferimento cliente</td><td><input type="text" value="\${(prev.riferimento_cliente||'').replace(/"/g,'&quot;')}" placeholder="—" onblur="salvaRiferimento('preventivo','\${id}',this.value)" style="width:100%;font-size:12px;padding:2px 6px;border:0.5px solid var(--border);border-radius:4px"></td></tr>
         <tr><td style="color:var(--mid);padding:3px 0">Data</td><td>\${fmtData(prev.data_creazione)}</td></tr>
         \${prev.data_ultima_modifica?\`<tr><td style="color:var(--mid);padding:3px 0">Ultima modifica</td><td>\${fmtData(prev.data_ultima_modifica)}</td></tr>\`:''}
         <tr><td style="color:var(--mid);padding:3px 0">Listino</td><td><span class="tag">\${prev.listino}</span></td></tr>
@@ -4938,7 +4938,7 @@ async function renderOrdineDetail(id){
         '<table style="font-size:13px">'+
           '<tr><td style="color:var(--mid);padding:3px 0;width:130px">N° Ordine</td><td><strong>'+(ord.numero||'')+'</strong></td></tr>'+
           '<tr><td style="color:var(--mid);padding:3px 0">Cliente</td><td>'+(ord.anagrafiche?.ragione_sociale||'—')+'</td></tr>'+
-          '<tr><td style="color:var(--mid);padding:3px 0">Vostro riferimento</td><td><input type="text" value="'+((ord.riferimento_cliente||'').replace(/"/g,'&quot;'))+'" placeholder="—" onblur="salvaRiferimento(\\'ordine\\',\\''+id+'\\',this.value)" style="width:100%;font-size:12px;padding:2px 6px;border:0.5px solid var(--border);border-radius:4px"></td></tr>'+
+          '<tr><td style="color:var(--mid);padding:3px 0">Riferimento cliente</td><td><input type="text" value="'+((ord.riferimento_cliente||'').replace(/"/g,'&quot;'))+'" placeholder="—" onblur="salvaRiferimento(\\'ordine\\',\\''+id+'\\',this.value)" style="width:100%;font-size:12px;padding:2px 6px;border:0.5px solid var(--border);border-radius:4px"></td></tr>'+
           '<tr><td style="color:var(--mid);padding:3px 0">Agente</td><td>'+(ord.agenti?ord.agenti.nome+' '+ord.agenti.cognome:'—')+'</td></tr>'+
           (ord.preventivo_id?'<tr><td style="color:var(--mid);padding:3px 0">Da preventivo</td><td><span class="badge bb" style="cursor:pointer" onclick="renderPreventivoDetail(\\''+ord.preventivo_id+'\\')">'+(ord.preventivi?.numero||'Sì')+'</span></td></tr>':'')+
           '<tr><td style="color:var(--mid);padding:3px 0">Data</td><td>'+fmtData(ord.data_ordine||ord.created_at)+'</td></tr>'+
@@ -7165,7 +7165,7 @@ async function eseguiEsportaPDF() {
           </select>
         </div>
         <div class="form-field" style="grid-column:1/-1">
-          <label>Vostro riferimento</label>
+          <label>Riferimento cliente</label>
           <input type="text" id="ndoc-rif-cliente" placeholder="Es: ordine n° 123, progetto Rossi...">
         </div>
         <div class="form-field">
