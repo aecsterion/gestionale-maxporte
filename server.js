@@ -4725,7 +4725,7 @@ async function firmaPreventivo(prevId){
     if(errRighe){ toast('Errore copia righe: '+errRighe.message,'err'); return; }
     await sb.from('preventivi').update({stato:'firmato'}).eq('id',prevId);
     toast(numero+' creato — in attesa di approvazione','ok');
-    renderPreventivi();
+    renderOrdineDetail(ordId);
   }
 }
 
