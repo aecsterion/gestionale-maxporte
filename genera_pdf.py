@@ -357,6 +357,7 @@ def genera_workbook(data, template_path):
         '*NOME DESTINAZIONE*': v(doc, 'dest_nome', v(doc, 'ragione_sociale')),
         '*DATA_GENERAZIONE_DOCUMENTO': v(doc, 'data'),
         '*CODICE_PREVENTIVO*': v(doc, 'numero', v(doc, codice_campo)),
+        '*CODICE_CONFERMA*': v(doc, 'numero', v(doc, codice_campo)),
         '*DATA_ULTIMA_MODIFICA*': v(doc, 'data_modifica', v(doc, 'data')),
         '*NOME_COGNOME_COMPILATORE*': v(doc, 'compilatore'),
         '*RIFERIMENTO_CLIENTE*': v(doc, 'riferimento_cliente'),
@@ -382,6 +383,7 @@ def genera_workbook(data, template_path):
         '*CODICE_SDI*': v(doc, 'sdi'),
         '*PEC_FATTURAZIONE*': v(doc, 'pec_fatturazione', v(doc, 'pec')),
         '*GIORNI_VALIDITÀ_OFFERTA*': v(doc, 'validita_offerta', '30'),
+        '*SETTIMANA_CONSEGNA*': v(doc, 'settimana_consegna', v(doc, 'settimana_approntamento', '')),
         '*BARCODE_DOCUMENTO*': '',
     }
     
@@ -577,14 +579,31 @@ def genera_preventivo(json_path, pdf_path):
         data = json.load(f)
     
     template_dir = os.path.dirname(os.path.abspath(__file__))
-    template_path = os.path.join(template_dir, 'template_preventivo.xlsx')
+    
+    # Sceglie il template in base al tipo documento (preventivo o conferma d'ordine)
+    doc = data.get('documento', data.get('doc', {}))
+    tipo_doc = str(doc.get('tipo_documento', 'PREVENTIVO')).lower()
+    is_ordine = 'ordine' in tipo_doc or 'conferma' in tipo_doc
+    template_file = 'template_conferma.xlsx' if is_ordine else 'template_preventivo.xlsx'
+    
+    template_path = os.path.join(template_dir, template_file)
     
     if not os.path.exists(template_path):
-        for p in ['/app/template_preventivo.xlsx', 
+        for p in ['/app/' + template_file,
+                  os.path.join(template_dir, '..', template_file)]:
+            if os.path.exists(p):
+                template_path = p
+                break
+    
+    # Fallback: se il template conferma non esiste ancora, usa quello del preventivo
+    if is_ordine and not os.path.exists(template_path):
+        template_path = os.path.join(template_dir, 'template_preventivo.xlsx')
+        for p in ['/app/template_preventivo.xlsx',
                   os.path.join(template_dir, '..', 'template_preventivo.xlsx')]:
             if os.path.exists(p):
                 template_path = p
                 break
+        print(f"template_conferma.xlsx non trovato, uso template_preventivo.xlsx", file=sys.stderr)
     
     wb = genera_workbook(data, template_path)
     

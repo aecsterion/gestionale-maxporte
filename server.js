@@ -4936,6 +4936,7 @@ async function renderOrdineDetail(id){
           '<tr><td style="color:var(--mid);padding:3px 0">Data</td><td>'+fmtData(ord.data_ordine||ord.created_at)+'</td></tr>'+
           '<tr><td style="color:var(--mid);padding:3px 0">Listino</td><td><span class="tag">'+(ord.listino||'')+'</span></td></tr>'+
           '<tr><td style="color:var(--mid);padding:3px 0">Trasporto</td><td>'+(ord.trasporto||'—')+'</td></tr>'+
+          '<tr><td style="color:var(--mid);padding:3px 0">Sett. approntamento</td><td><input type="text" id="ord-sett-appront" value="'+(ord.settimana_consegna||'')+'" placeholder="es. SETT. 42" onblur="salvaSettimanaAppront(\\''+id+'\\',this.value)" style="width:110px;font-size:12px;padding:2px 6px;border:0.5px solid var(--border);border-radius:4px"></td></tr>'+
           '<tr><td style="color:var(--mid);padding:3px 0">Approvazione</td><td>'+(ord.richiede_approvazione_tecnica?'<span class="badge br">Tecnica richiesta</span>':'<span class="badge bg">Solo commerciale</span>')+'</td></tr>'+
           '<tr><td style="color:var(--mid);padding:3px 0">Stato</td><td>'+badgeStato(ord.stato)+'</td></tr>'+
           (ord.nome_compilatore?'<tr><td style="color:var(--mid);padding:3px 0">Compilato da</td><td style="font-size:12px">'+ord.nome_compilatore+'</td></tr>':'')+
@@ -4971,6 +4972,12 @@ async function eliminaOrdineDiretto(id){
   toast('Ordine eliminato','ok');renderOrdiniDiretti();
 }
 
+
+async function salvaSettimanaAppront(id, val){
+  const { error } = await sb.from('ordini_vendita').update({settimana_consegna: val.trim()||null}).eq('id', id);
+  if(error){ toast('Errore salvataggio: '+error.message,'err'); return; }
+  toast('Settimana approntamento salvata','ok');
+}
 
 async function approvaOrdine(id, tipo){
   const stato = tipo==='comm'?'approvato_comm':'approvato_tec';
@@ -6977,6 +6984,7 @@ async function eseguiEsportaPDF() {
         imballo: an.tipo_imballo || 'Sì',
         condizioni_pagamento: an.condizioni_pagamento || '',
         validita_offerta: doc.validita_offerta || '30',
+        settimana_consegna: doc.settimana_consegna || '',
         riferimento_cliente: doc.riferimento_cliente || '',
         // Sconto
         sconto1: doc.sconto1 || 0,
