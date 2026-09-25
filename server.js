@@ -4702,6 +4702,8 @@ async function firmaPreventivo(prevId){
     citta_destinazione:prev.citta_destinazione,
     provincia_destinazione:prev.provincia_destinazione,
     trasporto:prev.trasporto, note:prev.note,
+    riferimento_cliente:prev.riferimento_cliente||null,
+    resa:prev.resa||null,
     totale_imponibile:prev.totale_imponibile,
     totale_netto:prev.totale_netto||prev.totale_imponibile,
     totale_arrotondato:prev.totale_arrotondato||null,
