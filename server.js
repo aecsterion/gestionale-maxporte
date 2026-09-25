@@ -4528,8 +4528,8 @@ async function salvaNuovoDoc(){
     document.getElementById('modal-nuovo-doc').classList.remove('open');
     delete document.getElementById('modal-nuovo-doc').dataset.editId;
     CFG_RIGHE=[];
-    if(mode==='preventivo') editId ? renderPreventivoDetail(docId) : renderPreventivi();
-    else editId ? renderOrdineDetail(docId) : renderOrdiniDiretti();
+    if(mode==='preventivo') renderPreventivoDetail(docId);
+    else renderOrdineDetail(docId);
 
   } catch(e) {
     console.error('salvaNuovoDoc error:', e);
