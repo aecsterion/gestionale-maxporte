@@ -2291,7 +2291,7 @@ function resetCFG(){
     _isDoppiaAnta:false, _needsComFmSuppl:false,
     _isFuoriH:false, _isFuoriL:false, _p_fuori_h:0, _p_fuori_l:0,
     _fuori_h_pct:0, _fuori_l_pct:0, _p_varsavia:0,
-    _p_misura:0, _pct_misura:0
+    _p_misura:0, _pct_misura:0, _lCustom:false, _hCustom:false
   };
 }
 resetCFG();
@@ -3064,13 +3064,13 @@ async function cfgMisure(){
     <div>
       <div style="font-size:12px;font-weight:500;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.4px;color:var(--mid)">Larghezza (mm)</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px">
-        \${larghezze.map(l=>\`<div onclick="selLarghezza(\${l})" style="padding:6px 12px;border-radius:var(--radius);border:\${CFG.larghezza===l?'2px solid var(--red)':'0.5px solid var(--border)'};cursor:pointer;font-size:13px;font-weight:500;background:\${CFG.larghezza===l?'var(--red-bg)':'var(--white)'};">\${l}</div>\`).join('')}
+        \${larghezze.map(l=>\`<div onclick="selLarghezza(\${l})" style="padding:6px 12px;border-radius:var(--radius);border:\${(!CFG._lCustom&&CFG.larghezza===l)?'2px solid var(--red)':'0.5px solid var(--border)'};cursor:pointer;font-size:13px;font-weight:500;background:\${(!CFG._lCustom&&CFG.larghezza===l)?'var(--red-bg)':'var(--white)'};">\${l}</div>\`).join('')}
       </div>
     </div>
     <div>
       <div style="font-size:12px;font-weight:500;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.4px;color:var(--mid)">Altezza (mm)</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px">
-        \${altezze.map(a=>\`<div onclick="selAltezza(\${a})" style="padding:6px 12px;border-radius:var(--radius);border:\${CFG.altezza===a?'2px solid var(--red)':'0.5px solid var(--border)'};cursor:pointer;font-size:13px;font-weight:500;background:\${CFG.altezza===a?'var(--red-bg)':'var(--white)'};">\${a}</div>\`).join('')}
+        \${altezze.map(a=>\`<div onclick="selAltezza(\${a})" style="padding:6px 12px;border-radius:var(--radius);border:\${(!CFG._hCustom&&CFG.altezza===a)?'2px solid var(--red)':'0.5px solid var(--border)'};cursor:pointer;font-size:13px;font-weight:500;background:\${(!CFG._hCustom&&CFG.altezza===a)?'var(--red-bg)':'var(--white)'};">\${a}</div>\`).join('')}
       </div>
     </div>
   </div>
@@ -3080,16 +3080,16 @@ async function cfgMisure(){
   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px">
     <div>
       <div style="font-size:11px;color:var(--mid);margin-bottom:4px">Larghezza custom (mm)</div>
-      <input type="number" id="cfg-larg-custom" placeholder="es. 870" min="300" max="3000" style="width:100%;padding:7px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit" oninput="selLarghezzaCustom(this.value)">
+      <input type="number" id="cfg-larg-custom" value="\${CFG._lCustom?CFG.larghezza:''}" placeholder="es. 870" min="300" max="3000" style="width:100%;padding:7px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit" oninput="selLarghezzaCustom(this.value)">
     </div>
     <div>
       <div style="font-size:11px;color:var(--mid);margin-bottom:4px">Altezza custom (mm)</div>
-      <input type="number" id="cfg-alt-custom" placeholder="es. 2100" min="1000" max="4000" style="width:100%;padding:7px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit" oninput="selAltezzaCustom(this.value)">
+      <input type="number" id="cfg-alt-custom" value="\${CFG._hCustom?CFG.altezza:''}" placeholder="es. 2100" min="1000" max="4000" style="width:100%;padding:7px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit" oninput="selAltezzaCustom(this.value)">
     </div>
   </div>
   \${CFG.misura_custom?'<div style="background:var(--red-bg);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--red-tx);margin-bottom:12px">⚠ Misura custom — richiederà approvazione tecnica</div>':''}
   <div style="background:var(--amber-bg);border-radius:var(--radius);padding:10px 14px;font-size:12px;color:var(--amber-tx);margin-bottom:12px">
-    <strong>Fuori misura:</strong> larghezze non in elenco → +40% · altezze non in elenco → +20% (o €45 per CL/LCL) · h&gt;210cm solo laccate con scorrevole/FM
+    <strong>Fuori misura:</strong> larghezze non in elenco → +40% · altezze non in elenco → +20% (o €45 per CL/LCL) · h&gt;2100mm solo laccate con scorrevole/FM
   </div>
   <div style="display:flex;justify-content:flex-end">
     <button class="btn btn-red btn-sm" onclick="avanzaASpessore()">Avanti →</button>
@@ -3097,16 +3097,17 @@ async function cfgMisure(){
   document.getElementById('cfg-body').innerHTML=html;
 }
 
-function selLarghezza(v){ 
-  CFG.larghezza=v; CFG.misura_custom=false;
-  // Trova sovrapprezzo misura se altezza già selezionata
-  aggiornaSuprMisura(window._cfgMisureCorrente||[]); 
-  cfgMisure(); 
-}
-function selAltezza(v){ 
-  CFG.altezza=v; CFG.misura_custom=false;
+function selLarghezza(v){
+  CFG.larghezza=v; CFG._lCustom=false;
+  CFG.misura_custom = !!CFG._hCustom;   // custom solo se l'altezza è custom
   aggiornaSuprMisura(window._cfgMisureCorrente||[]);
-  cfgMisure(); 
+  cfgMisure();
+}
+function selAltezza(v){
+  CFG.altezza=v; CFG._hCustom=false;
+  CFG.misura_custom = !!CFG._lCustom;   // custom solo se la larghezza è custom
+  aggiornaSuprMisura(window._cfgMisureCorrente||[]);
+  cfgMisure();
 }
 function aggiornaSuprMisura(misure){
   if(!misure||!CFG.larghezza||!CFG.altezza){ return; }
@@ -3119,8 +3120,18 @@ function aggiornaSuprMisura(misure){
   else { CFG._p_misura=fisso; CFG._pct_misura=0; }
   cfgUpdatePrice();
 }
-function selLarghezzaCustom(v){ if(v){ CFG.larghezza=parseFloat(v); CFG.misura_custom=true; CFG._p_misura=0; CFG._pct_misura=0; } }
-function selAltezzaCustom(v){ if(v){ CFG.altezza=parseFloat(v); CFG.misura_custom=true; CFG._p_misura=0; CFG._pct_misura=0; } }
+function selLarghezzaCustom(v){
+  if(v){ CFG.larghezza=parseFloat(v); CFG._lCustom=true; }
+  else { CFG._lCustom=false; }
+  CFG.misura_custom = !!(CFG._lCustom||CFG._hCustom);
+  CFG._p_misura=0; CFG._pct_misura=0;
+}
+function selAltezzaCustom(v){
+  if(v){ CFG.altezza=parseFloat(v); CFG._hCustom=true; }
+  else { CFG._hCustom=false; }
+  CFG.misura_custom = !!(CFG._lCustom||CFG._hCustom);
+  CFG._p_misura=0; CFG._pct_misura=0;
+}
 async function avanzaASpessore(){
   if(!CFG.larghezza||!CFG.altezza){ toast('Seleziona larghezza e altezza','err'); return; }
 
@@ -3142,14 +3153,14 @@ async function avanzaASpessore(){
   const isScorrevole = ['SI','SE'].some(x=>(CFG.apertura||'').startsWith(x));
   const isFM = (CFG.apertura||'').startsWith('FM');
 
-  // Validazione h>210 — solo laccati con scorrevole o FM
-  if(isFuoriH && CFG.altezza>210){
+  // Validazione altezza >2100 mm — solo laccate con scorrevole o filo muro
+  if(CFG.altezza>2100){
     if(!isLaccata){
-      toast('Altezza >210cm disponibile solo per porte laccate con tipologia scorrevole o filo muro','err');
+      toast('Altezza >2100 mm disponibile solo per porte laccate con tipologia scorrevole o filo muro','err');
       return;
     }
     if(!isScorrevole && !isFM){
-      toast('Altezza >210cm disponibile solo con tipologia scorrevole o filo muro','err');
+      toast('Altezza >2100 mm disponibile solo con tipologia scorrevole o filo muro','err');
       return;
     }
   }
@@ -4528,8 +4539,8 @@ async function salvaNuovoDoc(){
     document.getElementById('modal-nuovo-doc').classList.remove('open');
     delete document.getElementById('modal-nuovo-doc').dataset.editId;
     CFG_RIGHE=[];
-    if(mode==='preventivo') renderPreventivoDetail(docId);
-    else renderOrdineDetail(docId);
+    if(mode==='preventivo') editId ? renderPreventivoDetail(docId) : renderPreventivi();
+    else editId ? renderOrdineDetail(docId) : renderOrdiniDiretti();
 
   } catch(e) {
     console.error('salvaNuovoDoc error:', e);
@@ -4702,8 +4713,6 @@ async function firmaPreventivo(prevId){
     citta_destinazione:prev.citta_destinazione,
     provincia_destinazione:prev.provincia_destinazione,
     trasporto:prev.trasporto, note:prev.note,
-    riferimento_cliente:prev.riferimento_cliente||null,
-    resa:prev.resa||null,
     totale_imponibile:prev.totale_imponibile,
     totale_netto:prev.totale_netto||prev.totale_imponibile,
     totale_arrotondato:prev.totale_arrotondato||null,
