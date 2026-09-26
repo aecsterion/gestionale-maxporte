@@ -2585,8 +2585,8 @@ async function cfgFinitura(){
   });
 
   const fasciaStyle = {
-    'LAMINATO':   {bg:'#EDEAE3',tx:'var(--dark)',icon:'🪵'},
-    'MP CLASSIC': {bg:'var(--beige2)',tx:'var(--dark)',icon:'⬜'},
+    'LAMINATO':   {bg:'#EDE7DE',tx:'var(--dark)',icon:'🟤'},
+    'MP CLASSIC': {bg:'#E6DFD3',tx:'var(--dark)',icon:'⚪'},
     'MP LIGHT':   {bg:'#E8F4FD',tx:'#1A5276',icon:'🔵'},
     'MP PREMIUM': {bg:'#FDF3E7',tx:'#784212',icon:'🟡'},
     '': {bg:'transparent',tx:'var(--mid)',icon:''},
