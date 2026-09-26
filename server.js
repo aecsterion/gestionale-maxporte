@@ -2352,7 +2352,7 @@ function cfgUpdatePrice(){
   const tot = cfgTotale();
   const el = document.getElementById('cfg-prezzo-unitario');
   if(el) el.textContent = '€ '+tot.toLocaleString('it-IT',{minimumFractionDigits:2,maximumFractionDigits:2});
-  const qty = parseInt(document.getElementById('cfg-qty')?.value||1)||1;
+  const qty = parseFloat(document.getElementById('cfg-qty')?.value||1)||1;
   const elTot = document.getElementById('cfg-prezzo-totale');
   if(elTot) elTot.textContent = '€ '+(tot*qty).toLocaleString('it-IT',{minimumFractionDigits:2,maximumFractionDigits:2});
 }
@@ -2406,8 +2406,8 @@ const CFG_LABELS = {serie:'Serie',modello:'Modello',finitura:'Finitura',opzioni:
 const CFG_ACC_STEPS = {
   passata:    ['serie','modello','finitura','acc_misure','acc_spessore','riepilogo'],
   sopraluce:  ['serie','modello','finitura','acc_sopraluce','acc_spessore','riepilogo'],
-  semplice:   ['serie','modello','finitura','acc_qta','riepilogo'],
-  coprifilo:  ['serie','modello','finitura','acc_qta','riepilogo'],
+  semplice:   ['serie','modello','finitura','riepilogo'],
+  coprifilo:  ['serie','modello','finitura','riepilogo'],
   pannello:   ['serie','modello','finitura','acc_pannello','riepilogo'],
 };
 const CFG_ACC_LABELS = {
@@ -2643,7 +2643,7 @@ async function selFinitura(cod, nome, sovrVal, sovrTipo, consenteBugna){
     const t = CFG._tipoAccessorio;
     if(t==='passata') return await renderCfgStep('acc_misure');
     if(t==='sopraluce') return await renderCfgStep('acc_sopraluce');
-    if(t==='semplice'||t==='coprifilo') return await renderCfgStep('acc_qta');
+    if(t==='semplice'||t==='coprifilo') return await renderCfgStep('riepilogo');
   }
   if(CFG._isPannelloBlindato) return await renderCfgStep('acc_pannello');
 
@@ -4032,6 +4032,11 @@ async function selAccPannello(){
 
 async function cfgRiepilogo(){
   const tot = cfgTotale();
+  // Vincoli quantità da archivio (validi anche per accessori: unico campo quantità)
+  const _qMin = CFG._qtaMin||1;
+  const _qStep = CFG._qtaStep||1;
+  const _qAmmezzi = _qStep<1;
+  if(!CFG.quantita || CFG.quantita<_qMin) CFG.quantita=_qMin;
   const desc = [
     CFG.nome_serie, CFG.nome_modello, CFG.nome_finitura,
     CFG.pannello_bugna?CFG.pannello_bugna:'',
@@ -4077,7 +4082,7 @@ async function cfgRiepilogo(){
   document.getElementById('cfg-body').innerHTML=\`
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
       <div style="font-size:13px;font-weight:500">Riepilogo configurazione</div>
-      <button class="btn btn-sm" onclick="renderCfgStep('ferramenta')">← Modifica</button>
+      <button class="btn btn-sm" onclick="renderCfgStep('\${CFG._isAccessorio?'finitura':(CFG._isPannelloBlindato?'acc_pannello':'ferramenta')}')">← Modifica</button>
     </div>
     \${CFG.misura_custom?\`<div style="background:var(--red-bg);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--red-tx);margin-bottom:10px">⚠ Misura custom — questo ordine richiederà approvazione del responsabile tecnico</div>\`:''}
     <div style="background:var(--beige);border-radius:var(--radius);padding:12px;margin-bottom:12px;font-size:12px;color:var(--mid);line-height:1.6">\${desc}</div>
@@ -4088,7 +4093,8 @@ async function cfgRiepilogo(){
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
       <div>
         <div style="font-size:11px;color:var(--mid);margin-bottom:4px">Quantità</div>
-        <input type="number" id="cfg-qty" value="\${CFG.quantita||1}" min="1" style="width:100%;padding:7px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit" oninput="CFG.quantita=parseInt(this.value)||1;cfgUpdatePrice()">
+        <input type="number" id="cfg-qty" value="\${CFG.quantita||_qMin}" min="\${_qMin}" step="\${_qStep}" style="width:100%;padding:7px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit" oninput="CFG.quantita=parseFloat(this.value)||_qMin;cfgUpdatePrice()">
+        \${(_qMin>1||_qAmmezzi)?\`<div style="font-size:10px;color:var(--mid);margin-top:3px">Min \${_qMin} pz\${_qAmmezzi?', anche mezze':''}</div>\`:''}
       </div>
       <div>
         <div style="font-size:11px;color:var(--mid);margin-bottom:4px">Note riga</div>
@@ -4111,7 +4117,12 @@ async function cfgRiepilogo(){
 }
 
 async function aggiungiRigaAlDocumento(){
-  CFG.quantita = parseInt(document.getElementById('cfg-qty')?.value||1)||1;
+  const _qMin = CFG._qtaMin||1, _qStep = CFG._qtaStep||1;
+  const _q = parseFloat(document.getElementById('cfg-qty')?.value||0);
+  if(!_q || _q<_qMin){toast(\`Quantità minima: \${_qMin} pz\`,'err');return;}
+  if(_qStep>=1 && _q!==Math.floor(_q)){toast('Inserisci un numero intero','err');return;}
+  if(_qStep<1 && Math.round(_q*2)!==_q*2){toast('Sono ammesse solo quantità intere o mezze (es. 1,5)','err');return;}
+  CFG.quantita = _q;
   CFG.note_riga = document.getElementById('cfg-note-riga')?.value||'';
   CFG.stanza = document.getElementById('cfg-stanza')?.value||'';
   const tot = cfgTotale();
