@@ -2585,11 +2585,18 @@ async function cfgFinitura(){
   });
 
   const fasciaStyle = {
+    'LAMINATO':   {bg:'#EDEAE3',tx:'var(--dark)',icon:'🪵'},
     'MP CLASSIC': {bg:'var(--beige2)',tx:'var(--dark)',icon:'⬜'},
     'MP LIGHT':   {bg:'#E8F4FD',tx:'#1A5276',icon:'🔵'},
     'MP PREMIUM': {bg:'#FDF3E7',tx:'#784212',icon:'🟡'},
     '': {bg:'transparent',tx:'var(--mid)',icon:''},
   };
+  // Ordine fisso delle fasce: laminati sopra, poi laccati per intensità
+  const _ordFasce = ['LAMINATO','MP CLASSIC','MP LIGHT','MP PREMIUM'];
+  fasce.sort((a,b)=>{
+    const ia=_ordFasce.indexOf(a), ib=_ordFasce.indexOf(b);
+    return (ia<0?99:ia)-(ib<0?99:ib);
+  });
 
   let html = '';
   fasce.forEach(fascia=>{
