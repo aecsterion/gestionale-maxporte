@@ -7131,7 +7131,7 @@ async function eseguiEsportaPDF() {
   <div class="form-modal" style="width:min(820px,100%);max-height:90vh;display:flex;flex-direction:column">
     <div class="form-modal-head">
       <div style="display:flex;flex-direction:column;gap:6px;flex:1">
-        <span class="form-modal-title">Configuratore porta</span>
+        <span class="form-modal-title">Configura il prodotto</span>
         <div id="cfg-stepper" style="display:flex;align-items:center;gap:4px;flex-wrap:wrap"></div>
       </div>
       <div style="display:flex;align-items:center;gap:16px">
