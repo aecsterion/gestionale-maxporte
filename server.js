@@ -947,7 +947,7 @@ const pageInfo = {
   dashboard:{title:'Dashboard',bc:'Panoramica generale',action:false},
   anagrafiche:{title:'Anagrafiche',bc:'Clienti e fornitori',action:true,label:'+ Nuova anagrafica'},
   preventivi:{title:'Preventivi',bc:'Gestione offerte commerciali',action:false,label:''},
-  ordini_vendita:{title:"Conferme d'ordine",bc:'Ordini senza preventivo',action:false,label:''},
+  ordini_vendita:{title:"Conferme d'ordine",bc:'Preventivi confermati e ordini diretti',action:false,label:''},
   fatture:{title:'Fatture',bc:'Ciclo attivo',action:false},
   magazzino:{title:'Magazzino',bc:'Giacenze e componenti',action:false},
   produzione:{title:'Produzione MRP',bc:'Ciclo produttivo',action:false},
