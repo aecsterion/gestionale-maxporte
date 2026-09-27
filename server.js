@@ -5044,6 +5044,7 @@ const ADMIN_SECTIONS = [
   {id:'distinte',    label:'Distinte base',     icon:'M3 3h10v2H3zM3 7h10v2H3zM3 11h6v2H3z'},
   {id:'compatibilita',label:'Compatibilità',    icon:'M2 8h5M9 8h5M8 2v5M8 9v5'},
   {id:'lavorazioni', label:'Lavorazioni extra', icon:'M4 2h8l2 4-10 0zM2 6h12v10H2zM6 10h4'},
+  {id:'spedizioni',  label:'Imballi e trasporti', icon:'M1 1.5h1.8l1.3 8.2a1 1 0 0 0 1 .8h6.4a1 1 0 0 0 1-.78L14.8 4H3.6'},
   {id:'agenti',        label:'Agenti',             icon:'M8 5a3 3 0 100 6 3 3 0 000-6zM2 14c0-3 2-5 6-5s6 2 6 5'},
   {id:'impostazioni',  label:'Impostazioni',       icon:'M8 5a3 3 0 100 6M8 1v2M8 13v2M1 8h2M13 8h2'},
   {id:'magazzino_admin',label:'Magazzino',         icon:'M2 4h12v10H2zM2 4l6-3 6 3M6 14v-4h4v4'},
@@ -5057,6 +5058,7 @@ const ADMIN_SUB = {
   agenti:     ['agenti_lista'],
   impostazioni:['generale','utenti'],
   magazzino_admin:['categorie'],
+  spedizioni:['imballi','trasporti'],
 };
 
 let adminSection = 'catalogo';
@@ -5102,6 +5104,7 @@ function loadAdminSection(){
   else if(adminSection==='agenti') adminAgenti();
   else if(adminSection==='impostazioni') adminImpostazioni();
   else if(adminSection==='magazzino_admin') adminMagazzino();
+  else if(adminSection==='spedizioni') adminSpedizioni();
 }
 
 // ── HELPER UI ──────────────────────────────────────────
@@ -6693,6 +6696,144 @@ async function aggiungiLavorazione(){
   toast('Lavorazione aggiunta','ok'); adminLavorazioni();
 }
 
+// ══════════════════════════════════════════════════════
+// SPEDIZIONI — Imballi e Trasporti
+// ══════════════════════════════════════════════════════
+async function adminSpedizioni(){
+  const tabs=[{id:'imballi',label:'Imballi'},{id:'trasporti',label:'Trasporti'}];
+  let body='';
+  if(adminSub==='imballi'){
+    const {data:imb} = await sb.from('listino_imballi').select('*').order('descrizione');
+    const {data:suppFrag} = await sb.from('impostazioni').select('valore').eq('chiave','supplemento_imballo_fragile').maybeSingle();
+    const rows=(imb||[]).map(i=>\`<tr>
+      <td><code style="font-size:11px;color:var(--mid)">\${i.codice}</code></td>
+      <td>\${inlineInput(i.descrizione,\`salvaImballo('\${i.codice}','descrizione',this.value)\`,'220px','text')}</td>
+      <td>\${inlineInput(i.prezzo,\`salvaImballo('\${i.codice}','prezzo',this.value)\`,'90px','number')} €</td>
+      <td style="text-align:center"><input type="checkbox" \${i.per_pezzo?'checked':''} onchange="salvaImballo('\${i.codice}','per_pezzo',this.checked)"></td>
+      <td style="text-align:center"><input type="checkbox" \${i.attivo?'checked':''} onchange="salvaImballo('\${i.codice}','attivo',this.checked)"></td>
+      <td><button onclick="eliminaImballo('\${i.codice}')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
+    </tr>\`).join('');
+    body=\`
+    \${adminCard('Supplemento imballo fragili / vetro',\`
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px">
+        <input type="number" id="imp-frag" value="\${suppFrag?.valore||0}" min="0" step="0.01"
+          style="padding:6px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px;font-weight:600;width:120px">
+        <span style="font-size:13px;color:var(--mid)">€</span>
+        <button class="btn btn-sm" onclick="salvaImpostazione('supplemento_imballo_fragile','imp-frag')">Salva</button>
+      </div>
+      <div style="font-size:11px;color:var(--mid)">Aggiunto all'imballo dei prodotti su serie marcate come fragili (es. GL vetro)</div>
+    \`)}
+    \${adminCard('Listino imballi',\`
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;padding-bottom:12px;border-bottom:0.5px solid var(--border);flex-wrap:wrap">
+        <input type="text" id="imb-cod" placeholder="CODICE" style="padding:6px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;width:130px;text-transform:uppercase">
+        <input type="text" id="imb-desc" placeholder="Descrizione" style="padding:6px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;flex:1;min-width:160px">
+        <input type="number" id="imb-prezzo" placeholder="€" min="0" step="0.01" style="padding:6px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;width:90px">
+        <label style="font-size:12px;color:var(--mid);display:flex;align-items:center;gap:4px"><input type="checkbox" id="imb-perpezzo" checked> per pezzo</label>
+        <button class="btn btn-red btn-sm" onclick="aggiungiImballo()">+ Aggiungi</button>
+      </div>
+      <table><thead><tr><th>Codice</th><th>Descrizione</th><th>Prezzo</th><th style="text-align:center">Per pezzo</th><th style="text-align:center">Attivo</th><th></th></tr></thead>
+      <tbody>\${rows||'<tr><td colspan="6" style="text-align:center;color:var(--mid);padding:16px;font-style:italic">Nessun imballo configurato</td></tr>'}</tbody>
+      </table>
+      <div style="font-size:11px;color:var(--mid);margin-top:8px">"Per pezzo" = il costo si moltiplica per la quantità della posizione. Deselezionato = un solo imballo per posizione.</div>
+    \`)}\`;
+  } else {
+    // TRASPORTI
+    const {data:zone} = await sb.from('zone_trasporto').select('*').order('ordine');
+    const {data:tar} = await sb.from('listino_trasporti').select('*').order('zona_id').order('min_porte');
+    const tarByZona={}; (tar||[]).forEach(t=>{ (tarByZona[t.zona_id]=tarByZona[t.zona_id]||[]).push(t); });
+    const zoneCards=(zone||[]).map(z=>{
+      const scal=(tarByZona[z.id]||[]).map(t=>\`<tr>
+        <td>\${inlineInput(t.min_porte,\`adminSalva('listino_trasporti','\${t.id}','min_porte',this.value)\`,'60px','number')}</td>
+        <td>\${inlineInput(t.max_porte,\`adminSalva('listino_trasporti','\${t.id}','max_porte',this.value)\`,'60px','number','∞')}</td>
+        <td>\${inlineInput(t.prezzo_proprio,\`adminSalva('listino_trasporti','\${t.id}','prezzo_proprio',this.value)\`,'80px','number')} €</td>
+        <td>\${inlineInput(t.prezzo_corriere,\`adminSalva('listino_trasporti','\${t.id}','prezzo_corriere',this.value)\`,'80px','number')} €</td>
+        <td><button onclick="eliminaTariffa('\${t.id}')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:15px">×</button></td>
+      </tr>\`).join('');
+      return adminCard('',\`
+        <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+          <div style="flex:1;min-width:180px">
+            <div style="font-size:11px;color:var(--mid);margin-bottom:2px">Zona</div>
+            \${inlineInput(z.nome,\`adminSalva('zone_trasporto','\${z.id}','nome',this.value)\`,'100%','text')}
+          </div>
+          <div style="flex:2;min-width:200px">
+            <div style="font-size:11px;color:var(--mid);margin-bottom:2px">Province (sigle, separate da virgola)</div>
+            \${inlineInput(z.province,\`adminSalva('zone_trasporto','\${z.id}','province',this.value)\`,'100%','text','TO,CN,AT')}
+          </div>
+          <button onclick="eliminaZona('\${z.id}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:12px;align-self:flex-end;padding-bottom:4px">Elimina zona</button>
+        </div>
+        <table style="font-size:12px"><thead><tr><th>Da (porte)</th><th>A</th><th>Mezzo proprio</th><th>Corriere</th><th></th></tr></thead>
+        <tbody>\${scal||'<tr><td colspan="5" style="color:var(--mid);font-style:italic;padding:8px">Nessuno scaglione</td></tr>'}</tbody></table>
+        <button class="btn btn-sm" style="margin-top:8px" onclick="aggiungiTariffa('\${z.id}')">+ Aggiungi scaglione</button>
+      \`);
+    }).join('');
+    body=\`
+    \${adminCard('Zone di trasporto',\`
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input type="text" id="zona-nome" placeholder="Nome zona (es. Piemonte)" style="padding:6px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;flex:1;min-width:180px">
+        <input type="text" id="zona-prov" placeholder="Province: TO,CN,AT" style="padding:6px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;flex:1;min-width:180px;text-transform:uppercase">
+        <button class="btn btn-red btn-sm" onclick="aggiungiZona()">+ Aggiungi zona</button>
+      </div>
+      <div style="font-size:11px;color:var(--mid);margin-top:8px">La zona viene proposta automaticamente sul documento in base alla provincia del cliente. Gli scaglioni sono per numero di porte.</div>
+    \`)}
+    \${zoneCards||'<div style="color:var(--mid);font-style:italic;padding:12px">Nessuna zona configurata.</div>'}\`;
+  }
+  document.getElementById('admin-main').innerHTML = adminSubTabs(tabs, adminSub, 'switchAdminSub') + body;
+}
+
+// --- Imballi: add/delete ---
+async function aggiungiImballo(){
+  const cod=(document.getElementById('imb-cod')?.value||'').trim().toUpperCase();
+  const desc=(document.getElementById('imb-desc')?.value||'').trim();
+  const prezzo=document.getElementById('imb-prezzo')?.value||'0';
+  const perPezzo=document.getElementById('imb-perpezzo')?.checked;
+  if(!cod){toast('Inserisci un codice','err');return;}
+  if(!desc){toast('Inserisci la descrizione','err');return;}
+  const {error}=await sb.from('listino_imballi').insert({codice:cod,descrizione:desc,prezzo:parseFloat(prezzo)||0,per_pezzo:!!perPezzo,attivo:true});
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Imballo aggiunto','ok'); adminSpedizioni();
+}
+async function eliminaImballo(cod){
+  if(!confirm('Eliminare questo imballo?'))return;
+  const {error}=await sb.from('listino_imballi').delete().eq('codice',cod);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Imballo eliminato','ok'); adminSpedizioni();
+}
+
+// --- Trasporti: zone e tariffe ---
+async function aggiungiZona(){
+  const nome=(document.getElementById('zona-nome')?.value||'').trim();
+  const prov=(document.getElementById('zona-prov')?.value||'').trim().toUpperCase();
+  if(!nome){toast('Inserisci il nome della zona','err');return;}
+  const {error}=await sb.from('zone_trasporto').insert({nome,province:prov,ordine:Date.now()%100000});
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Zona aggiunta','ok'); adminSpedizioni();
+}
+async function eliminaZona(id){
+  if(!confirm('Eliminare la zona e i suoi scaglioni?'))return;
+  const {error}=await sb.from('zone_trasporto').delete().eq('id',id);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Zona eliminata','ok'); adminSpedizioni();
+}
+async function aggiungiTariffa(zonaId){
+  const {error}=await sb.from('listino_trasporti').insert({zona_id:parseInt(zonaId),min_porte:1,max_porte:null,prezzo_proprio:0,prezzo_corriere:0});
+  if(error){toast('Errore: '+error.message,'err');return;}
+  adminSpedizioni();
+}
+async function eliminaTariffa(id){
+  const {error}=await sb.from('listino_trasporti').delete().eq('id',id);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  adminSpedizioni();
+}
+
+async function salvaImballo(codice, campo, valore){
+  let val = valore;
+  if(campo==='prezzo'){ val = parseFloat(valore); if(isNaN(val)) return; }
+  const {error} = await sb.from('listino_imballi').update({[campo]:val}).eq('codice',codice);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Salvato','ok');
+}
+function switchAdminSub(sub){ adminSub=sub; adminSpedizioni(); }
+
 function adminImpostazioni(){
   sb.from('impostazioni').select('*').then(({data})=>{
     const imp={};(data||[]).forEach(r=>{imp[r.chiave]=r.valore;});
@@ -6814,8 +6955,11 @@ async function adminSalva(tabella, id, campo, valore){
     'prezzo_vetro','prezzo_extra_incisioni','sovrapprezzo_bugna_A','sovrapprezzo_bugna_P',
     'maggiorazione_pct','spalla_cm','spessore_da_cm','spessore_a_cm','cm_accessorio',
     'prezzo_access_A','prezzo_access_P','spalla_cassone_cm','quantita',
-    'percentuale_provvigione','sconto_base_pct','sconto_max_pct'];
-  if(numericFields.includes(campo)){
+    'percentuale_provvigione','sconto_base_pct','sconto_max_pct',
+    'prezzo','min_porte','max_porte','prezzo_proprio','prezzo_corriere'];
+  if(campo==='max_porte' && (valore===''||valore===null||valore===undefined)){
+    val = null;  // max vuoto = scaglione illimitato
+  } else if(numericFields.includes(campo)){
     val = parseFloat(valore);
     if(isNaN(val)) return;
   }
