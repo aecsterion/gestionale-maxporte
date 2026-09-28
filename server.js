@@ -5173,20 +5173,26 @@ function switchAdminCat(sub){
 // SERIE
 async function adminSerie(){
   const {data} = await sb.from('serie').select('*').order('nome');
+  const {data:imballi} = await sb.from('listino_imballi').select('codice,descrizione').eq('attivo',true).order('descrizione');
+  const imbOpts=(sel)=>\`<option value="">— nessuno —</option>\`+(imballi||[]).map(i=>\`<option value="\${i.codice}" \${i.codice===sel?'selected':''}>\${i.descrizione}</option>\`).join('');
   const rows=(data||[]).map(s=>\`<tr>
     <td>\${inlineInput(s.codice,\`adminSalva('serie','\${s.id}','codice',this.value)\`,'70px','text')}</td>
-    <td>\${inlineInput(s.nome,\`adminSalva('serie','\${s.id}','nome',this.value)\`,'140px','text')}</td>
-    <td>\${inlineInput(s.descrizione||'',\`adminSalva('serie','\${s.id}','descrizione',this.value)\`,'220px','text','Descrizione')}</td>
+    <td>\${inlineInput(s.nome,\`adminSalva('serie','\${s.id}','nome',this.value)\`,'130px','text')}</td>
+    <td>\${inlineInput(s.descrizione||'',\`adminSalva('serie','\${s.id}','descrizione',this.value)\`,'180px','text','Descrizione')}</td>
+    <td><select onchange="adminSalva('serie','\${s.id}','codice_imballo',this.value)" style="padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:11px">\${imbOpts(s.codice_imballo)}</select></td>
+    <td><select onchange="adminSalva('serie','\${s.id}','codice_imballo_posa',this.value)" style="padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:11px">\${imbOpts(s.codice_imballo_posa)}</select></td>
+    <td style="text-align:center"><input type="checkbox" \${s.imballo_fragile?'checked':''} onchange="toggleCampo('serie','\${s.id}','imballo_fragile',\${!s.imballo_fragile})" title="Prodotti fragili/vetro: applica supplemento"></td>
     <td>
-      \${s.immagine_url?\`<img src="\${s.immagine_url}" style="width:40px;height:40px;object-fit:cover;border-radius:4px;margin-right:6px">\`:'<span style="font-size:11px;color:var(--mid)">Nessuna</span>'}
-      <label style="cursor:pointer"><input type="file" accept="image/*" style="display:none" onchange="uploadImmagine('serie','\${s.id}',this)"><span class="btn btn-sm" style="font-size:11px">📷 Carica</span></label>
+      \${s.immagine_url?\`<img src="\${s.immagine_url}" style="width:36px;height:36px;object-fit:cover;border-radius:4px;margin-right:6px">\`:'<span style="font-size:11px;color:var(--mid)">—</span>'}
+      <label style="cursor:pointer"><input type="file" accept="image/*" style="display:none" onchange="uploadImmagine('serie','\${s.id}',this)"><span class="btn btn-sm" style="font-size:11px">📷</span></label>
     </td>
     <td>\${adminToggle(s.attiva,\`toggleCampo('serie','\${s.id}','attiva',\${s.attiva})\`)}</td>
     <td><button onclick="eliminaRigaAdmin('serie','\${s.id}','adminSerie')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px" title="Elimina">×</button></td>
   </tr>\`).join('');
   document.getElementById('admin-sub').innerHTML=adminCard('Serie',\`
-    <table><thead><tr><th>Codice</th><th>Nome</th><th>Descrizione</th><th>Immagine</th><th>Stato</th><th></th></tr></thead>
-    <tbody>\${rows}</tbody></table>\`,
+    <table><thead><tr><th>Codice</th><th>Nome</th><th>Descrizione</th><th>Imballo</th><th>Imballo se posata</th><th style="text-align:center" title="Fragile / vetro">Fragile</th><th>Immagine</th><th>Stato</th><th></th></tr></thead>
+    <tbody>\${rows}</tbody></table>
+    <div style="font-size:11px;color:var(--mid);margin-top:8px">"Imballo" = imballo di default della serie. "Imballo se posata" = imballo alternativo per le porte posate da noi. "Fragile" = aggiunge il supplemento fragili/vetro.</div>\`,
     \`<button class="btn btn-red btn-sm" onclick="nuovaRiga('serie',{codice:'NUOVA',nome:'Nuova serie',attiva:true},'adminSerie')">+ Aggiungi serie</button>\`);
 }
 
