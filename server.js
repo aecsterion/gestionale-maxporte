@@ -6705,14 +6705,19 @@ async function adminSpedizioni(){
   if(adminSub==='imballi'){
     const {data:imb} = await sb.from('listino_imballi').select('*').order('descrizione');
     const {data:suppFrag} = await sb.from('impostazioni').select('valore').eq('chiave','supplemento_imballo_fragile').maybeSingle();
-    const rows=(imb||[]).map(i=>\`<tr>
+    const METODI=[['per_pezzo','Per pezzo'],['a_scatola','A scatola'],['a_posizione','A posizione']];
+    const rows=(imb||[]).map(i=>{
+      const metOpts=METODI.map(m=>\`<option value="\${m[0]}" \${(i.metodo||'per_pezzo')===m[0]?'selected':''}>\${m[1]}</option>\`).join('');
+      return \`<tr>
       <td><code style="font-size:11px;color:var(--mid)">\${i.codice}</code></td>
-      <td>\${inlineInput(i.descrizione,\`salvaImballo('\${i.codice}','descrizione',this.value)\`,'220px','text')}</td>
-      <td>\${inlineInput(i.prezzo,\`salvaImballo('\${i.codice}','prezzo',this.value)\`,'90px','number')} €</td>
-      <td style="text-align:center"><input type="checkbox" \${i.per_pezzo?'checked':''} onchange="salvaImballo('\${i.codice}','per_pezzo',this.checked)"></td>
+      <td>\${inlineInput(i.descrizione,\`salvaImballo('\${i.codice}','descrizione',this.value)\`,'200px','text')}</td>
+      <td>\${inlineInput(i.prezzo,\`salvaImballo('\${i.codice}','prezzo',this.value)\`,'80px','number')} €</td>
+      <td><select onchange="salvaImballo('\${i.codice}','metodo',this.value)" style="padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px">\${metOpts}</select></td>
+      <td style="text-align:center">\${(i.metodo==='a_scatola')?inlineInput(i.capienza,\`salvaImballo('\${i.codice}','capienza',this.value)\`,'60px','number'):'<span style="color:var(--border)">—</span>'}</td>
+      <td>\${inlineInput(i.gruppo_scatola,\`salvaImballo('\${i.codice}','gruppo_scatola',this.value)\`,'110px','text','—')}</td>
       <td style="text-align:center"><input type="checkbox" \${i.attivo?'checked':''} onchange="salvaImballo('\${i.codice}','attivo',this.checked)"></td>
       <td><button onclick="eliminaImballo('\${i.codice}')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
-    </tr>\`).join('');
+    </tr>\`;}).join('');
     body=\`
     \${adminCard('Supplemento imballo fragili / vetro',\`
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px">
@@ -6725,16 +6730,20 @@ async function adminSpedizioni(){
     \`)}
     \${adminCard('Listino imballi',\`
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;padding-bottom:12px;border-bottom:0.5px solid var(--border);flex-wrap:wrap">
-        <input type="text" id="imb-cod" placeholder="CODICE" style="padding:6px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;width:130px;text-transform:uppercase">
-        <input type="text" id="imb-desc" placeholder="Descrizione" style="padding:6px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;flex:1;min-width:160px">
-        <input type="number" id="imb-prezzo" placeholder="€" min="0" step="0.01" style="padding:6px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;width:90px">
-        <label style="font-size:12px;color:var(--mid);display:flex;align-items:center;gap:4px"><input type="checkbox" id="imb-perpezzo" checked> per pezzo</label>
+        <input type="text" id="imb-cod" placeholder="CODICE" style="padding:6px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;width:120px;text-transform:uppercase">
+        <input type="text" id="imb-desc" placeholder="Descrizione" style="padding:6px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;flex:1;min-width:150px">
+        <input type="number" id="imb-prezzo" placeholder="€" min="0" step="0.01" style="padding:6px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;width:80px">
+        <select id="imb-metodo" onchange="document.getElementById('imb-capienza').style.display=this.value==='a_scatola'?'inline-block':'none'" style="padding:6px 8px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px">
+          <option value="per_pezzo">Per pezzo</option><option value="a_scatola">A scatola</option><option value="a_posizione">A posizione</option>
+        </select>
+        <input type="number" id="imb-capienza" placeholder="pz/scatola" min="1" style="display:none;padding:6px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;width:100px">
+        <input type="text" id="imb-gruppo" placeholder="Gruppo (opz.)" style="padding:6px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;width:130px;text-transform:uppercase">
         <button class="btn btn-red btn-sm" onclick="aggiungiImballo()">+ Aggiungi</button>
       </div>
-      <table><thead><tr><th>Codice</th><th>Descrizione</th><th>Prezzo</th><th style="text-align:center">Per pezzo</th><th style="text-align:center">Attivo</th><th></th></tr></thead>
-      <tbody>\${rows||'<tr><td colspan="6" style="text-align:center;color:var(--mid);padding:16px;font-style:italic">Nessun imballo configurato</td></tr>'}</tbody>
+      <table><thead><tr><th>Codice</th><th>Descrizione</th><th>Prezzo</th><th>Metodo</th><th style="text-align:center">Capienza</th><th>Gruppo</th><th style="text-align:center">Attivo</th><th></th></tr></thead>
+      <tbody>\${rows||'<tr><td colspan="8" style="text-align:center;color:var(--mid);padding:16px;font-style:italic">Nessun imballo configurato</td></tr>'}</tbody>
       </table>
-      <div style="font-size:11px;color:var(--mid);margin-top:8px">"Per pezzo" = il costo si moltiplica per la quantità della posizione. Deselezionato = un solo imballo per posizione.</div>
+      <div style="font-size:11px;color:var(--mid);margin-top:8px">Per pezzo = prezzo × quantità · A scatola = arrotonda(quantità ÷ capienza) × prezzo · A posizione = prezzo una volta. Il "Gruppo" serve a unire più articoli nelle stesse scatole in produzione (es. COPRIFILI per coprifili+ringrossi).</div>
     \`)}\`;
   } else {
     // TRASPORTI
@@ -6785,10 +6794,17 @@ async function aggiungiImballo(){
   const cod=(document.getElementById('imb-cod')?.value||'').trim().toUpperCase();
   const desc=(document.getElementById('imb-desc')?.value||'').trim();
   const prezzo=document.getElementById('imb-prezzo')?.value||'0';
-  const perPezzo=document.getElementById('imb-perpezzo')?.checked;
+  const metodo=document.getElementById('imb-metodo')?.value||'per_pezzo';
+  const capienza=document.getElementById('imb-capienza')?.value;
+  const gruppo=(document.getElementById('imb-gruppo')?.value||'').trim().toUpperCase();
   if(!cod){toast('Inserisci un codice','err');return;}
   if(!desc){toast('Inserisci la descrizione','err');return;}
-  const {error}=await sb.from('listino_imballi').insert({codice:cod,descrizione:desc,prezzo:parseFloat(prezzo)||0,per_pezzo:!!perPezzo,attivo:true});
+  if(metodo==='a_scatola' && (!capienza||parseInt(capienza)<1)){toast('Per il metodo "a scatola" indica la capienza (pezzi per scatola)','err');return;}
+  const rec={codice:cod,descrizione:desc,prezzo:parseFloat(prezzo)||0,metodo,attivo:true,
+    per_pezzo:(metodo==='per_pezzo'),
+    capienza:metodo==='a_scatola'?parseInt(capienza):null,
+    gruppo_scatola:gruppo||null};
+  const {error}=await sb.from('listino_imballi').insert(rec);
   if(error){toast('Errore: '+error.message,'err');return;}
   toast('Imballo aggiunto','ok'); adminSpedizioni();
 }
@@ -6828,9 +6844,15 @@ async function eliminaTariffa(id){
 async function salvaImballo(codice, campo, valore){
   let val = valore;
   if(campo==='prezzo'){ val = parseFloat(valore); if(isNaN(val)) return; }
-  const {error} = await sb.from('listino_imballi').update({[campo]:val}).eq('codice',codice);
+  else if(campo==='capienza'){ val = (valore===''||valore==null)?null:parseInt(valore); if(val!=null&&isNaN(val)) return; }
+  else if(campo==='gruppo_scatola'){ val = (valore||'').trim().toUpperCase()||null; }
+  const patch = {[campo]:val};
+  // Mantieni il vecchio flag per_pezzo coerente col metodo
+  if(campo==='metodo') patch.per_pezzo = (val==='per_pezzo');
+  const {error} = await sb.from('listino_imballi').update(patch).eq('codice',codice);
   if(error){toast('Errore: '+error.message,'err');return;}
   toast('Salvato','ok');
+  if(campo==='metodo') adminSpedizioni(); // ridisegna: mostra/nasconde capienza
 }
 function switchAdminSub(sub){ adminSub=sub; adminSpedizioni(); }
 
