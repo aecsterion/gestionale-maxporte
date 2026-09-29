@@ -2494,11 +2494,15 @@ function closeCfg(){
 }
 
 let _cfgStepCorrente = 'serie';  // step attualmente mostrato (per il pulsante "Avanti")
+// Step che hanno già un pulsante "Avanti" proprio dentro la scheda: lì la barra
+// non deve mostrare un secondo Avanti (evita il doppione).
+const _STEP_CON_AVANTI_PROPRIO = ['opzioni','misure','spessore','ferramenta','acc_misure','acc_sopraluce','acc_spessore','acc_pannello','acc_qta'];
 function updateCfgNav(step){
   const nav = document.getElementById('cfg-nav');
   if(!nav) return;
-  // Barra Avanti/Indietro solo in modalità modifica e non nel riepilogo (che ha i suoi pulsanti)
-  const mostra = !!CFG_EDIT_RIGA_ID && step!=='riepilogo';
+  // La barra (solo "Avanti") serve nella modifica per scorrere gli step che NON hanno
+  // un pulsante Avanti proprio nella scheda. Altrove è nascosta per non duplicarlo.
+  const mostra = !!CFG_EDIT_RIGA_ID && step!=='riepilogo' && !_STEP_CON_AVANTI_PROPRIO.includes(step);
   nav.style.display = mostra ? 'flex' : 'none';
 }
 async function renderCfgStep(step){
@@ -7533,9 +7537,8 @@ async function eseguiEsportaPDF() {
       <div class="loading"><div class="spinner"></div></div>
     </div>
     <div id="cfg-nav" style="display:none;padding:10px 20px;border-top:0.5px solid var(--border);justify-content:space-between;align-items:center;background:var(--white)">
-      <button class="btn btn-sm" onclick="cfgIndietro()">← Indietro</button>
-      <span style="font-size:11px;color:var(--mid)">Modifica: scorri con Avanti, cambia solo ciò che serve</span>
-      <button class="btn btn-sm btn-red" onclick="cfgAvanti()">Avanti →</button>
+      <span style="font-size:11px;color:var(--mid)">Modifica: clicca <strong>Avanti</strong> per scorrere le schede senza cambiare nulla</span>
+      <button id="cfg-nav-avanti" class="btn btn-sm btn-red" onclick="cfgAvanti()">Avanti →</button>
     </div>
   </div>
 </div>
