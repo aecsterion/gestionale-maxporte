@@ -474,6 +474,7 @@ tr.data-row:hover td{background:var(--beige);cursor:pointer}
           <div class="form-grid">
             <div class="form-field"><label>CAP</label><input type="text" id="ana-so-cap" maxlength="5"></div>
             <div class="form-field"><label>Città</label><input type="text" id="ana-so-citta"></div>
+            <div class="form-field"><label>Provincia</label><input type="text" id="ana-so-provincia" maxlength="2" style="text-transform:uppercase"></div>
           </div>
         </div>
       </div>
@@ -1173,6 +1174,7 @@ async function openFormAnagrafica(data){
   if(data?.sede_op_indirizzo) document.getElementById('ana-so-indirizzo').value=data.sede_op_indirizzo;
   if(data?.sede_op_cap) document.getElementById('ana-so-cap').value=data.sede_op_cap;
   if(data?.sede_op_citta) document.getElementById('ana-so-citta').value=data.sede_op_citta;
+  if(data?.sede_op_provincia) document.getElementById('ana-so-provincia').value=data.sede_op_provincia;
 
   // Aggiorna campi condizionali in base al tipo
   aggiornaCampiPerTipo(data?.tipo||'');
@@ -1226,7 +1228,7 @@ async function saveAnagrafica(){
     indirizzo:v('ana-indirizzo')||null,cap:v('ana-cap')||null,citta:v('ana-citta')||null,
     provincia:v('ana-provincia')||null,paese:v('ana-paese')||'IT',
     sede_op_diversa:document.getElementById('ana-sede-op').checked,
-    sede_op_indirizzo:v('ana-so-indirizzo')||null,sede_op_cap:v('ana-so-cap')||null,sede_op_citta:v('ana-so-citta')||null,
+    sede_op_indirizzo:v('ana-so-indirizzo')||null,sede_op_cap:v('ana-so-cap')||null,sede_op_citta:v('ana-so-citta')||null,sede_op_provincia:(v('ana-so-provincia')||'').toUpperCase()||null,
     codice_sdi:v('ana-sdi')||null,pec_fatturazione:v('ana-pec-fatt')||null,pec:v('ana-pec')||null,
     split_payment:document.getElementById('ana-split').checked,
     iban:v('ana-iban')||null,bic_swift:v('ana-bic')||null,banca:v('ana-banca')||null,intestatario_conto:v('ana-intestatario')||null,
@@ -4427,15 +4429,85 @@ async function aggiungiRigaAlDocumento(){
   resetCFG();
 }
 
+// ── TRASPORTO (voce di testata) ────────────────────────────────────────
+// Card nel dettaglio documento: zona (auto-proposta dalla provincia cliente),
+// mezzo proprio/corriere, costo calcolato dallo scaglione (n° porte), modificabile.
+async function renderTrasportoCard(mode, doc, righe){
+  const {data:zone} = await sb.from('zone_trasporto').select('*').order('ordine');
+  const nPorte = (righe||[]).filter(r=>r.codice_serie!=='ACC'&&r.codice_serie!=='PAN-BL').reduce((s,r)=>s+(parseFloat(r.quantita)||0),0);
+  // Provincia per l'auto-zona: sede operativa se compilata, altrimenti sede legale
+  const ana = doc.anagrafiche||{};
+  const provConsegna = (ana.sede_op_provincia||'').toUpperCase().trim();
+  const provLegale = (ana.provincia||'').toUpperCase().trim();
+  const prov = provConsegna || provLegale;
+  // Auto-proposta zona dalla provincia se non ancora scelta
+  let zonaId = doc.zona_trasporto_id;
+  let autoProposta = false;
+  if(!zonaId && prov){
+    const z = (zone||[]).find(z => (z.province||'').toUpperCase().split(',').map(x=>x.trim()).includes(prov));
+    if(z){ zonaId = z.id; autoProposta = true; }
+  }
+  const mezzo = doc.trasporto_mezzo || 'proprio';
+  const costo = parseFloat(doc.costo_trasporto)||0;
+  const zoneOpts = '<option value="">— nessuna —</option>'+(zone||[]).map(z=>\`<option value="\${z.id}" \${String(z.id)===String(zonaId)?'selected':''}>\${z.nome}</option>\`).join('');
+  const bloccato = (mode==='preventivo' && doc.stato==='confermato');
+  return \`<div class="card">
+    <div class="card-title">Trasporto</div>
+    <table style="font-size:13px;width:100%">
+      <tr><td style="color:var(--mid);padding:4px 0;width:130px">Zona</td>
+        <td><select id="trasp-zona" \${bloccato?'disabled':''} onchange="aggiornaTrasporto('\${mode}','\${doc.id}')" style="width:100%;font-size:12px;padding:3px 6px;border:0.5px solid var(--border);border-radius:4px">\${zoneOpts}</select>
+        \${autoProposta?'<div style="font-size:10px;color:var(--mid);margin-top:2px">Proposta dalla provincia '+prov+' — conferma o cambia</div>':''}</td></tr>
+      <tr><td style="color:var(--mid);padding:4px 0">Mezzo</td>
+        <td><label style="font-size:12px;margin-right:12px"><input type="radio" name="trasp-mezzo" value="proprio" \${mezzo==='proprio'?'checked':''} \${bloccato?'disabled':''} onchange="aggiornaTrasporto('\${mode}','\${doc.id}')"> Mezzo Max Porte</label>
+        <label style="font-size:12px"><input type="radio" name="trasp-mezzo" value="corriere" \${mezzo==='corriere'?'checked':''} \${bloccato?'disabled':''} onchange="aggiornaTrasporto('\${mode}','\${doc.id}')"> Corriere</label></td></tr>
+      <tr><td style="color:var(--mid);padding:4px 0">N° porte</td><td style="font-size:12px">\${nPorte}</td></tr>
+      <tr><td style="color:var(--mid);padding:4px 0">Costo trasporto</td>
+        <td><div style="display:flex;align-items:center;gap:6px">
+          <input type="number" id="trasp-costo" step="0.01" value="\${costo||''}" placeholder="0.00" \${bloccato?'disabled':''} style="width:100px;font-size:13px;padding:3px 6px;border:0.5px solid var(--border);border-radius:4px" onchange="salvaCostoTrasporto('\${mode}','\${doc.id}',this.value)">
+          <span style="font-size:12px;color:var(--mid)">€</span>
+          \${bloccato?'':'<button class="btn btn-sm" onclick="ricalcolaTrasporto(\\''+mode+'\\',\\''+doc.id+'\\')">Ricalcola da listino</button>'}
+        </div></td></tr>
+    </table>
+    <div style="font-size:10px;color:var(--mid);margin-top:6px">Il costo è proposto dal listino (zona + n° porte + mezzo) ma puoi modificarlo a mano.</div>
+  </div>\`;
+}
+
+// Cambia zona o mezzo → ricalcola il costo dal listino e salva
+async function aggiornaTrasporto(mode, docId){
+  const tabDoc = mode==='preventivo'?'preventivi':'ordini_vendita';
+  const zonaId = document.getElementById('trasp-zona')?.value || null;
+  const mezzo = document.querySelector('input[name="trasp-mezzo"]:checked')?.value || 'proprio';
+  const nPorte = await contaPorteDoc(docId, mode);
+  const costo = await calcolaCostoTrasporto(zonaId, mezzo, nPorte);
+  await sb.from(tabDoc).update({zona_trasporto_id:zonaId||null, trasporto_mezzo:mezzo, costo_trasporto:costo}).eq('id',docId);
+  await ricalcolaTotale(docId, mode);
+  toast('Trasporto aggiornato','ok');
+  if(mode==='preventivo') renderPreventivoDetail(docId); else renderOrdineDetail(docId);
+}
+// Ricalcola esplicitamente il costo dal listino (bottone)
+async function ricalcolaTrasporto(mode, docId){ await aggiornaTrasporto(mode, docId); }
+// Salva un costo trasporto inserito a mano
+async function salvaCostoTrasporto(mode, docId, val){
+  const tabDoc = mode==='preventivo'?'preventivi':'ordini_vendita';
+  const costo = parseFloat(val)||0;
+  await sb.from(tabDoc).update({costo_trasporto:costo}).eq('id',docId);
+  await ricalcolaTotale(docId, mode);
+  toast('Costo trasporto salvato','ok');
+  if(mode==='preventivo') renderPreventivoDetail(docId); else renderOrdineDetail(docId);
+}
+
 async function ricalcolaTotale(docId, mode){
   const tabRighe = mode==='preventivo'?'righe_preventivo':'righe_ordine';
   const fk = mode==='preventivo'?'preventivo_id':'ordine_id';
   const tabDoc = mode==='preventivo'?'preventivi':'ordini_vendita';
   const {data:righe} = await sb.from(tabRighe).select('prezzo_totale_riga').eq(fk,docId);
-  const totImponibile = (righe||[]).reduce((s,r)=>s+(r.prezzo_totale_riga||0),0);
+  const totRighe = (righe||[]).reduce((s,r)=>s+(r.prezzo_totale_riga||0),0);
+  // Costo trasporto (voce di testata) sommato al totale imponibile
+  const {data:docCorr} = await sb.from(tabDoc).select('totale_arrotondato,costo_trasporto').eq('id',docId).single();
+  const costoTrasp = parseFloat(docCorr&&docCorr.costo_trasporto)||0;
+  const totImponibile = Math.round((totRighe + costoTrasp)*100)/100;
   // Le righe sono cambiate: se c'era un arrotondamento salvato va azzerato,
   // altrimenti resterebbe calcolato sul vecchio totale (rischio di sottostimare il prezzo).
-  const {data:docCorr} = await sb.from(tabDoc).select('totale_arrotondato').eq('id',docId).single();
   const avevaArr = docCorr && docCorr.totale_arrotondato != null;
   await sb.from(tabDoc).update({
     totale_imponibile:totImponibile,
@@ -4445,6 +4517,28 @@ async function ricalcolaTotale(docId, mode){
   if(avevaArr){
     toast('Arrotondamento azzerato: il totale e cambiato, reimpostalo se necessario','err');
   }
+}
+
+// Conta le "porte" del documento per lo scaglione trasporto:
+// somma delle quantità delle righe-porta (accessori serie ACC e pannelli PAN-BL esclusi).
+async function contaPorteDoc(docId, mode){
+  const tabRighe = mode==='preventivo'?'righe_preventivo':'righe_ordine';
+  const fk = mode==='preventivo'?'preventivo_id':'ordine_id';
+  const {data:righe} = await sb.from(tabRighe).select('codice_serie,quantita').eq(fk,docId);
+  return (righe||[]).filter(r=>r.codice_serie!=='ACC' && r.codice_serie!=='PAN-BL')
+    .reduce((s,r)=>s+(parseFloat(r.quantita)||0),0);
+}
+
+// Calcola il costo trasporto per zona + mezzo + numero porte (scaglione)
+async function calcolaCostoTrasporto(zonaId, mezzo, nPorte){
+  if(!zonaId) return 0;
+  const {data:scal} = await sb.from('listino_trasporti').select('*').eq('zona_id',zonaId).order('min_porte');
+  if(!scal || !scal.length) return 0;
+  // Trova lo scaglione che contiene nPorte (max_porte null = illimitato)
+  const s = scal.find(t => nPorte >= (t.min_porte||0) && (t.max_porte==null || nPorte <= t.max_porte))
+         || scal[scal.length-1];
+  const prezzo = mezzo==='corriere' ? (s.prezzo_corriere||0) : (s.prezzo_proprio||0);
+  return Math.round((parseFloat(prezzo)||0)*100)/100;
 }
 
 // ══════════════════════════════════════════════════════
@@ -4782,12 +4876,13 @@ async function salvaNuovoDoc(){
 
 async function renderPreventivoDetail(id){
   const [{data:prev},{data:righe}] = await Promise.all([
-    sb.from('preventivi').select('*,anagrafiche(ragione_sociale,partita_iva),agenti(nome,cognome)').eq('id',id).single(),
+    sb.from('preventivi').select('*,anagrafiche(ragione_sociale,partita_iva,provincia,sede_op_provincia),agenti(nome,cognome)').eq('id',id).single(),
     sb.from('righe_preventivo').select('*').eq('preventivo_id',id).order('riga_numero'),
   ]);
   if(!prev) return;
   CFG_TARGET_ID=id; CFG_MODE='preventivo';
   window._prevListino=prev.listino;
+  const trasportoCardHtml = await renderTrasportoCard('preventivo', prev, righe);
 
   const sc1=prev.sconto1||0; const sc2=prev.sconto2||0;
   const netto=prev.totale_imponibile*(1-sc1/100)*(1-sc2/100);
@@ -4844,7 +4939,8 @@ async function renderPreventivoDetail(id){
     <div class="card">
       <div class="card-title">Riepilogo economico</div>
       <table style="font-size:13px">
-        <tr><td style="color:var(--mid);padding:3px 0;width:130px">Imponibile</td><td style="text-align:right">\${fmtEuro(prev.totale_imponibile)}</td></tr>
+        <tr><td style="color:var(--mid);padding:3px 0;width:130px">Imponibile\${(prev.costo_trasporto>0)?' (incl. trasporto)':''}</td><td style="text-align:right">\${fmtEuro(prev.totale_imponibile)}</td></tr>
+        \${prev.costo_trasporto>0?\`<tr><td style="color:var(--mid);padding:3px 0;font-size:11px">di cui trasporto</td><td style="text-align:right;font-size:11px;color:var(--mid)">\${fmtEuro(prev.costo_trasporto)}</td></tr>\`:''}
         <tr><td style="color:var(--mid);padding:3px 0">Sconto 1</td><td style="text-align:right">\${sc1}%</td></tr>
         <tr><td style="color:var(--mid);padding:3px 0">Sconto 2</td><td style="text-align:right">\${sc2||0}%</td></tr>
         <tr style="border-top:0.5px solid var(--border)"><td style="padding:6px 0;font-weight:500">Totale netto</td><td style="text-align:right;font-size:18px;font-weight:500;color:var(--mid)">\${fmtEuro(netto)}</td></tr>\${prev.totale_arrotondato?\`<tr><td style="color:var(--mid);padding:3px 0">Arrotondamento</td><td style="text-align:right">\${(prev.arrotondamento_euro>=0?'+':'')+fmtEuro(prev.arrotondamento_euro)}</td></tr><tr style="border-top:0.5px solid var(--border)"><td style="padding:6px 0;font-weight:500">Totale arrotondato</td><td style="text-align:right;font-size:18px;font-weight:500;color:var(--red)">\${fmtEuro(prev.totale_arrotondato)}</td></tr>\`:''}
@@ -4853,6 +4949,7 @@ async function renderPreventivoDetail(id){
       \${prev.note?\`<div style="margin-top:10px;font-size:12px;color:var(--mid)">\${prev.note}</div>\`:''}
     </div>
   </div>
+  <div style="margin-bottom:14px">\${trasportoCardHtml}</div>
   <div class="card">
     <div class="card-header"><span class="card-title">Righe preventivo (\${righe?.length||0} porte)</span></div>
     <table>
@@ -4948,6 +5045,9 @@ async function firmaPreventivo(prevId){
     citta_destinazione:prev.citta_destinazione,
     provincia_destinazione:prev.provincia_destinazione,
     trasporto:prev.trasporto, note:prev.note,
+    zona_trasporto_id:prev.zona_trasporto_id||null,
+    trasporto_mezzo:prev.trasporto_mezzo||'proprio',
+    costo_trasporto:prev.costo_trasporto||0,
     totale_imponibile:prev.totale_imponibile,
     totale_netto:prev.totale_netto||prev.totale_imponibile,
     totale_arrotondato:prev.totale_arrotondato||null,
@@ -5117,12 +5217,13 @@ async function nuovoOrdineDiretto(){
 
 async function renderOrdineDetail(id){
   const [{data:ord},{data:righe}] = await Promise.all([
-    sb.from('ordini_vendita').select('*,anagrafiche(ragione_sociale,partita_iva),agenti(nome,cognome),preventivi(numero)').eq('id',id).single(),
+    sb.from('ordini_vendita').select('*,anagrafiche(ragione_sociale,partita_iva,provincia,sede_op_provincia),agenti(nome,cognome),preventivi(numero)').eq('id',id).single(),
     sb.from('righe_ordine').select('*').eq('ordine_id',id).order('riga_numero'),
   ]);
   if(!ord) return;
   CFG_TARGET_ID=id; CFG_MODE='ordine';
   window._prevListino=ord.listino;
+  const trasportoCardHtml = await renderTrasportoCard('ordine', ord, righe);
 
   const sc1=ord.sconto1||0; const sc2=ord.sconto2||0;
   const netto=ord.totale_imponibile*(1-sc1/100)*(1-sc2/100);
@@ -5201,7 +5302,8 @@ async function renderOrdineDetail(id){
       '<div class="card">'+
         '<div class="card-title">Riepilogo economico</div>'+
         '<table style="font-size:13px">'+
-          '<tr><td style="color:var(--mid);padding:3px 0;width:130px">Imponibile</td><td style="text-align:right">'+fmtEuro(ord.totale_imponibile)+'</td></tr>'+
+          '<tr><td style="color:var(--mid);padding:3px 0;width:130px">Imponibile'+(ord.costo_trasporto>0?' (incl. trasporto)':'')+'</td><td style="text-align:right">'+fmtEuro(ord.totale_imponibile)+'</td></tr>'+
+          (ord.costo_trasporto>0?'<tr><td style="color:var(--mid);padding:3px 0;font-size:11px">di cui trasporto</td><td style="text-align:right;font-size:11px;color:var(--mid)">'+fmtEuro(ord.costo_trasporto)+'</td></tr>':'')+
           '<tr><td style="color:var(--mid);padding:3px 0">Sconto 1</td><td style="text-align:right">'+sc1+'%</td></tr>'+
           '<tr><td style="color:var(--mid);padding:3px 0">Sconto 2</td><td style="text-align:right">'+(sc2||0)+'%</td></tr>'+
           '<tr style="border-top:0.5px solid var(--border)"><td style="padding:6px 0;font-weight:500">Totale netto</td><td style="text-align:right;font-size:'+(ord.totale_arrotondato?'14px':'18px')+';font-weight:500;color:'+(ord.totale_arrotondato?'var(--mid)':'var(--red)')+'">'+fmtEuro(netto)+'</td></tr>'+
@@ -5211,6 +5313,7 @@ async function renderOrdineDetail(id){
         (ord.note?'<div style="margin-top:10px;font-size:12px;color:var(--mid)">'+ord.note+'</div>':'')+
       '</div>'+
     '</div>'+
+    '<div style="margin-bottom:14px">'+trasportoCardHtml+'</div>'+
     '<div class="card">'+
       '<div class="card-header"><span class="card-title">Righe ordine ('+(righe?.length||0)+' porte)</span></div>'+
       '<table>'+
