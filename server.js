@@ -2263,6 +2263,8 @@ let CFG = {};          // configurazione corrente porta
 let CFG_MODE = null;   // 'preventivo' | 'ordine'
 let CFG_TARGET_ID = null; // id preventivo o ordine corrente
 let CFG_RIGHE = [];    // righe accumulate prima del salvataggio testata
+let CFG_EDIT_RIGA_ID = null;  // id riga in modifica (null = nuova riga)
+let CFG_EDIT_RIGA_NUM = null; // riga_numero da preservare in modifica
 
 function resetCFG(){
   CFG = {
@@ -2414,11 +2416,51 @@ function cfgUpdatePrice(){
 function openConfiguratore(mode, targetId, listino_in){
   CFG_MODE = mode;
   CFG_TARGET_ID = targetId;
+  CFG_EDIT_RIGA_ID = null;   // nuova riga
+  CFG_EDIT_RIGA_NUM = null;
   window._prevListino = listino_in || 'A';
   resetCFG();
   renderCfgStep('serie');
   const el = ensureModalInBody('modal-cfg');
   el.classList.add('open');
+}
+
+// Riapre il configuratore su una riga esistente, con tutte le scelte preselezionate.
+// L'utente naviga con "Avanti" (ricalcolando prezzi/flag correttamente) e alla fine
+// la riga viene AGGIORNATA invece di crearne una nuova.
+async function modificaRiga(tabella, rigaId, docId, mode, listino_in){
+  const {data:r, error} = await sb.from(tabella).select('*').eq('id',rigaId).maybeSingle();
+  if(error || !r){ toast('Riga non trovata','err'); return; }
+  CFG_MODE = mode;
+  CFG_TARGET_ID = docId;
+  CFG_EDIT_RIGA_ID = rigaId;
+  CFG_EDIT_RIGA_NUM = r.riga_numero||null;
+  window._prevListino = (listino_in||'A');
+  resetCFG();
+  // Precarica lo stato dal record salvato (i codici e i nomi; i flag/prezzi
+  // si ricalcolano navigando gli step, quindi non li forziamo a mano)
+  CFG.serie=r.codice_serie; CFG.nome_serie=r.nome_serie||'';
+  CFG.modello=r.codice_modello; CFG.nome_modello=r.nome_modello||'';
+  CFG.finitura=r.codice_finitura; CFG.nome_finitura=r.nome_finitura||'';
+  CFG.pannello_bugna=r.pannello_bugna||null;
+  CFG.colore_alu=r.codice_colore_alu||null; CFG.nome_colore_alu=r.nome_colore_alu||'';
+  CFG.colore_pietra=r.codice_colore_pietra||null; CFG.nome_colore_pietra=r.nome_colore_pietra||'';
+  CFG.tipo_vetro=r.codice_tipo_vetro||null; CFG.nome_tipo_vetro=r.nome_tipo_vetro||'';
+  CFG.apertura=r.codice_apertura||null; CFG.nome_apertura=r.nome_apertura||'';
+  CFG.senso=r.senso_apertura||null;
+  CFG.larghezza=r.larghezza_mm||null; CFG.altezza=r.altezza_mm||null;
+  CFG.misura_custom=!!r.misura_custom;
+  CFG.spessore=r.spessore_muro_cm||null;
+  CFG.spalla=r.codice_spalla||null; CFG.accessorio_telaio=r.tipo_accessorio_telaio||null;
+  CFG.ferramenta=r.codice_ferramenta||null; CFG.nome_ferramenta=r.nome_ferramenta||'';
+  CFG.maniglia=r.codice_maniglia||null; CFG.nome_maniglia=r.nome_maniglia||'';
+  CFG.colore_maniglia=r.codice_colore_maniglia||null; CFG.nome_colore_maniglia=r.nome_colore_maniglia||'';
+  CFG.quantita=r.quantita||1; CFG.note_riga=r.note_riga||''; CFG.stanza=r.stanza||'';
+  CFG.posata_da_noi=!!r.posata_da_noi;
+  renderCfgStep('serie');
+  const el = ensureModalInBody('modal-cfg');
+  el.classList.add('open');
+  toast('Modifica riga: naviga con Avanti e cambia ciò che serve','ok');
 }
 
 function closeCfg(){
@@ -4190,7 +4232,7 @@ async function cfgRiepilogo(){
         <div id="cfg-prezzo-totale" style="font-size:20px;font-weight:500;color:var(--red)">€ \${(tot*(CFG.quantita||1)+_imbTot).toLocaleString('it-IT',{minimumFractionDigits:2})}</div>
       </div>
       <button class="btn" onclick="anteprimaDistinta()">&#128196; Anteprima distinta</button>
-      <button class="btn btn-red" onclick="aggiungiRigaAlDocumento()">+ Aggiungi al documento</button>
+      <button class="btn btn-red" onclick="aggiungiRigaAlDocumento()">\${CFG_EDIT_RIGA_ID?'💾 Salva modifiche':'+ Aggiungi al documento'}</button>
     </div>\`;
   cfgUpdatePrice();
 }
@@ -4241,6 +4283,21 @@ async function aggiungiRigaAlDocumento(){
     note_riga:CFG.note_riga,
     stanza:CFG.stanza||null
   };
+
+  if(CFG_TARGET_ID && CFG_EDIT_RIGA_ID){
+    // MODIFICA di una riga esistente: aggiorna, mantieni riga_numero
+    const tabella = CFG_MODE==='preventivo'?'righe_preventivo':'righe_ordine';
+    const {error:errUp} = await sb.from(tabella).update(riga).eq('id',CFG_EDIT_RIGA_ID);
+    if(errUp){ toast('Errore aggiornamento: '+errUp.message,'err'); return; }
+    await ricalcolaTotale(CFG_TARGET_ID, CFG_MODE);
+    toast('Riga aggiornata','ok');
+    CFG_EDIT_RIGA_ID=null; CFG_EDIT_RIGA_NUM=null;
+    closeCfg();
+    if(CFG_MODE==='preventivo') renderPreventivoDetail(CFG_TARGET_ID);
+    else renderOrdineDetail(CFG_TARGET_ID);
+    resetCFG();
+    return;
+  }
 
   if(CFG_TARGET_ID){
     // Salvataggio diretto su documento esistente
@@ -4669,7 +4726,10 @@ async function renderPreventivoDetail(id){
       <td style="text-align:center">\${r.quantita}</td>
       <td style="text-align:right">\${fmtEuro(r.prezzo_unitario)}</td>
       <td style="text-align:right;font-weight:500">\${fmtEuro(r.prezzo_totale_riga)}</td>
-      <td><button class="btn btn-sm" style="color:var(--red)" onclick="eliminaRiga('righe_preventivo','\${r.id}','\${id}','preventivo')">×</button></td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-sm" title="Modifica" onclick="modificaRiga('righe_preventivo','\${r.id}','\${id}','preventivo','\${prev.listino}')">&#9998;</button>
+        <button class="btn btn-sm" style="color:var(--red)" title="Elimina" onclick="eliminaRiga('righe_preventivo','\${r.id}','\${id}','preventivo')">×</button>
+      </td>
     </tr>\`).join('');
 
   document.getElementById('main-content').innerHTML=\`
@@ -5009,7 +5069,9 @@ async function renderOrdineDetail(id){
       '<td style="text-align:center">'+r.quantita+'</td>'+
       '<td style="text-align:right">'+fmtEuro(r.prezzo_unitario)+'</td>'+
       '<td style="text-align:right;font-weight:500">'+fmtEuro(r.prezzo_totale_riga)+'</td>'+
-      '<td><button class="btn btn-sm" style="color:var(--red)" onclick="eliminaRiga(\\'righe_ordine\\',\\''+r.id+'\\',\\''+id+'\\',\\'ordine\\')">\xc3\x97</button></td>'+
+      '<td style="white-space:nowrap">'+'<button class="btn btn-sm" title="Modifica" onclick="modificaRiga(\\'righe_ordine\\',\\''+r.id+'\\',\\''+id+'\\',\\'ordine\\',\\''+(ord.listino||'A')+'\\')">✎</button>'+
+      '<button class="btn btn-sm" style="color:var(--red)" onclick="eliminaRiga(\\'righe_ordine\\',\\''+r.id+'\\',\\''+id+'\\',\\'ordine\\')">\xc3\x97</button>'+
+      '</td>'+
       '</tr>';
   }).join('');
 
