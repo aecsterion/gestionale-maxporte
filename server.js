@@ -5181,7 +5181,7 @@ async function adminSerie(){
     <td>\${inlineInput(s.descrizione||'',\`adminSalva('serie','\${s.id}','descrizione',this.value)\`,'180px','text','Descrizione')}</td>
     <td><select onchange="adminSalva('serie','\${s.id}','codice_imballo',this.value)" style="padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:11px">\${imbOpts(s.codice_imballo)}</select></td>
     <td><select onchange="adminSalva('serie','\${s.id}','codice_imballo_posa',this.value)" style="padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:11px">\${imbOpts(s.codice_imballo_posa)}</select></td>
-    <td style="text-align:center"><input type="checkbox" \${s.imballo_fragile?'checked':''} onchange="toggleCampo('serie','\${s.id}','imballo_fragile',\${!s.imballo_fragile})" title="Prodotti fragili/vetro: applica supplemento"></td>
+    <td style="text-align:center"><input type="checkbox" \${s.imballo_fragile?'checked':''} onchange="toggleCampo('serie','\${s.id}','imballo_fragile',\${!!s.imballo_fragile})" title="Prodotti fragili/vetro: applica supplemento"></td>
     <td>
       \${s.immagine_url?\`<img src="\${s.immagine_url}" style="width:36px;height:36px;object-fit:cover;border-radius:4px;margin-right:6px">\`:'<span style="font-size:11px;color:var(--mid)">—</span>'}
       <label style="cursor:pointer"><input type="file" accept="image/*" style="display:none" onchange="uploadImmagine('serie','\${s.id}',this)"><span class="btn btn-sm" style="font-size:11px">📷</span></label>
