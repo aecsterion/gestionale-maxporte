@@ -2291,10 +2291,63 @@ function resetCFG(){
     _isDoppiaAnta:false, _needsComFmSuppl:false,
     _isFuoriH:false, _isFuoriL:false, _p_fuori_h:0, _p_fuori_l:0,
     _fuori_h_pct:0, _fuori_l_pct:0, _p_varsavia:0,
-    _p_misura:0, _pct_misura:0, _lCustom:false, _hCustom:false
+    _p_misura:0, _pct_misura:0, _lCustom:false, _hCustom:false,
+    // imballo
+    posata_da_noi:false,
+    _imballo_codice:null, _imballo_desc:'', _imballo_metodo:null,
+    _imballo_capienza:null, _imballo_prezzo_unit:0, _imballo_totale:0,
+    _imballo_serie:null, _imballo_serie_posa:null, _imballo_fragile:false,
+    _imballo_modello:null, _supp_fragile:0
   };
 }
 resetCFG();
+
+// ── IMBALLO: risoluzione e calcolo del costo per la posizione ──────────
+// Risoluzione: se "posata da noi" e la serie ha un imballo-posa → quello;
+// altrimenti modello.codice_imballo → serie.codice_imballo → imballo_default.
+// Metodo: per_pezzo = prezzo×qta · a_scatola = ceil(qta/capienza)×prezzo · a_posizione = prezzo.
+// Supplemento fragile (se serie fragile) aggiunto una volta per pezzo se per_pezzo, altrimenti una volta.
+async function calcolaImballo(){
+  const qta = CFG.quantita || 1;
+  // Scegli il codice imballo da applicare
+  let cod = null;
+  if(CFG.posata_da_noi && CFG._imballo_serie_posa) cod = CFG._imballo_serie_posa;
+  else cod = CFG._imballo_modello || CFG._imballo_serie || null;
+  if(!cod){
+    // fallback: imballo_default dalle impostazioni
+    const {data:def} = await sb.from('impostazioni').select('valore').eq('chiave','imballo_default').maybeSingle();
+    cod = (def&&def.valore)||null;
+  }
+  if(!cod){ CFG._imballo_codice=null; CFG._imballo_desc=''; CFG._imballo_prezzo_unit=0; CFG._imballo_totale=0; return; }
+
+  const {data:imb} = await sb.from('listino_imballi').select('*').eq('codice',cod).maybeSingle();
+  if(!imb || imb.attivo===false){ CFG._imballo_codice=null; CFG._imballo_desc=''; CFG._imballo_prezzo_unit=0; CFG._imballo_totale=0; return; }
+
+  const prezzo = parseFloat(imb.prezzo)||0;
+  const metodo = imb.metodo||'per_pezzo';
+  let base = 0, unit = prezzo;
+  if(metodo==='a_scatola'){
+    const cap = parseInt(imb.capienza)||1;
+    const scatole = Math.ceil(qta / Math.max(1,cap));
+    base = scatole * prezzo;
+  } else if(metodo==='a_posizione'){
+    base = prezzo;
+  } else { // per_pezzo
+    base = prezzo * qta;
+  }
+  // Supplemento fragile
+  let supp = 0;
+  if(CFG._imballo_fragile){
+    const s = parseFloat(CFG._supp_fragile)||0;
+    supp = (metodo==='per_pezzo') ? s*qta : s;
+  }
+  CFG._imballo_codice = imb.codice;
+  CFG._imballo_desc = imb.descrizione||imb.codice;
+  CFG._imballo_metodo = metodo;
+  CFG._imballo_capienza = imb.capienza||null;
+  CFG._imballo_prezzo_unit = prezzo;
+  CFG._imballo_totale = Math.round((base+supp)*100)/100;
+}
 
 function cfgTotale(){
   // Prezzo finitura (fisso o percentuale)
@@ -2510,6 +2563,15 @@ async function selModello(cod, nome, prezzo, vetroIncluso, haExtraIncisioni){
   // Quantità minima e step dal modello (gestiti dal pannello admin)
   CFG._qtaMin = (m && m.qta_minima) || 1;
   CFG._qtaStep = (m && m.step_quantita) || 1;
+
+  // Dati imballo: dal modello (override) e dalla serie (default + posa + fragile)
+  CFG._imballo_modello = (m && m.codice_imballo) || null;
+  const {data:srow} = await sb.from('serie').select('codice_imballo,codice_imballo_posa,imballo_fragile').eq('codice',CFG.serie).maybeSingle();
+  CFG._imballo_serie = (srow && srow.codice_imballo) || null;
+  CFG._imballo_serie_posa = (srow && srow.codice_imballo_posa) || null;
+  CFG._imballo_fragile = !!(srow && srow.imballo_fragile);
+  const {data:sf} = await sb.from('impostazioni').select('valore').eq('chiave','supplemento_imballo_fragile').maybeSingle();
+  CFG._supp_fragile = parseFloat(sf&&sf.valore)||0;
 
   await renderCfgStep('finitura');
 }
@@ -4044,6 +4106,11 @@ async function cfgRiepilogo(){
   const _qStep = CFG._qtaStep||1;
   const _qAmmezzi = _qStep<1;
   if(!CFG.quantita || CFG.quantita<_qMin) CFG.quantita=_qMin;
+  // Calcola l'imballo per questa posizione (dipende da quantità e "posata da noi")
+  await calcolaImballo();
+  const _imbTot = CFG._imballo_totale||0;
+  // Porte (non accessori/pannelli): mostra la spunta "posata da noi" se la serie ha un imballo-posa
+  const _mostraPosa = !CFG._isAccessorio && !CFG._isPannelloBlindato && !!CFG._imballo_serie_posa;
   const desc = [
     CFG.nome_serie, CFG.nome_modello, CFG.nome_finitura,
     CFG.pannello_bugna?CFG.pannello_bugna:'',
@@ -4096,11 +4163,16 @@ async function cfgRiepilogo(){
     <table style="width:100%;font-size:13px;margin-bottom:12px">
       \${righe_prezzo.map(r=>\`<tr><td style="padding:3px 0;color:var(--mid)">\${r.label}</td><td style="text-align:right;font-weight:500">€ \${(r.val||0).toLocaleString('it-IT',{minimumFractionDigits:2})}</td></tr>\`).join('')}
       <tr style="border-top:0.5px solid var(--border)"><td style="padding:8px 0;font-weight:500">Totale unitario</td><td style="text-align:right;font-size:16px;font-weight:500;color:var(--red)">€ \${tot.toLocaleString('it-IT',{minimumFractionDigits:2})}</td></tr>
+      \${_imbTot>0?\`<tr><td style="padding:3px 0;color:var(--mid)">Imballo (\${CFG._imballo_desc})\${CFG._imballo_metodo==='a_scatola'?\` — \${Math.ceil((CFG.quantita||1)/Math.max(1,CFG._imballo_capienza||1))} scatola/e\`:''}</td><td style="text-align:right;font-weight:500">€ \${_imbTot.toLocaleString('it-IT',{minimumFractionDigits:2})}</td></tr>\`:''}
     </table>
+    \${_mostraPosa?\`<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:8px 12px;background:var(--beige);border-radius:var(--radius)">
+      <input type="checkbox" id="cfg-posata" \${CFG.posata_da_noi?'checked':''} onchange="CFG.posata_da_noi=this.checked;cfgRiepilogo()">
+      <label for="cfg-posata" style="font-size:12px;color:var(--dark);cursor:pointer">Porta <strong>posata da noi</strong> (cambia l'imballo)</label>
+    </div>\`:''}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
       <div>
         <div style="font-size:11px;color:var(--mid);margin-bottom:4px">Quantità</div>
-        <input type="number" id="cfg-qty" value="\${CFG.quantita||_qMin}" min="\${_qMin}" step="\${_qStep}" style="width:100%;padding:7px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit" oninput="CFG.quantita=parseFloat(this.value)||_qMin;cfgUpdatePrice()">
+        <input type="number" id="cfg-qty" value="\${CFG.quantita||_qMin}" min="\${_qMin}" step="\${_qStep}" style="width:100%;padding:7px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit" oninput="CFG.quantita=parseFloat(this.value)||_qMin;cfgUpdatePrice()" onchange="CFG.quantita=parseFloat(this.value)||_qMin;cfgRiepilogo()">
         \${(_qMin>1||_qAmmezzi)?\`<div style="font-size:10px;color:var(--mid);margin-top:3px">Min \${_qMin} pz\${_qAmmezzi?', anche mezze':''}</div>\`:''}
       </div>
       <div>
@@ -4114,8 +4186,8 @@ async function cfgRiepilogo(){
     </div>
     <div style="display:flex;justify-content:space-between;align-items:center">
       <div>
-        <div style="font-size:11px;color:var(--mid)">Totale riga</div>
-        <div id="cfg-prezzo-totale" style="font-size:20px;font-weight:500;color:var(--red)">€ \${(tot*(CFG.quantita||1)).toLocaleString('it-IT',{minimumFractionDigits:2})}</div>
+        <div style="font-size:11px;color:var(--mid)">Totale riga\${_imbTot>0?' (incl. imballo)':''}</div>
+        <div id="cfg-prezzo-totale" style="font-size:20px;font-weight:500;color:var(--red)">€ \${(tot*(CFG.quantita||1)+_imbTot).toLocaleString('it-IT',{minimumFractionDigits:2})}</div>
       </div>
       <button class="btn" onclick="anteprimaDistinta()">&#128196; Anteprima distinta</button>
       <button class="btn btn-red" onclick="aggiungiRigaAlDocumento()">+ Aggiungi al documento</button>
@@ -4133,6 +4205,9 @@ async function aggiungiRigaAlDocumento(){
   CFG.note_riga = document.getElementById('cfg-note-riga')?.value||'';
   CFG.stanza = document.getElementById('cfg-stanza')?.value||'';
   const tot = cfgTotale();
+  // Ricalcola l'imballo sulla quantità definitiva
+  await calcolaImballo();
+  const _imbTot = CFG._imballo_totale||0;
   const riga = {
     codice_serie:CFG.serie, codice_modello:CFG.modello, nome_modello:CFG.nome_modello,
     nome_serie:CFG.nome_serie,
@@ -4157,7 +4232,12 @@ async function aggiungiRigaAlDocumento(){
     prezzo_ferramenta:CFG.p_ferramenta, prezzo_maniglia:CFG.p_maniglia,
     prezzo_extra_incisioni:CFG.p_extra_incisioni,
     prezzo_unitario:tot, quantita:CFG.quantita,
-    prezzo_totale_riga:tot*CFG.quantita,
+    prezzo_totale_riga:Math.round((tot*CFG.quantita+_imbTot)*100)/100,
+    // imballo
+    codice_imballo:CFG._imballo_codice||null,
+    prezzo_imballo_unitario:CFG._imballo_prezzo_unit||0,
+    prezzo_imballo_totale:_imbTot,
+    posata_da_noi:!!CFG.posata_da_noi,
     note_riga:CFG.note_riga,
     stanza:CFG.stanza||null
   };
