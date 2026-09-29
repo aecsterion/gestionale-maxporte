@@ -2457,6 +2457,32 @@ async function modificaRiga(tabella, rigaId, docId, mode, listino_in){
   CFG.colore_maniglia=r.codice_colore_maniglia||null; CFG.nome_colore_maniglia=r.nome_colore_maniglia||'';
   CFG.quantita=r.quantita||1; CFG.note_riga=r.note_riga||''; CFG.stanza=r.stanza||'';
   CFG.posata_da_noi=!!r.posata_da_noi;
+  // Precarica i prezzi salvati, così scorrendo con "Avanti" (senza ri-selezionare)
+  // il totale resta corretto; se l'utente cambia uno step, quel prezzo si ricalcola.
+  CFG.p_base=r.prezzo_base||0; CFG.p_vetro=r.prezzo_vetro||0; CFG.p_finitura=r.prezzo_finitura||0;
+  CFG.p_bugna=r.prezzo_bugna||0; CFG.p_inserto=r.prezzo_inserto||0; CFG.p_apertura=r.prezzo_apertura||0;
+  CFG.p_telaio=r.prezzo_telaio||0; CFG.p_acc_telaio=r.prezzo_accessorio_telaio||0;
+  CFG.p_ferramenta=r.prezzo_ferramenta||0; CFG.p_maniglia=r.prezzo_maniglia||0;
+  CFG.p_extra_incisioni=r.prezzo_extra_incisioni||0;
+  // Carica i flag del modello e i dati imballo (necessari per la sequenza e il ricalcolo)
+  if(r.codice_modello){
+    const {data:m} = await sb.from('modelli').select('*').eq('codice',r.codice_modello).maybeSingle();
+    if(m){
+      CFG._flags=m;
+      CFG._qtaMin=m.qta_minima||1; CFG._qtaStep=m.step_quantita||1;
+      CFG._imballo_modello=m.codice_imballo||null;
+    }
+  }
+  CFG._isAccessorio = CFG.serie==='ACC';
+  CFG._isPannelloBlindato = CFG.serie==='PAN-BL';
+  const ACC_TIPO2 = {'PAS':'passata','SOP':'sopraluce','COP':'coprifilo','COP3M':'coprifilo','COP65':'coprifilo','COP90':'coprifilo','COP3M65':'coprifilo','COP3M90':'coprifilo','FPAN':'semplice','IMB':'semplice','RIN':'semplice','BSC':'semplice','AL100':'semplice','AL230':'semplice','ZOC':'semplice'};
+  CFG._tipoAccessorio = ACC_TIPO2[r.codice_modello] || (CFG._isPannelloBlindato?'pannello':null);
+  if(CFG.serie){
+    const {data:srow} = await sb.from('serie').select('codice_imballo,codice_imballo_posa,imballo_fragile').eq('codice',CFG.serie).maybeSingle();
+    if(srow){ CFG._imballo_serie=srow.codice_imballo||null; CFG._imballo_serie_posa=srow.codice_imballo_posa||null; CFG._imballo_fragile=!!srow.imballo_fragile; }
+    const {data:sf} = await sb.from('impostazioni').select('valore').eq('chiave','supplemento_imballo_fragile').maybeSingle();
+    CFG._supp_fragile = parseFloat(sf&&sf.valore)||0;
+  }
   renderCfgStep('serie');
   const el = ensureModalInBody('modal-cfg');
   el.classList.add('open');
@@ -2467,10 +2493,20 @@ function closeCfg(){
   document.getElementById('modal-cfg').classList.remove('open');
 }
 
+let _cfgStepCorrente = 'serie';  // step attualmente mostrato (per il pulsante "Avanti")
+function updateCfgNav(step){
+  const nav = document.getElementById('cfg-nav');
+  if(!nav) return;
+  // Barra Avanti/Indietro solo in modalità modifica e non nel riepilogo (che ha i suoi pulsanti)
+  const mostra = !!CFG_EDIT_RIGA_ID && step!=='riepilogo';
+  nav.style.display = mostra ? 'flex' : 'none';
+}
 async function renderCfgStep(step){
+  _cfgStepCorrente = step;
   const body = document.getElementById('cfg-body');
   body.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
   updateCfgStepper(step);
+  updateCfgNav(step);
 
   if(step==='serie') await cfgSerie();
   else if(step==='modello') await cfgModello();
@@ -2509,6 +2545,42 @@ const CFG_ACC_LABELS = {
   acc_misure:'Misure', acc_sopraluce:'Misure', acc_qta:'Quantità',
   acc_pannello:'Configurazione', acc_spessore:'Spessore muro'
 };
+
+// Sequenza effettiva degli step in base ai flag correnti (per il pulsante "Avanti →").
+// Include gli step condizionali (cilindro, pomolino, colore_maniglia) non presenti in CFG_STEPS.
+function cfgSequenzaEffettiva(){
+  const f = CFG._flags||{};
+  // Accessori / pannelli: usa la sequenza dedicata
+  const tipo = CFG._tipoAccessorio || (CFG._isPannelloBlindato ? 'pannello' : null);
+  if(tipo && CFG_ACC_STEPS[tipo]) return CFG_ACC_STEPS[tipo].slice();
+  // Porte: costruisci la sequenza secondo i flag
+  const haOpzioni = f.ha_vetro||f.ha_pannello_o_bugna||f.ha_inserto_alluminio||f.ha_inserto_pietra||f.ha_pantografatura;
+  const seq = ['serie','modello','finitura'];
+  if(haOpzioni) seq.push('opzioni');
+  seq.push('apertura','serratura');
+  if(CFG._richiede_cilindro) seq.push('cilindro');
+  seq.push('misure','spessore','ferramenta');
+  if(!CFG._maniglia_esclusa) seq.push('maniglia','colore_maniglia');
+  if(CFG._richiede_pomolino) seq.push('pomolino');
+  seq.push('riepilogo');
+  return seq;
+}
+
+// Va allo step successivo senza modificare/azzerare nulla (usato in modifica riga)
+async function cfgAvanti(){
+  const seq = cfgSequenzaEffettiva();
+  let idx = seq.indexOf(_cfgStepCorrente);
+  if(idx<0) idx = 0;
+  const next = seq[Math.min(idx+1, seq.length-1)];
+  await renderCfgStep(next);
+}
+async function cfgIndietro(){
+  const seq = cfgSequenzaEffettiva();
+  let idx = seq.indexOf(_cfgStepCorrente);
+  if(idx<0) idx = 0;
+  const prev = seq[Math.max(idx-1, 0)];
+  await renderCfgStep(prev);
+}
 
 function updateCfgStepper(current){
   const el = document.getElementById('cfg-stepper');
@@ -2552,8 +2624,9 @@ async function cfgSerie(){
 }
 
 async function selSerie(cod, nome){
+  const cambia = CFG.serie !== cod;
   CFG.serie=cod; CFG.nome_serie=nome;
-  CFG.modello=null; CFG.finitura=null;
+  if(cambia){ CFG.modello=null; CFG.finitura=null; }  // azzera a valle solo se cambia davvero
   await renderCfgStep('modello');
 }
 
@@ -3025,8 +3098,8 @@ async function cfgApertura(){
 }
 
 async function selApertura(cod, nome, logica, sovr, doppio, magg){
-  // Reset serratura quando cambia apertura
-  CFG.serratura=null; CFG.nome_serratura=''; CFG.cilindro=null; CFG.nome_cilindro='';
+  // Reset serratura/cilindro solo se l'apertura cambia davvero
+  if(CFG.apertura !== cod){ CFG.serratura=null; CFG.nome_serratura=''; CFG.cilindro=null; CFG.nome_cilindro=''; }
   CFG.apertura=cod; CFG.nome_apertura=nome;
   CFG._logicaApertura=logica; CFG._maggApertura=magg; CFG._doppioApertura=doppio;
 
@@ -7458,6 +7531,11 @@ async function eseguiEsportaPDF() {
     </div>
     <div id="cfg-body" style="padding:20px;overflow-y:auto;flex:1">
       <div class="loading"><div class="spinner"></div></div>
+    </div>
+    <div id="cfg-nav" style="display:none;padding:10px 20px;border-top:0.5px solid var(--border);justify-content:space-between;align-items:center;background:var(--white)">
+      <button class="btn btn-sm" onclick="cfgIndietro()">← Indietro</button>
+      <span style="font-size:11px;color:var(--mid)">Modifica: scorri con Avanti, cambia solo ciò che serve</span>
+      <button class="btn btn-sm btn-red" onclick="cfgAvanti()">Avanti →</button>
     </div>
   </div>
 </div>
