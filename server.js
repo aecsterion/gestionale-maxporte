@@ -4502,9 +4502,12 @@ async function renderTrasportoCard(mode, doc, righe){
 async function aggiornaTrasporto(mode, docId){
   const tabDoc = mode==='preventivo'?'preventivi':'ordini_vendita';
   const mezzo = document.querySelector('input[name="trasp-mezzo"]:checked')?.value || 'proprio';
+  // Mantieni coerente anche l'etichetta testuale 'trasporto' del form documento
+  const TRASP_LABEL = {proprio:'Max Porte', corriere:'Vettore', ritiro:'Cliente'};
+  const trasportoLabel = TRASP_LABEL[mezzo] || 'Max Porte';
   if(mezzo==='ritiro'){
     // Ritiro cliente: nessun trasporto, costo azzerato, zona svuotata
-    await sb.from(tabDoc).update({trasporto_mezzo:'ritiro', zona_trasporto_id:null, costo_trasporto:0}).eq('id',docId);
+    await sb.from(tabDoc).update({trasporto_mezzo:'ritiro', trasporto:'Cliente', zona_trasporto_id:null, costo_trasporto:0}).eq('id',docId);
     await ricalcolaTotale(docId, mode);
     toast('Ritiro cliente — trasporto azzerato','ok');
     if(mode==='preventivo') renderPreventivoDetail(docId); else renderOrdineDetail(docId);
@@ -4513,7 +4516,7 @@ async function aggiornaTrasporto(mode, docId){
   const zonaId = document.getElementById('trasp-zona')?.value || null;
   const nPorte = await contaPorteDoc(docId, mode);
   const costo = await calcolaCostoTrasporto(zonaId, mezzo, nPorte);
-  await sb.from(tabDoc).update({zona_trasporto_id:zonaId||null, trasporto_mezzo:mezzo, costo_trasporto:costo}).eq('id',docId);
+  await sb.from(tabDoc).update({zona_trasporto_id:zonaId||null, trasporto_mezzo:mezzo, trasporto:trasportoLabel, costo_trasporto:costo}).eq('id',docId);
   await ricalcolaTotale(docId, mode);
   toast('Trasporto aggiornato','ok');
   if(mode==='preventivo') renderPreventivoDetail(docId); else renderOrdineDetail(docId);
@@ -4817,6 +4820,9 @@ async function salvaNuovoDoc(){
     const sc2=parseFloat(document.getElementById('ndoc-sconto2').value||0);
     const agenteId=document.getElementById('ndoc-agenti').value||null;
     const trasporto=document.getElementById('ndoc-trasporto').value||'Max Porte';
+    // Il dropdown trasporto del form imposta la modalità; la card nel dettaglio calcola costo/zona
+    const TRASP_MEZZO_MAP = {'Max Porte':'proprio','Vettore':'corriere','Cliente':'ritiro'};
+    const trasportoMezzo = TRASP_MEZZO_MAP[trasporto] || 'proprio';
     const note=document.getElementById('ndoc-note').value||null;
     const ind=document.getElementById('ndoc-ind').value||null;
     const cap=document.getElementById('ndoc-cap').value||null;
@@ -4846,11 +4852,14 @@ async function salvaNuovoDoc(){
       indirizzo_destinazione:ind, cap_destinazione:cap,
       citta_destinazione:cit, provincia_destinazione:prv,
       trasporto,
+      trasporto_mezzo:trasportoMezzo,
       resa: document.getElementById('ndoc-resa')?.value || 'Franco fabbrica',
       riferimento_cliente: document.getElementById('ndoc-rif-cliente')?.value?.trim() || null,
       note,
       totale_imponibile:imponibile, totale_netto:netto,
       provvigione_pct:provvPct, provvigione_euro:provvEuro,
+      // Ritiro cliente → nessun costo/zona di trasporto
+      ...(trasportoMezzo==='ritiro'?{costo_trasporto:0, zona_trasporto_id:null}:{}),
       ...(mode==='ordine'?{richiede_approvazione_tecnica:haCustom}:{})
     };
 
@@ -5193,7 +5202,7 @@ async function apriModificaOrdine(id){
   const modal=ensureModalInBody('modal-nuovo-doc');
   modal.dataset.mode='ordine';
   modal.dataset.editId=id;
-  document.getElementById('ndoc-title').textContent='Modifica conferma d&#39;ordine';
+  document.getElementById('ndoc-title').textContent="Modifica conferma d'ordine";
   document.getElementById('ndoc-clienti').innerHTML='<option value="">Seleziona...</option>'+(clienti||[]).map(function(c){
     return '<option value="'+c.id+'"'+(c.id===ord.anagrafica_id?' selected':'')+
       ' data-listino="'+(c.listino||'A')+'" data-sa="'+(c.sconto_dedicato_A||0)+
@@ -5232,7 +5241,7 @@ async function nuovoOrdineDiretto(){
     if(!modal){ toast('Errore: modal non trovato','err'); return; }
     modal.dataset.mode='ordine';
     delete modal.dataset.editId;
-    document.getElementById('ndoc-title').textContent="Nuova conferma d&#39;ordine";
+    document.getElementById('ndoc-title').textContent="Nuova conferma d'ordine";
     document.getElementById('ndoc-clienti').innerHTML='<option value="">Seleziona cliente...</option>'+(clienti||[]).map(function(c){
       return '<option value="'+c.id+'" data-listino="'+(c.listino||'A')+'" data-sa="'+(c.sconto_dedicato_A||0)+
         '" data-sp="'+(c.sconto_dedicato_P||0)+'" data-ind="'+(c.indirizzo||'')+
