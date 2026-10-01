@@ -2301,7 +2301,9 @@ function resetCFG(){
     _imballo_codice:null, _imballo_desc:'', _imballo_metodo:null,
     _imballo_capienza:null, _imballo_prezzo_unit:0, _imballo_totale:0,
     _imballo_serie:null, _imballo_serie_posa:null, _imballo_fragile:false,
-    _imballo_modello:null, _supp_fragile:0
+    _imballo_modello:null, _supp_fragile:0,
+    // esclusioni telaio / coprifili per la posizione
+    escludi_telaio:false, escludi_coprifili:false
   };
 }
 resetCFG();
@@ -2459,6 +2461,8 @@ async function modificaRiga(tabella, rigaId, docId, mode, listino_in){
   CFG.colore_maniglia=r.codice_colore_maniglia||null; CFG.nome_colore_maniglia=r.nome_colore_maniglia||'';
   CFG.quantita=r.quantita||1; CFG.note_riga=r.note_riga||''; CFG.stanza=r.stanza||'';
   CFG.posata_da_noi=!!r.posata_da_noi;
+  CFG.escludi_telaio=!!r.escludi_telaio;
+  CFG.escludi_coprifili=!!r.escludi_coprifili;
   // Precarica i prezzi salvati, così scorrendo con "Avanti" (senza ri-selezionare)
   // il totale resta corretto; se l'utente cambia uno step, quel prezzo si ricalcola.
   CFG.p_base=r.prezzo_base||0; CFG.p_vetro=r.prezzo_vetro||0; CFG.p_finitura=r.prezzo_finitura||0;
@@ -3413,25 +3417,46 @@ async function cfgSpessore(){
     CFG.apertura==='ROTO'?'ROTO':
     CFG.apertura?.startsWith('CS')?'CS':'BAT';
 
+  const escl = !!CFG.escludi_telaio;
   let html=\`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
     <div style="font-size:13px;font-weight:500">Spessore muro e telaio <span style="color:var(--mid);font-weight:400">— \${CFG.larghezza}×\${CFG.altezza} mm \${CFG.senso}</span></div>
     <button class="btn btn-sm" onclick="renderCfgStep('misure')">← Indietro</button>
   </div>
-  <div style="margin-bottom:14px">
-    <div style="font-size:12px;font-weight:500;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.4px;color:var(--mid)">Spessore muro (mm)</div>
-    <div style="display:flex;align-items:center;gap:10px">
-      <input type="number" id="cfg-spessore" value="\${CFG.spessore||''}" placeholder="es. 125" step="0.5" min="5" max="60"
-        style="width:120px;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px;font-family:inherit"
-        oninput="calcolaTelaio(this.value,'\${fam}')">
-      <span style="font-size:13px;color:var(--mid)">mm</span>
+  <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;padding:8px 12px;background:var(--beige);border-radius:var(--radius);cursor:pointer">
+    <input type="checkbox" \${escl?'checked':''} onchange="toggleEscludiTelaio(this.checked,'\${fam}')">
+    <span style="font-size:12px;color:var(--dark)"><strong>Escludi telaio</strong> — es. solo anta di ricambio senza telaio</span>
+  </label>
+  <div id="cfg-spessore-wrap" style="display:\${escl?'none':'block'}">
+    <div style="margin-bottom:14px">
+      <div style="font-size:12px;font-weight:500;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.4px;color:var(--mid)">Spessore muro (mm)</div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <input type="number" id="cfg-spessore" value="\${CFG.spessore||''}" placeholder="es. 125" step="0.5" min="5" max="60"
+          style="width:120px;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px;font-family:inherit"
+          oninput="calcolaTelaio(this.value,'\${fam}')">
+        <span style="font-size:13px;color:var(--mid)">mm</span>
+      </div>
     </div>
+    <div id="cfg-telaio-result" style="margin-bottom:14px"></div>
   </div>
-  <div id="cfg-telaio-result" style="margin-bottom:14px"></div>
   <div style="display:flex;justify-content:flex-end">
     <button class="btn btn-red btn-sm" onclick="avanzaAFerramenta()">Avanti →</button>
   </div>\`;
   document.getElementById('cfg-body').innerHTML=html;
-  if(CFG.spessore) calcolaTelaio(CFG.spessore, fam);
+  if(!escl && CFG.spessore) calcolaTelaio(CFG.spessore, fam);
+}
+
+// Spunta "escludi telaio": azzera spalla/telaio e nasconde il blocco spessore
+function toggleEscludiTelaio(checked, fam){
+  CFG.escludi_telaio = !!checked;
+  const wrap = document.getElementById('cfg-spessore-wrap');
+  if(wrap) wrap.style.display = checked ? 'none' : 'block';
+  if(checked){
+    CFG.spessore=null; CFG.spalla=null; CFG.accessorio_telaio=null;
+    CFG.p_telaio=0; CFG.p_acc_telaio=0; CFG._cassone=null;
+  } else if(CFG.spessore){
+    calcolaTelaio(CFG.spessore, fam);
+  }
+  cfgUpdatePrice();
 }
 
 async function calcolaTelaio(spessore, fam){
@@ -3516,7 +3541,7 @@ function selCassone(kit, prezzo, cassone){
 }
 
 function avanzaAFerramenta(){
-  if(!CFG.spessore){ toast('Inserisci lo spessore del muro','err'); return; }
+  if(!CFG.escludi_telaio && !CFG.spessore){ toast('Inserisci lo spessore del muro (o spunta "Escludi telaio")','err'); return; }
   renderCfgStep('ferramenta');
 }
 
@@ -4381,6 +4406,8 @@ async function aggiungiRigaAlDocumento(){
     prezzo_imballo_unitario:CFG._imballo_prezzo_unit||0,
     prezzo_imballo_totale:_imbTot,
     posata_da_noi:!!CFG.posata_da_noi,
+    escludi_telaio:!!CFG.escludi_telaio,
+    escludi_coprifili:!!CFG.escludi_coprifili,
     note_riga:CFG.note_riga,
     stanza:CFG.stanza||null
   };
@@ -4864,7 +4891,7 @@ async function salvaNuovoDoc(){
     };
 
     let docId, docNumero;
-    const RIGHE_FIELDS = ['codice_serie','nome_serie','codice_modello','nome_modello','codice_finitura','nome_finitura','pannello_bugna','codice_colore_alu','nome_colore_alu','codice_colore_pietra','nome_colore_pietra','codice_tipo_vetro','nome_tipo_vetro','codice_apertura','nome_apertura','senso_apertura','larghezza_mm','altezza_mm','misura_custom','spessore_muro_cm','spessore_muro_mm','codice_spalla','tipo_accessorio_telaio','codice_ferramenta','nome_ferramenta','codice_maniglia','nome_maniglia','codice_colore_maniglia','nome_colore_maniglia','prezzo_base','prezzo_vetro','prezzo_finitura','prezzo_bugna','prezzo_inserto','prezzo_apertura','prezzo_telaio','prezzo_accessorio_telaio','prezzo_ferramenta','prezzo_maniglia','prezzo_extra_incisioni','prezzo_unitario','quantita','sconto_riga','prezzo_totale_riga','note_riga','stanza'];
+    const RIGHE_FIELDS = ['codice_serie','nome_serie','codice_modello','nome_modello','codice_finitura','nome_finitura','pannello_bugna','codice_colore_alu','nome_colore_alu','codice_colore_pietra','nome_colore_pietra','codice_tipo_vetro','nome_tipo_vetro','codice_apertura','nome_apertura','senso_apertura','larghezza_mm','altezza_mm','misura_custom','spessore_muro_cm','spessore_muro_mm','codice_spalla','tipo_accessorio_telaio','codice_ferramenta','nome_ferramenta','codice_maniglia','nome_maniglia','codice_colore_maniglia','nome_colore_maniglia','prezzo_base','prezzo_vetro','prezzo_finitura','prezzo_bugna','prezzo_inserto','prezzo_apertura','prezzo_telaio','prezzo_accessorio_telaio','prezzo_ferramenta','prezzo_maniglia','prezzo_extra_incisioni','prezzo_unitario','quantita','sconto_riga','prezzo_totale_riga','note_riga','stanza','escludi_telaio','escludi_coprifili','coprifili_config','codice_imballo','prezzo_imballo_unitario','prezzo_imballo_totale','posata_da_noi'];
 
     if(editId){
       // MODIFICA — update del documento esistente (senza toccare numero/creato_da)
