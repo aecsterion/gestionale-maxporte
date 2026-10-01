@@ -2076,7 +2076,7 @@ async function caricaFornitori(magId){
       (f.lead_time_giorni?\' \xe2\x80\x94 \'+f.lead_time_giorni+\'gg\':\'\')+
       (f.preferito?\' <span class="badge bg">preferito</span>\':\'\')+
       \'</span>\'+
-      \'<button class="btn btn-sm" data-fid="\'+f.id+\'" onclick="eliminaFornitore(this.dataset.fid)">\xc3\x97</button></div>\';
+      \'<button class="btn btn-sm" data-fid="\'+f.id+\'" onclick="eliminaFornitore(this.dataset.fid)">&times;</button></div>\';
   }).join(\'\');
 }
 
@@ -5293,7 +5293,7 @@ async function renderOrdineDetail(id){
       '<td style="text-align:right">'+fmtEuro(r.prezzo_unitario)+'</td>'+
       '<td style="text-align:right;font-weight:500">'+fmtEuro(r.prezzo_totale_riga)+'</td>'+
       '<td style="white-space:nowrap">'+'<button class="btn btn-sm" title="Modifica" onclick="modificaRiga(\\'righe_ordine\\',\\''+r.id+'\\',\\''+id+'\\',\\'ordine\\',\\''+(ord.listino||'A')+'\\')">✎</button>'+
-      '<button class="btn btn-sm" style="color:var(--red)" onclick="eliminaRiga(\\'righe_ordine\\',\\''+r.id+'\\',\\''+id+'\\',\\'ordine\\')">\xc3\x97</button>'+
+      '<button class="btn btn-sm" style="color:var(--red)" onclick="eliminaRiga(\\'righe_ordine\\',\\''+r.id+'\\',\\''+id+'\\',\\'ordine\\')">&times;</button>'+
       '</td>'+
       '</tr>';
   }).join('');
