@@ -2536,6 +2536,28 @@ async function renderCfgStep(step){
   else if(step==='riepilogo') await cfgRiepilogo();
 }
 
+// Sigle province italiane (per i dropdown provincia)
+const PROVINCE_IT = ['AG','AL','AN','AO','AP','AQ','AR','AT','AV','BA','BG','BI','BL','BN','BO','BR','BS','BT','BZ','CA','CB','CE','CH','CL','CN','CO','CR','CS','CT','CZ','EN','FC','FE','FG','FI','FM','FR','GE','GO','GR','IM','IS','KR','LC','LE','LI','LO','LT','LU','MB','MC','ME','MI','MN','MO','MS','MT','NA','NO','NU','OR','PA','PC','PD','PE','PG','PI','PN','PO','PR','PT','PU','PV','PZ','RA','RC','RE','RG','RI','RM','RN','RO','SA','SI','SO','SP','SR','SS','SU','SV','TA','TE','TN','TO','TP','TR','TS','TV','UD','VA','VB','VC','VE','VI','VR','VT','VV'];
+function provinceOptions(sel){
+  return '<option value="">—</option>'+PROVINCE_IT.map(p=>\`<option value="\${p}" \${p===(sel||'').toUpperCase()?'selected':''}>\${p}</option>\`).join('');
+}
+// Popola il select provincia destinazione e seleziona la sigla data
+function setProvinciaDest(sigla){
+  const el=document.getElementById('ndoc-prv');
+  if(el) el.innerHTML=provinceOptions(sigla||'');
+}
+// Ricompila i campi destinazione dall'anagrafica del cliente selezionato
+function usaIndirizzoCliente(){
+  const sel=document.getElementById('ndoc-clienti');
+  const opt=sel&&sel.options[sel.selectedIndex];
+  if(!opt||!opt.value){ toast('Seleziona prima un cliente','err'); return; }
+  document.getElementById('ndoc-ind').value=opt.dataset.ind||'';
+  document.getElementById('ndoc-cap').value=opt.dataset.cap||'';
+  document.getElementById('ndoc-cit').value=opt.dataset.cit||'';
+  setProvinciaDest(opt.dataset.prv||'');
+  toast('Indirizzo cliente inserito','ok');
+}
+
 const CFG_STEPS = ['serie','modello','finitura','opzioni','apertura','serratura','misure','spessore','ferramenta','maniglia','riepilogo'];
 const CFG_LABELS = {serie:'Serie',modello:'Modello',finitura:'Finitura',opzioni:'Opzioni',apertura:'Apertura',misure:'Misure',spessore:'Spessore muro',ferramenta:'Ferramenta',riepilogo:'Riepilogo'};
 
@@ -4658,7 +4680,7 @@ async function apriModificaPreventivo(id){
   document.getElementById('ndoc-ind').value=prev.indirizzo_destinazione||'';
   document.getElementById('ndoc-cap').value=prev.cap_destinazione||'';
   document.getElementById('ndoc-cit').value=prev.citta_destinazione||'';
-  document.getElementById('ndoc-prv').value=prev.provincia_destinazione||'';
+  setProvinciaDest(prev.provincia_destinazione||'');
   var no=document.getElementById('ndoc-note');if(no)no.value=prev.note||'';
   const {data:righe}=await sb.from('righe_preventivo').select('*').eq('preventivo_id',id).order('riga_numero',{ascending:true});
   CFG_RIGHE=(righe||[]).map(function(r){return Object.assign({},r);});
@@ -4681,6 +4703,7 @@ async function nuovoPreventivo(){
     document.getElementById('ndoc-clienti').innerHTML='<option value="">Seleziona cliente...</option>'+(clienti||[]).map(c=>\`<option value="\${c.id}" data-listino="\${c.listino||'A'}" data-sa="\${c.sconto_dedicato_A||0}" data-sp="\${c.sconto_dedicato_P||0}" data-ind="\${c.indirizzo||''}" data-cap="\${c.cap||''}" data-cit="\${c.citta||''}" data-prv="\${c.provincia||''}">\${c.ragione_sociale}</option>\`).join('');
     document.getElementById('ndoc-agenti').innerHTML='<option value="">Nessun agente</option>'+(agenti||[]).map(a=>\`<option value="\${a.id}">\${a.cognome} \${a.nome}</option>\`).join('');
     document.getElementById('ndoc-righe-list').innerHTML='<div style="text-align:center;padding:20px;color:var(--mid);font-size:13px;font-style:italic">Nessuna porta aggiunta ancora — clicca "+ Aggiungi porta"</div>';
+    setProvinciaDest('');
     document.getElementById('ndoc-totale').textContent='€ 0,00';
     modal.classList.add('open');
   } catch(e) {
@@ -4707,7 +4730,7 @@ async function ndocClienteChange(sel){
   document.getElementById('ndoc-ind').value = cliente.indirizzo||'';
   document.getElementById('ndoc-cap').value = cliente.cap||'';
   document.getElementById('ndoc-cit').value = cliente.citta||'';
-  document.getElementById('ndoc-prv').value = cliente.provincia||'';
+  setProvinciaDest(cliente.provincia||'');
 
   // Agente collegato al cliente
   if(cliente.agente_id){
@@ -5190,7 +5213,7 @@ async function apriModificaOrdine(id){
   document.getElementById('ndoc-ind').value=ord.indirizzo_destinazione||'';
   document.getElementById('ndoc-cap').value=ord.cap_destinazione||'';
   document.getElementById('ndoc-cit').value=ord.citta_destinazione||'';
-  document.getElementById('ndoc-prv').value=ord.provincia_destinazione||'';
+  setProvinciaDest(ord.provincia_destinazione||'');
   var no=document.getElementById('ndoc-note');if(no)no.value=ord.note||'';
   const {data:righe}=await sb.from('righe_ordine').select('*').eq('ordine_id',id).order('riga_numero',{ascending:true});
   CFG_RIGHE=(righe||[]).map(function(r){return Object.assign({},r);});
@@ -5219,6 +5242,7 @@ async function nuovoOrdineDiretto(){
       return '<option value="'+a.id+'">'+a.cognome+' '+a.nome+'</option>';
     }).join('');
     document.getElementById('ndoc-righe-list').innerHTML='<div style="text-align:center;padding:20px;color:var(--mid);font-size:13px;font-style:italic">Nessuna porta aggiunta ancora \xe2\x80\x94 clicca \"+ Aggiungi porta\"</div>';
+    setProvinciaDest('');
     document.getElementById('ndoc-totale').textContent='€ 0,00';
     modal.classList.add('open');
   } catch(e) {
@@ -7717,12 +7741,15 @@ async function eseguiEsportaPDF() {
         </div>
       </div>
       <!-- Destinazione merce -->
-      <div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:var(--mid);margin-bottom:8px">Destinazione merce</div>
-      <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:10px;margin-bottom:16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:var(--mid)">Destinazione merce</div>
+        <button type="button" class="btn btn-sm" onclick="usaIndirizzoCliente()" style="font-size:11px">Usa indirizzo cliente</button>
+      </div>
+      <div style="display:grid;grid-template-columns:2.6fr 0.9fr 1.6fr 0.7fr;gap:10px;margin-bottom:16px">
         <div class="form-field"><label>Indirizzo</label><input type="text" id="ndoc-ind" placeholder="Via/Piazza..."></div>
         <div class="form-field"><label>CAP</label><input type="text" id="ndoc-cap" maxlength="5"></div>
         <div class="form-field"><label>Città</label><input type="text" id="ndoc-cit"></div>
-        <div class="form-field"><label>Prov.</label><input type="text" id="ndoc-prv" maxlength="2" style="text-transform:uppercase"></div>
+        <div class="form-field"><label>Prov.</label><select id="ndoc-prv"></select></div>
       </div>
       <!-- Note -->
       <div class="form-field" style="margin-bottom:16px">
