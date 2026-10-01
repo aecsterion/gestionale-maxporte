@@ -4448,35 +4448,47 @@ async function renderTrasportoCard(mode, doc, righe){
     if(z){ zonaId = z.id; autoProposta = true; }
   }
   const mezzo = doc.trasporto_mezzo || 'proprio';
+  const ritiro = (mezzo==='ritiro');
   const costo = parseFloat(doc.costo_trasporto)||0;
   const zoneOpts = '<option value="">— nessuna —</option>'+(zone||[]).map(z=>\`<option value="\${z.id}" \${String(z.id)===String(zonaId)?'selected':''}>\${z.nome}</option>\`).join('');
   const bloccato = (mode==='preventivo' && doc.stato==='confermato');
+  const dis = bloccato || ritiro;  // ritiro cliente → campi trasporto spenti
   return \`<div class="card">
     <div class="card-title">Trasporto</div>
     <table style="font-size:13px;width:100%">
-      <tr><td style="color:var(--mid);padding:4px 0;width:130px">Zona</td>
-        <td><select id="trasp-zona" \${bloccato?'disabled':''} onchange="aggiornaTrasporto('\${mode}','\${doc.id}')" style="width:100%;font-size:12px;padding:3px 6px;border:0.5px solid var(--border);border-radius:4px">\${zoneOpts}</select>
-        \${autoProposta?'<div style="font-size:10px;color:var(--mid);margin-top:2px">Proposta dalla provincia '+prov+' — conferma o cambia</div>':''}</td></tr>
-      <tr><td style="color:var(--mid);padding:4px 0">Mezzo</td>
+      <tr><td style="color:var(--mid);padding:4px 0;width:130px">Modalità</td>
         <td><label style="font-size:12px;margin-right:12px"><input type="radio" name="trasp-mezzo" value="proprio" \${mezzo==='proprio'?'checked':''} \${bloccato?'disabled':''} onchange="aggiornaTrasporto('\${mode}','\${doc.id}')"> Mezzo Max Porte</label>
-        <label style="font-size:12px"><input type="radio" name="trasp-mezzo" value="corriere" \${mezzo==='corriere'?'checked':''} \${bloccato?'disabled':''} onchange="aggiornaTrasporto('\${mode}','\${doc.id}')"> Corriere</label></td></tr>
+        <label style="font-size:12px;margin-right:12px"><input type="radio" name="trasp-mezzo" value="corriere" \${mezzo==='corriere'?'checked':''} \${bloccato?'disabled':''} onchange="aggiornaTrasporto('\${mode}','\${doc.id}')"> Corriere</label>
+        <label style="font-size:12px"><input type="radio" name="trasp-mezzo" value="ritiro" \${ritiro?'checked':''} \${bloccato?'disabled':''} onchange="aggiornaTrasporto('\${mode}','\${doc.id}')"> Ritiro cliente</label></td></tr>
+      \${ritiro?'<tr><td></td><td style="font-size:11px;color:var(--mid);padding-bottom:4px">Ritiro a cura del cliente — nessun costo di trasporto.</td></tr>':\`
+      <tr><td style="color:var(--mid);padding:4px 0">Zona</td>
+        <td><select id="trasp-zona" \${dis?'disabled':''} onchange="aggiornaTrasporto('\${mode}','\${doc.id}')" style="width:100%;font-size:12px;padding:3px 6px;border:0.5px solid var(--border);border-radius:4px">\${zoneOpts}</select>
+        \${autoProposta?'<div style="font-size:10px;color:var(--mid);margin-top:2px">Proposta dalla provincia '+prov+' — conferma o cambia</div>':''}</td></tr>
       <tr><td style="color:var(--mid);padding:4px 0">N° porte</td><td style="font-size:12px">\${nPorte}</td></tr>
       <tr><td style="color:var(--mid);padding:4px 0">Costo trasporto</td>
         <td><div style="display:flex;align-items:center;gap:6px">
-          <input type="number" id="trasp-costo" step="0.01" value="\${costo||''}" placeholder="0.00" \${bloccato?'disabled':''} style="width:100px;font-size:13px;padding:3px 6px;border:0.5px solid var(--border);border-radius:4px" onchange="salvaCostoTrasporto('\${mode}','\${doc.id}',this.value)">
+          <input type="number" id="trasp-costo" step="0.01" value="\${costo||''}" placeholder="0.00" \${dis?'disabled':''} style="width:100px;font-size:13px;padding:3px 6px;border:0.5px solid var(--border);border-radius:4px" onchange="salvaCostoTrasporto('\${mode}','\${doc.id}',this.value)">
           <span style="font-size:12px;color:var(--mid)">€</span>
-          \${bloccato?'':'<button class="btn btn-sm" onclick="ricalcolaTrasporto(\\''+mode+'\\',\\''+doc.id+'\\')">Ricalcola da listino</button>'}
-        </div></td></tr>
+          \${dis?'':'<button class="btn btn-sm" onclick="ricalcolaTrasporto(\\''+mode+'\\',\\''+doc.id+'\\')">Ricalcola da listino</button>'}
+        </div></td></tr>\`}
     </table>
-    <div style="font-size:10px;color:var(--mid);margin-top:6px">Il costo è proposto dal listino (zona + n° porte + mezzo) ma puoi modificarlo a mano.</div>
+    \${ritiro?'':'<div style="font-size:10px;color:var(--mid);margin-top:6px">Il costo è proposto dal listino (zona + n° porte + mezzo) ma puoi modificarlo a mano.</div>'}
   </div>\`;
 }
 
 // Cambia zona o mezzo → ricalcola il costo dal listino e salva
 async function aggiornaTrasporto(mode, docId){
   const tabDoc = mode==='preventivo'?'preventivi':'ordini_vendita';
-  const zonaId = document.getElementById('trasp-zona')?.value || null;
   const mezzo = document.querySelector('input[name="trasp-mezzo"]:checked')?.value || 'proprio';
+  if(mezzo==='ritiro'){
+    // Ritiro cliente: nessun trasporto, costo azzerato, zona svuotata
+    await sb.from(tabDoc).update({trasporto_mezzo:'ritiro', zona_trasporto_id:null, costo_trasporto:0}).eq('id',docId);
+    await ricalcolaTotale(docId, mode);
+    toast('Ritiro cliente — trasporto azzerato','ok');
+    if(mode==='preventivo') renderPreventivoDetail(docId); else renderOrdineDetail(docId);
+    return;
+  }
+  const zonaId = document.getElementById('trasp-zona')?.value || null;
   const nPorte = await contaPorteDoc(docId, mode);
   const costo = await calcolaCostoTrasporto(zonaId, mezzo, nPorte);
   await sb.from(tabDoc).update({zona_trasporto_id:zonaId||null, trasporto_mezzo:mezzo, costo_trasporto:costo}).eq('id',docId);
