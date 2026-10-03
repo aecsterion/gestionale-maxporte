@@ -6700,11 +6700,64 @@ async function adminCoprifiliSet(){
     <div style="background:var(--blue-bg);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--blue-tx);margin-bottom:10px">
       Definisci le <b>varianti</b> di coprifilo per questa apertura. Per ogni variante imposta la larghezza e il n. di aste <b>per lato</b> (a spingere / a tirare) — così gestisci anche i casi 65 da un lato e 90 dall'altro. Segna come <b>Standard</b> la variante precaricata nel configuratore (compresa nel prezzo); le altre restano selezionabili come opzioni con eventuale <b>supplemento</b>. Il colore segue la finitura telaio; la lunghezza 2250/3000 (sopraluce) si risolve allo scarico.
     </div>
-    <div style="margin-bottom:10px"><button class="btn btn-red btn-sm" onclick="nuovaVarianteCoprifilo('\${apSel}',\${varianti.length})">+ Aggiungi variante</button></div>
+    <div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-red btn-sm" onclick="nuovaVarianteCoprifilo('\${apSel}',\${varianti.length})">+ Aggiungi variante</button>
+      \${varianti.length?\`<button class="btn btn-sm" onclick="apriCopiaCoprifili('\${apSel}')" style="background:var(--light);color:var(--dark);border:0.5px solid var(--border)">Copia queste varianti su altre aperture…</button>\`:''}
+    </div>
     <table><thead><tr>
       <th>Variante</th><th>Lato spingere</th><th>Lato tirare</th><th>Standard</th><th>Suppl.</th><th>Ord.</th><th></th>
     </tr></thead>
-    <tbody>\${rows||'<tr><td colspan="7" style="text-align:center;color:var(--mid);padding:18px;font-style:italic">Nessuna variante per questa apertura — aggiungi la prima</td></tr>'}</tbody></table>\`)}\`;
+    <tbody>\${rows||'<tr><td colspan="7" style="text-align:center;color:var(--mid);padding:18px;font-style:italic">Nessuna variante per questa apertura — aggiungi la prima</td></tr>'}</tbody></table>
+    <div id="cop-copia-box"></div>\`)}\`;
+}
+
+// Pannello di copia: checkbox delle altre aperture; copia tutte le varianti
+async function apriCopiaCoprifili(daApertura){
+  const box=document.getElementById('cop-copia-box');
+  if(!box) return;
+  if(box.dataset.open==='1'){ box.innerHTML=''; box.dataset.open='0'; return; }
+  const {data:aperture}=await sb.from('tipologie_apertura').select('codice,nome').order('codice');
+  const {data:sets}=await sb.from('coprifili_set').select('codice_apertura');
+  const conSet=new Set((sets||[]).map(s=>s.codice_apertura));
+  const altre=(aperture||[]).filter(a=>a.codice!==daApertura);
+  const checks=altre.map(a=>\`<label style="display:flex;align-items:center;gap:6px;padding:4px 6px;font-size:12px;cursor:pointer">
+    <input type="checkbox" class="cop-copia-dest" value="\${a.codice}" style="accent-color:var(--red)">
+    <span style="font-family:monospace;font-size:11px;color:var(--mid)">\${a.codice}</span> \${a.nome}
+    \${conSet.has(a.codice)?'<span class="badge ba" style="font-size:9px;margin-left:4px">ha già un set</span>':''}
+  </label>\`).join('');
+  box.dataset.open='1';
+  box.innerHTML=\`<div style="margin-top:12px;border:0.5px solid var(--border);border-radius:var(--radius);padding:12px;background:var(--beige)">
+    <div style="font-size:12px;font-weight:500;margin-bottom:4px">Copia le varianti di <b>\${daApertura}</b> su:</div>
+    <div style="font-size:11px;color:var(--amber-tx);background:var(--amber-bg);border-radius:var(--radius);padding:6px 8px;margin-bottom:8px">Attenzione: per le aperture che hanno già un set, le varianti copiate si <b>aggiungono</b> a quelle esistenti.</div>
+    <div style="max-height:240px;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:2px;margin-bottom:10px">\${checks}</div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-red btn-sm" onclick="eseguiCopiaCoprifili('\${daApertura}')">Copia</button>
+      <button class="btn btn-sm" onclick="apriCopiaCoprifili('\${daApertura}')" style="background:var(--white);border:0.5px solid var(--border)">Annulla</button>
+    </div>
+  </div>\`;
+}
+
+async function eseguiCopiaCoprifili(daApertura){
+  const dest=Array.from(document.querySelectorAll('.cop-copia-dest:checked')).map(c=>c.value);
+  if(!dest.length){ toast('Seleziona almeno un\\'apertura destinazione','err'); return; }
+  const {data:src}=await sb.from('coprifili_set').select('*').eq('codice_apertura',daApertura);
+  if(!src||!src.length){ toast('Nessuna variante da copiare','err'); return; }
+  const nuovi=[];
+  dest.forEach(d=>{
+    src.forEach(s=>{
+      nuovi.push({
+        codice_apertura:d,
+        descrizione_variante:s.descrizione_variante,
+        larghezza_spingere:s.larghezza_spingere, larghezza_tirare:s.larghezza_tirare,
+        aste_spingere:s.aste_spingere, aste_tirare:s.aste_tirare,
+        is_standard:s.is_standard, supplemento:s.supplemento, ordine:s.ordine, attivo:true
+      });
+    });
+  });
+  const {error}=await sb.from('coprifili_set').insert(nuovi);
+  if(error){ toast('Errore: '+error.message,'err'); return; }
+  toast('Varianti copiate su '+dest.length+' apertura/e','ok');
+  adminCoprifiliSet();
 }
 
 async function nuovaVarianteCoprifilo(apertura, nEsistenti){
