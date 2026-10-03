@@ -2271,6 +2271,7 @@ let CFG_EDIT_RIGA_NUM = null; // riga_numero da preservare in modifica
 function resetCFG(){
   CFG = {
     serie:null, modello:null, finitura:null, colore_speciale:null,
+    finitura_telaio:null, nome_finitura_telaio:'', _finitura_telaio_come_porta:true, _colore_speciale_telaio:null,
     pannello_bugna:null, colore_alu:null, colore_pietra:null,
     tipo_vetro:null, apertura:null, senso:null,
     serratura:null, cilindro:null, pomolino:null,
@@ -2451,6 +2452,10 @@ async function modificaRiga(tabella, rigaId, docId, mode, listino_in){
   CFG.serie=r.codice_serie; CFG.nome_serie=r.nome_serie||'';
   CFG.modello=r.codice_modello; CFG.nome_modello=r.nome_modello||'';
   CFG.finitura=r.codice_finitura; CFG.nome_finitura=r.nome_finitura||'';
+  CFG.finitura_telaio=r.codice_finitura_telaio||r.codice_finitura;
+  CFG.nome_finitura_telaio=r.nome_finitura_telaio||r.nome_finitura||'';
+  CFG._finitura_telaio_come_porta = (CFG.finitura_telaio===CFG.finitura);
+  if(CFG.finitura_telaio==='SPECIALE' && !CFG._finitura_telaio_come_porta) CFG._colore_speciale_telaio=CFG.nome_finitura_telaio.replace(/^Colore speciale\\s*/i,'');
   CFG.pannello_bugna=r.pannello_bugna||null;
   CFG.colore_alu=r.codice_colore_alu||null; CFG.nome_colore_alu=r.nome_colore_alu||'';
   CFG.colore_pietra=r.codice_colore_pietra||null; CFG.nome_colore_pietra=r.nome_colore_pietra||'';
@@ -2510,7 +2515,7 @@ function closeCfg(){
 let _cfgStepCorrente = 'serie';  // step attualmente mostrato (per il pulsante "Avanti")
 // Step che hanno già un pulsante "Avanti" proprio dentro la scheda: lì la barra
 // non deve mostrare un secondo Avanti (evita il doppione).
-const _STEP_CON_AVANTI_PROPRIO = ['opzioni','misure','spessore','coprifili','ferramenta','acc_misure','acc_sopraluce','acc_spessore','acc_pannello','acc_qta'];
+const _STEP_CON_AVANTI_PROPRIO = ['finitura_telaio','opzioni','misure','spessore','coprifili','ferramenta','acc_misure','acc_sopraluce','acc_spessore','acc_pannello','acc_qta'];
 function updateCfgNav(step){
   const nav = document.getElementById('cfg-nav');
   if(!nav) return;
@@ -2529,6 +2534,7 @@ async function renderCfgStep(step){
   if(step==='serie') await cfgSerie();
   else if(step==='modello') await cfgModello();
   else if(step==='finitura') await cfgFinitura();
+  else if(step==='finitura_telaio') await cfgFinituraTelaio();
   else if(step==='colore_speciale') await cfgColoreSpeciale();
   else if(step==='opzioni') await cfgOpzioni();
   else if(step==='apertura') await cfgApertura();
@@ -2571,8 +2577,8 @@ function usaIndirizzoCliente(){
   toast('Indirizzo cliente inserito','ok');
 }
 
-const CFG_STEPS = ['serie','modello','finitura','opzioni','apertura','serratura','misure','spessore','coprifili','ferramenta','maniglia','riepilogo'];
-const CFG_LABELS = {serie:'Serie',modello:'Modello',finitura:'Finitura',opzioni:'Opzioni',apertura:'Apertura',misure:'Misure',spessore:'Spessore muro',coprifili:'Coprifili',ferramenta:'Ferramenta',riepilogo:'Riepilogo'};
+const CFG_STEPS = ['serie','modello','finitura','finitura_telaio','opzioni','apertura','serratura','misure','spessore','coprifili','ferramenta','maniglia','riepilogo'];
+const CFG_LABELS = {serie:'Serie',modello:'Modello',finitura:'Finitura',finitura_telaio:'Colore telaio',opzioni:'Opzioni',apertura:'Apertura',misure:'Misure',spessore:'Spessore muro',coprifili:'Coprifili',ferramenta:'Ferramenta',riepilogo:'Riepilogo'};
 
 // Step accessori
 const CFG_ACC_STEPS = {
@@ -2596,13 +2602,11 @@ function cfgSequenzaEffettiva(){
   if(tipo && CFG_ACC_STEPS[tipo]) return CFG_ACC_STEPS[tipo].slice();
   // Porte: costruisci la sequenza secondo i flag
   const haOpzioni = f.ha_vetro||f.ha_pannello_o_bugna||f.ha_inserto_alluminio||f.ha_inserto_pietra||f.ha_pantografatura;
-  const seq = ['serie','modello','finitura'];
+  const seq = ['serie','modello','finitura','finitura_telaio'];
   if(haOpzioni) seq.push('opzioni');
   seq.push('apertura','serratura');
   if(CFG._richiede_cilindro) seq.push('cilindro');
-  seq.push('misure','spessore');
-  if(!CFG.escludi_telaio) seq.push('coprifili');  // coprifili solo se c'è il telaio
-  seq.push('ferramenta');
+  seq.push('misure','spessore','coprifili','ferramenta');
   if(!CFG._maniglia_esclusa) seq.push('maniglia','colore_maniglia');
   if(CFG._richiede_pomolino) seq.push('pomolino');
   seq.push('riepilogo');
@@ -2863,6 +2867,10 @@ async function selFinitura(cod, nome, sovrVal, sovrTipo, consenteBugna){
   CFG.finitura=cod; CFG.nome_finitura=nome;
   CFG._consenteBugna=consenteBugna;
   CFG.colore_speciale=null;
+  // Se il telaio segue la porta, allinea la finitura telaio alla nuova scelta
+  if(CFG._finitura_telaio_come_porta){
+    CFG.finitura_telaio=cod; CFG.nome_finitura_telaio=nome;
+  }
   cfgUpdatePrice();
 
   // Flusso accessori
@@ -2874,10 +2882,8 @@ async function selFinitura(cod, nome, sovrVal, sovrTipo, consenteBugna){
   }
   if(CFG._isPannelloBlindato) return await renderCfgStep('acc_pannello');
 
-  // Flusso porte normale
-  const f = CFG._flags||{};
-  const haOpzioni = f.ha_vetro||f.ha_pannello_o_bugna||f.ha_inserto_alluminio||f.ha_inserto_pietra||f.ha_pantografatura;
-  await renderCfgStep(haOpzioni?'opzioni':'apertura');
+  // Flusso porte normale → passa dalla scelta colore telaio/coprifili
+  await renderCfgStep('finitura_telaio');
 }
 
 async function cfgColoreSpeciale(){
@@ -2943,15 +2949,117 @@ async function confColoreSpeciale(sovrVal, sovrTipo){
   } else {
     CFG._finitura_pct=0; CFG._finitura_fisso=sovrVal; CFG.p_finitura=sovrVal;
   }
+  if(CFG._finitura_telaio_come_porta){
+    CFG.finitura_telaio='SPECIALE'; CFG.nome_finitura_telaio=CFG.nome_finitura;
+  }
   cfgUpdatePrice();
+  await renderCfgStep('finitura_telaio');
+}
+
+// ── STEP COLORE TELAIO + COPRIFILI ─────────────────────────
+// Di default il telaio (e i coprifili) seguono il colore della porta.
+// Qui si può scegliere un colore diverso, applicato a telaio e coprifili insieme.
+async function cfgFinituraTelaio(){
+  var finQuery = sb.from('finiture').select('*')
+    .eq('codice_serie',CFG.serie)
+    .or(\`codice_modello.is.null,codice_modello.eq.\${CFG.modello}\`)
+    .eq('attiva',true);
+  const {data:tutteFiniture} = await finQuery.order('fascia').order('nome_finitura');
+  const data = (tutteFiniture||[]).filter(f=>f.codice_finitura!=='SPECIALE');
+  const hasSpeciale = (tutteFiniture||[]).some(f=>f.codice_finitura==='SPECIALE');
+
+  // Raggruppa per fascia
+  const fasce=[], fasciaMap={};
+  data.forEach(f=>{ const fa=f.fascia||''; if(!fasciaMap[fa]){fasciaMap[fa]=[];fasce.push(fa);} fasciaMap[fa].push(f); });
+  const fasciaStyle = {
+    'LAMINATO':{bg:'#EDE7DE',tx:'var(--dark)',icon:'🟤'},
+    'MP CLASSIC':{bg:'#E6DFD3',tx:'var(--dark)',icon:'⚪'},
+    'MP LIGHT':{bg:'#E8F4FD',tx:'#1A5276',icon:'🔵'},
+    'MP PREMIUM':{bg:'#FDF3E7',tx:'#784212',icon:'🟡'},
+    '':{bg:'transparent',tx:'var(--mid)',icon:''},
+  };
+  const _ordFasce=['LAMINATO','MP CLASSIC','MP LIGHT','MP PREMIUM'];
+  fasce.sort((a,b)=>{const ia=_ordFasce.indexOf(a),ib=_ordFasce.indexOf(b);return (ia<0?99:ia)-(ib<0?99:ib);});
+
+  const comePorta = !!CFG._finitura_telaio_come_porta;
+  let html='';
+  fasce.forEach(fascia=>{
+    const st=fasciaStyle[fascia]||fasciaStyle[''];
+    if(fascia) html+=\`<div style="grid-column:1/-1;padding:6px 10px;border-radius:var(--radius);background:\${st.bg};color:\${st.tx};font-size:11px;font-weight:600;letter-spacing:0.5px;margin-top:4px">\${st.icon} \${fascia}</div>\`;
+    fasciaMap[fascia].forEach(f=>{
+      const sel = !comePorta && CFG.finitura_telaio===f.codice_finitura;
+      html+=\`<div onclick="selFinituraTelaio('\${f.codice_finitura}','\${f.nome_finitura.replace(/'/g,"\\\\'")}')"
+        style="border:\${sel?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:10px 12px;cursor:pointer;background:\${sel?'var(--red-bg)':'var(--white)'}">
+        <div style="font-size:13px;font-weight:500;color:\${sel?'var(--red)':'var(--dark)'}">\${f.nome_finitura}</div>
+      </div>\`;
+    });
+  });
+  const specCard = hasSpeciale ? \`
+    <div onclick="coloreSpecialeTelaio()"
+      style="border:\${(!comePorta&&CFG.finitura_telaio==='SPECIALE')?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:10px 12px;cursor:pointer;background:\${(!comePorta&&CFG.finitura_telaio==='SPECIALE')?'var(--red-bg)':'var(--white)'};grid-column:1/-1;display:flex;align-items:center;gap:12px">
+      <div style="width:36px;height:36px;border-radius:6px;background:linear-gradient(135deg,#e8d5f5,#d5e8f5,#f5e8d5);border:0.5px solid var(--border);flex-shrink:0"></div>
+      <div><div style="font-size:13px;font-weight:500;color:\${(!comePorta&&CFG.finitura_telaio==='SPECIALE')?'var(--red)':'var(--dark)'}">Colore speciale telaio\${(!comePorta&&CFG.finitura_telaio==='SPECIALE'&&CFG._colore_speciale_telaio)?\` <span style="font-weight:400">— \${CFG._colore_speciale_telaio}</span>\`:''}</div>
+        <div style="font-size:11px;color:var(--mid);margin-top:2px">RAL · NCS · PANTONE</div></div>
+    </div>\` : '';
+
+  document.getElementById('cfg-body').innerHTML=\`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:500">Colore telaio e coprifili</div>
+      <button class="btn btn-sm" onclick="renderCfgStep('finitura')">← Colore porta</button>
+    </div>
+    <div style="background:var(--blue-bg);border-radius:var(--radius);padding:8px 12px;font-size:11px;color:var(--blue-tx);margin-bottom:12px">
+      Il colore scelto qui vale per telaio <b>e</b> coprifili insieme. Di default seguono il colore della porta.
+    </div>
+    <div onclick="telaioComePorta()" style="border:\${comePorta?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:12px 14px;cursor:pointer;background:\${comePorta?'var(--red-bg)':'var(--white)'};margin-bottom:14px;display:flex;align-items:center;gap:12px">
+      <div style="width:36px;height:36px;border-radius:6px;background:var(--beige);border:0.5px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:18px">🚪</div>
+      <div><div style="font-size:13px;font-weight:500;color:\${comePorta?'var(--red)':'var(--dark)'}">Stesso colore della porta</div>
+      <div style="font-size:11px;color:var(--mid);margin-top:2px">\${CFG.nome_finitura||'—'}</div></div>
+    </div>
+    <div style="font-size:11px;color:var(--mid);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.4px">Oppure scegli un colore diverso per telaio e coprifili</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;max-height:calc(45vh);overflow-y:auto">\${html}\${specCard}</div>
+    <div style="display:flex;justify-content:flex-end;margin-top:14px">
+      <button class="btn btn-red btn-sm" onclick="renderCfgStep(cfgProssimoDopoFinitura())">Avanti →</button>
+    </div>\`;
+}
+
+// Step successivo al colore telaio nel flusso porte (opzioni o apertura)
+function cfgProssimoDopoFinitura(){
   const f = CFG._flags||{};
   const haOpzioni = f.ha_vetro||f.ha_pannello_o_bugna||f.ha_inserto_alluminio||f.ha_inserto_pietra||f.ha_pantografatura;
-  await renderCfgStep(haOpzioni?'opzioni':'apertura');
+  return haOpzioni ? 'opzioni' : 'apertura';
+}
+
+function telaioComePorta(){
+  CFG._finitura_telaio_come_porta=true;
+  CFG.finitura_telaio=CFG.finitura;
+  CFG.nome_finitura_telaio=CFG.nome_finitura;
+  CFG._colore_speciale_telaio=null;
+  renderCfgStep('finitura_telaio');
+}
+
+function selFinituraTelaio(cod, nome){
+  CFG._finitura_telaio_come_porta=false;
+  CFG.finitura_telaio=cod;
+  CFG.nome_finitura_telaio=nome;
+  CFG._colore_speciale_telaio=null;
+  renderCfgStep('finitura_telaio');
+}
+
+function coloreSpecialeTelaio(){
+  const sistema=(prompt('Sistema colore telaio (RAL / NCS / PANTONE):','RAL')||'').trim().toUpperCase();
+  if(!sistema) return;
+  const codice=(prompt('Codice colore (es. 9010):')||'').trim();
+  if(!codice) return;
+  CFG._finitura_telaio_come_porta=false;
+  CFG.finitura_telaio='SPECIALE';
+  CFG._colore_speciale_telaio=\`\${sistema} \${codice}\`;
+  CFG.nome_finitura_telaio=\`Colore speciale \${sistema} \${codice}\`;
+  renderCfgStep('finitura_telaio');
 }
 
 async function cfgOpzioni(){
   const f = CFG._flags || {};
-  
+
   // Se non ci sono opzioni disponibili, salta direttamente all'apertura
   const haOpzioni = f.ha_pannello_o_bugna || f.ha_inserto_alluminio || 
                     f.ha_inserto_pietra || (f.ha_vetro && !CFG._vetroIncluso) || 
@@ -3553,9 +3661,7 @@ function selCassone(kit, prezzo, cassone){
 
 function avanzaAFerramenta(){
   if(!CFG.escludi_telaio && !CFG.spessore){ toast('Inserisci lo spessore del muro (o spunta "Escludi telaio")','err'); return; }
-  // Con telaio → passa dai coprifili; senza telaio → salta direttamente alla ferramenta
-  if(!CFG.escludi_telaio) renderCfgStep('coprifili');
-  else renderCfgStep('ferramenta');
+  renderCfgStep('coprifili');
 }
 
 // ── STEP COPRIFILI ────────────────────────────────────────
@@ -4487,6 +4593,7 @@ async function cfgRiepilogo(){
       <tr style="border-top:0.5px solid var(--border)"><td style="padding:8px 0;font-weight:500">Totale unitario</td><td style="text-align:right;font-size:16px;font-weight:500;color:var(--red)">€ \${tot.toLocaleString('it-IT',{minimumFractionDigits:2})}</td></tr>
       \${_imbTot>0?\`<tr><td style="padding:3px 0;color:var(--mid)">Imballo (\${CFG._imballo_desc})\${CFG._imballo_metodo==='a_scatola'?\` — \${Math.ceil((CFG.quantita||1)/Math.max(1,CFG._imballo_capienza||1))} scatola/e\`:''}</td><td style="text-align:right;font-weight:500">€ \${_imbTot.toLocaleString('it-IT',{minimumFractionDigits:2})}</td></tr>\`:''}
     </table>
+    \${(CFG.finitura_telaio && CFG.finitura_telaio!==CFG.finitura)?\`<div style="font-size:11px;color:var(--mid);margin-bottom:4px">Colore telaio e coprifili: <strong>\${CFG.nome_finitura_telaio}</strong></div>\`:''}
     \${(() => {
       if(CFG.escludi_coprifili) return '<div style="font-size:11px;color:var(--mid);margin-bottom:12px">Coprifili: <strong>esclusi</strong></div>';
       const cc = CFG.coprifili_config||[];
@@ -4541,6 +4648,8 @@ async function aggiungiRigaAlDocumento(){
     codice_serie:CFG.serie, codice_modello:CFG.modello, nome_modello:CFG.nome_modello,
     nome_serie:CFG.nome_serie,
     codice_finitura:CFG.finitura, nome_finitura:CFG.nome_finitura,
+    codice_finitura_telaio:CFG.finitura_telaio||CFG.finitura,
+    nome_finitura_telaio:CFG.nome_finitura_telaio||CFG.nome_finitura,
     pannello_bugna:CFG.pannello_bugna,
     codice_colore_alu:CFG.colore_alu, nome_colore_alu:CFG.nome_colore_alu,
     codice_colore_pietra:CFG.colore_pietra, nome_colore_pietra:CFG.nome_colore_pietra,
@@ -6592,7 +6701,7 @@ async function adminCoprifiliSet(){
 
 async function nuovaRigaCoprifilo(apertura){
   if(!apertura){toast('Seleziona prima una tipologia','err');return;}
-  const {error}=await sb.from('coprifili_set').insert([{codice_apertura:apertura,quantita:1,is_standard:true,supplemento:0,ordine:0,attivo:true}]);
+  const {error}=await sb.from('coprifili_set').insert([{codice_apertura:apertura,codice_coprifilo:'',descrizione:'',quantita:1,is_standard:true,supplemento:0,ordine:0,attivo:true}]);
   if(error){toast('Errore: '+error.message,'err');return;}
   toast('Articolo aggiunto','ok'); adminCoprifiliSet();
 }
