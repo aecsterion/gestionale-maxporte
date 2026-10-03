@@ -5447,7 +5447,7 @@ const ADMIN_SECTIONS = [
 const ADMIN_SUB = {
   catalogo:   ['serie','modelli','finiture','aperture','ferramenta','maniglie'],
   prezzi:     ['listini','sovrapprezzi','scontistiche'],
-  telaio:     ['spalle','regole','scorrevoli_int','scorrevoli_ext','colori'],
+  telaio:     ['spalle','regole','scorrevoli_int','scorrevoli_ext','coprifili','colori'],
   distinte:   ['db_modelli'],
   agenti:     ['agenti_lista'],
   impostazioni:['generale','utenti'],
@@ -6246,7 +6246,8 @@ async function adminScontistiche(){
 // ══════════════════════════════════════════════════════
 function adminTelaioPanel(){
   const tabs=[{id:'spalle',label:'Spalle telaio'},{id:'regole',label:'Regole spessore'},
-    {id:'scorrevoli_ext',label:'Scorrevoli esterni'},{id:'scorrevoli_int',label:'Scorrevoli interni'}];
+    {id:'scorrevoli_ext',label:'Scorrevoli esterni'},{id:'scorrevoli_int',label:'Scorrevoli interni'},
+    {id:'coprifili',label:'Set coprifili'}];
   document.getElementById('admin-main').innerHTML=adminSubTabs(tabs,'spalle','switchAdminTelaio')+'<div id="admin-sub"></div>';
   switchAdminTelaio('spalle');
 }
@@ -6261,6 +6262,7 @@ function switchAdminTelaio(sub){
   else if(sub==='regole') adminRegole();
   else if(sub==='scorrevoli_ext') adminScorExt();
   else if(sub==='scorrevoli_int') adminScorInt();
+  else if(sub==='coprifili') adminCoprifiliSet();
 }
 
 async function adminSpalle(){
@@ -6378,6 +6380,70 @@ async function nuovoScorInt(){
   const {error}=await sb.from('scorrevoli_interni').insert([{codice_apertura:cod.toUpperCase()}]);
   if(error){toast('Errore: '+error.message,'err');return;}
   toast('Riga aggiunta','ok'); adminScorInt();
+}
+
+// ── Set coprifili per tipologia di apertura ──────────────
+async function adminCoprifiliSet(){
+  const [{data:aperture},{data:sets}] = await Promise.all([
+    sb.from('tipologie_apertura').select('codice,nome').order('codice'),
+    sb.from('coprifili_set').select('*').order('codice_apertura').order('ordine').order('id'),
+  ]);
+  const apt=aperture||[];
+  const apSel = document.getElementById('cop-apertura-filter')?.value || apt[0]?.codice || '';
+  const aptOpts=apt.map(a=>\`<option value="\${a.codice}" \${a.codice===apSel?'selected':''}>\${a.codice} — \${a.nome}</option>\`).join('');
+  // conteggio righe per apertura (per badge "definito")
+  const conteggi={};
+  (sets||[]).forEach(s=>{conteggi[s.codice_apertura]=(conteggi[s.codice_apertura]||0)+1;});
+  const nDef=Object.keys(conteggi).length;
+
+  const righe=(sets||[]).filter(s=>s.codice_apertura===apSel);
+  const rows=righe.map(s=>\`<tr>
+    <td>\${inlineInput(s.codice_coprifilo||'',\`adminSalva('coprifili_set','\${s.id}','codice_coprifilo',this.value)\`,'110px','text','codice')}</td>
+    <td>\${inlineInput(s.descrizione||'',\`adminSalva('coprifili_set','\${s.id}','descrizione',this.value)\`,'220px','text','descrizione coprifilo')}</td>
+    <td>\${inlineInput(s.quantita??1,\`adminSalva('coprifili_set','\${s.id}','quantita',this.value)\`,'55px','number')}</td>
+    <td style="text-align:center"><input type="checkbox" \${s.is_standard?'checked':''} onchange="adminSalva('coprifili_set','\${s.id}','is_standard',this.checked)" style="width:16px;height:16px;cursor:pointer;accent-color:var(--red)"></td>
+    <td>\${inlineInput(s.supplemento??0,\`adminSalva('coprifili_set','\${s.id}','supplemento',this.value)\`,'65px','number','€')}</td>
+    <td>\${inlineInput(s.ordine??0,\`adminSalva('coprifili_set','\${s.id}','ordine',this.value)\`,'45px','number')}</td>
+    <td><button onclick="eliminaRigaAdmin('coprifili_set','\${s.id}','adminCoprifiliSet')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
+  </tr>\`).join('');
+  const nomeApt = apt.find(a=>a.codice===apSel)?.nome || '';
+
+  document.getElementById('admin-sub').innerHTML=\`
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+    <label style="font-size:12px;color:var(--mid)">Tipologia apertura:</label>
+    <select id="cop-apertura-filter" onchange="adminCoprifiliSet()" style="padding:5px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-family:inherit;min-width:320px">\${aptOpts}</select>
+    <span style="font-size:11px;color:var(--mid)">\${nDef}/\${apt.length} aperture con set definito</span>
+  </div>
+  \${adminCard('Set coprifili — '+apSel+(nomeApt?' · '+nomeApt:''),\`
+    <div style="background:var(--blue-bg);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--blue-tx);margin-bottom:10px">
+      Definisci gli articoli coprifilo del set <b>standard</b> per questa apertura (spunta "Standard"): verranno precaricati nel configuratore. Le righe <b>non</b> standard restano come opzioni aggiuntive selezionabili, con eventuale supplemento. I coprifili standard sono già compresi nel prezzo della porta.
+    </div>
+    <div style="margin-bottom:10px;display:flex;gap:8px">
+      <button class="btn btn-red btn-sm" onclick="nuovaRigaCoprifilo('\${apSel}')">+ Aggiungi articolo</button>
+      \${righe.length?\`<button class="btn btn-sm" onclick="copiaSetCoprifili('\${apSel}')" style="background:var(--light);color:var(--dark);border:0.5px solid var(--border)">Copia set su un'altra apertura</button>\`:''}
+    </div>
+    <table><thead><tr><th>Codice</th><th>Descrizione</th><th>Q.tà</th><th>Standard</th><th>Suppl. (€)</th><th>Ord.</th><th></th></tr></thead>
+    <tbody>\${rows||'<tr><td colspan="7" style="text-align:center;color:var(--mid);padding:18px;font-style:italic">Nessun articolo per questa apertura — aggiungi il primo</td></tr>'}</tbody></table>\`)}\`;
+}
+
+async function nuovaRigaCoprifilo(apertura){
+  if(!apertura){toast('Seleziona prima una tipologia','err');return;}
+  const {error}=await sb.from('coprifili_set').insert([{codice_apertura:apertura,quantita:1,is_standard:true,supplemento:0,ordine:0,attivo:true}]);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Articolo aggiunto','ok'); adminCoprifiliSet();
+}
+
+async function copiaSetCoprifili(daApertura){
+  const a=prompt('Copia il set di '+daApertura+' SU quale apertura? (codice esatto, es. BAT2A)'); if(!a) return;
+  const dest=a.trim();
+  const {data:src}=await sb.from('coprifili_set').select('*').eq('codice_apertura',daApertura);
+  if(!src||!src.length){toast('Nessun articolo da copiare','err');return;}
+  const nuovi=src.map(s=>({codice_apertura:dest,codice_coprifilo:s.codice_coprifilo,descrizione:s.descrizione,quantita:s.quantita,is_standard:s.is_standard,supplemento:s.supplemento,ordine:s.ordine,attivo:true}));
+  const {error}=await sb.from('coprifili_set').insert(nuovi);
+  if(error){toast('Errore: '+error.message,'err');return;}
+  toast('Set copiato su '+dest,'ok');
+  const sel=document.getElementById('cop-apertura-filter'); if(sel) sel.value=dest;
+  adminCoprifiliSet();
 }
 
 // ══════════════════════════════════════════════════════
@@ -7378,7 +7444,8 @@ async function adminSalva(tabella, id, campo, valore){
     'maggiorazione_pct','spalla_cm','spessore_da_cm','spessore_a_cm','cm_accessorio',
     'prezzo_access_A','prezzo_access_P','spalla_cassone_cm','quantita',
     'percentuale_provvigione','sconto_base_pct','sconto_max_pct',
-    'prezzo','min_porte','max_porte','prezzo_proprio','prezzo_corriere'];
+    'prezzo','min_porte','max_porte','prezzo_proprio','prezzo_corriere',
+    'supplemento','ordine'];
   if(campo==='max_porte' && (valore===''||valore===null||valore===undefined)){
     val = null;  // max vuoto = scaglione illimitato
   } else if(numericFields.includes(campo)){
