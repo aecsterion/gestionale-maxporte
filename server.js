@@ -2303,7 +2303,12 @@ function resetCFG(){
     _imballo_serie:null, _imballo_serie_posa:null, _imballo_fragile:false,
     _imballo_modello:null, _supp_fragile:0,
     // esclusioni telaio / coprifili per la posizione
-    escludi_telaio:false, escludi_coprifili:false
+    escludi_telaio:false, escludi_coprifili:false,
+    // coprifili
+    coprifili_config:[],      // righe effettive della posizione [{codice,descrizione,quantita,is_standard,supplemento}]
+    _coprifili_set:[],        // set definito in archivio per l'apertura (standard + opzioni)
+    p_coprifili:0,
+    nome_coprifili:''
   };
 }
 resetCFG();
@@ -2401,7 +2406,7 @@ function cfgTotale(){
     (CFG.p_acc_telaio||0)+
     (CFG.p_ferramenta||0)+(CFG.p_maniglia||0)+(CFG.p_extra_incisioni||0)+
     (CFG.p_serratura||0)+(CFG.p_cilindro||0)+(CFG.p_pomolino||0)+
-    (CFG._p_varsavia||0)
+    (CFG._p_varsavia||0)+(CFG.p_coprifili||0)
   )*100)/100;
 }
 
@@ -2463,6 +2468,9 @@ async function modificaRiga(tabella, rigaId, docId, mode, listino_in){
   CFG.posata_da_noi=!!r.posata_da_noi;
   CFG.escludi_telaio=!!r.escludi_telaio;
   CFG.escludi_coprifili=!!r.escludi_coprifili;
+  CFG.coprifili_config = Array.isArray(r.coprifili_config) ? r.coprifili_config : [];
+  CFG.p_coprifili = parseFloat(r.prezzo_coprifili)||0;
+  CFG._coprifili_set = null; CFG._coprifili_set_apertura = null; // forza ricarica set in cfgCoprifili
   // Precarica i prezzi salvati, così scorrendo con "Avanti" (senza ri-selezionare)
   // il totale resta corretto; se l'utente cambia uno step, quel prezzo si ricalcola.
   CFG.p_base=r.prezzo_base||0; CFG.p_vetro=r.prezzo_vetro||0; CFG.p_finitura=r.prezzo_finitura||0;
@@ -2502,7 +2510,7 @@ function closeCfg(){
 let _cfgStepCorrente = 'serie';  // step attualmente mostrato (per il pulsante "Avanti")
 // Step che hanno già un pulsante "Avanti" proprio dentro la scheda: lì la barra
 // non deve mostrare un secondo Avanti (evita il doppione).
-const _STEP_CON_AVANTI_PROPRIO = ['opzioni','misure','spessore','ferramenta','acc_misure','acc_sopraluce','acc_spessore','acc_pannello','acc_qta'];
+const _STEP_CON_AVANTI_PROPRIO = ['opzioni','misure','spessore','coprifili','ferramenta','acc_misure','acc_sopraluce','acc_spessore','acc_pannello','acc_qta'];
 function updateCfgNav(step){
   const nav = document.getElementById('cfg-nav');
   if(!nav) return;
@@ -2528,6 +2536,7 @@ async function renderCfgStep(step){
   else if(step==='cilindro') await cfgCilindro();
   else if(step==='misure') await cfgMisure();
   else if(step==='spessore') await cfgSpessore();
+  else if(step==='coprifili') await cfgCoprifili();
   else if(step==='ferramenta') await cfgFerramenta();
   else if(step==='maniglia') await cfgManiglia();
   else if(step==='colore_maniglia') await cfgColoreManiglia();
@@ -2562,8 +2571,8 @@ function usaIndirizzoCliente(){
   toast('Indirizzo cliente inserito','ok');
 }
 
-const CFG_STEPS = ['serie','modello','finitura','opzioni','apertura','serratura','misure','spessore','ferramenta','maniglia','riepilogo'];
-const CFG_LABELS = {serie:'Serie',modello:'Modello',finitura:'Finitura',opzioni:'Opzioni',apertura:'Apertura',misure:'Misure',spessore:'Spessore muro',ferramenta:'Ferramenta',riepilogo:'Riepilogo'};
+const CFG_STEPS = ['serie','modello','finitura','opzioni','apertura','serratura','misure','spessore','coprifili','ferramenta','maniglia','riepilogo'];
+const CFG_LABELS = {serie:'Serie',modello:'Modello',finitura:'Finitura',opzioni:'Opzioni',apertura:'Apertura',misure:'Misure',spessore:'Spessore muro',coprifili:'Coprifili',ferramenta:'Ferramenta',riepilogo:'Riepilogo'};
 
 // Step accessori
 const CFG_ACC_STEPS = {
@@ -2591,7 +2600,9 @@ function cfgSequenzaEffettiva(){
   if(haOpzioni) seq.push('opzioni');
   seq.push('apertura','serratura');
   if(CFG._richiede_cilindro) seq.push('cilindro');
-  seq.push('misure','spessore','ferramenta');
+  seq.push('misure','spessore');
+  if(!CFG.escludi_telaio) seq.push('coprifili');  // coprifili solo se c'è il telaio
+  seq.push('ferramenta');
   if(!CFG._maniglia_esclusa) seq.push('maniglia','colore_maniglia');
   if(CFG._richiede_pomolino) seq.push('pomolino');
   seq.push('riepilogo');
@@ -3542,7 +3553,149 @@ function selCassone(kit, prezzo, cassone){
 
 function avanzaAFerramenta(){
   if(!CFG.escludi_telaio && !CFG.spessore){ toast('Inserisci lo spessore del muro (o spunta "Escludi telaio")','err'); return; }
-  renderCfgStep('ferramenta');
+  // Con telaio → passa dai coprifili; senza telaio → salta direttamente alla ferramenta
+  if(!CFG.escludi_telaio) renderCfgStep('coprifili');
+  else renderCfgStep('ferramenta');
+}
+
+// ── STEP COPRIFILI ────────────────────────────────────────
+// Carica il set definito in archivio per l'apertura; precarica lo standard
+// nella configurazione della posizione; consente opzioni aggiuntive e esclusione.
+async function cfgCoprifili(){
+  // Carica il set una sola volta per questa apertura
+  if(!CFG._coprifili_set || CFG._coprifili_set_apertura !== CFG.apertura){
+    const {data:set} = await sb.from('coprifili_set')
+      .select('*').eq('codice_apertura',CFG.apertura).eq('attivo',true)
+      .order('ordine').order('id');
+    CFG._coprifili_set = set||[];
+    CFG._coprifili_set_apertura = CFG.apertura;
+    // Se la config è vuota (nuova posizione), precarica le righe standard
+    if(!CFG.coprifili_config || CFG.coprifili_config.length===0){
+      CFG.coprifili_config = (set||[]).filter(s=>s.is_standard).map(s=>({
+        set_id:s.id, codice:s.codice_coprifilo||'', descrizione:s.descrizione||'',
+        quantita:parseFloat(s.quantita)||1, is_standard:true, supplemento:0, manuale:false
+      }));
+    }
+  }
+  ricalcolaPrezzoCoprifili();
+
+  const escl = !!CFG.escludi_coprifili;
+  const sel = CFG.coprifili_config||[];
+  const set = CFG._coprifili_set||[];
+  // Opzioni aggiuntive = righe del set non-standard non ancora selezionate
+  const selSetIds = new Set(sel.filter(r=>r.set_id).map(r=>r.set_id));
+  const opzioni = set.filter(s=>!s.is_standard && !selSetIds.has(s.id));
+
+  const righeSelHtml = sel.map((r,i)=>\`<tr>
+    <td style="padding:6px 8px">\${r.codice?'<span style="font-family:monospace;font-size:11px;color:var(--mid)">'+r.codice+'</span> ':''}\${r.descrizione||'<span style="color:var(--mid);font-style:italic">(senza descrizione)</span>'}
+      \${r.is_standard?'<span class="badge bg" style="margin-left:6px;font-size:10px">standard</span>':'<span class="badge bb" style="margin-left:6px;font-size:10px">opzione</span>'}</td>
+    <td style="padding:6px 8px;white-space:nowrap">
+      <input type="number" value="\${r.quantita}" min="0" step="1" onchange="setQtaCoprifilo(\${i},this.value)"
+        style="width:56px;padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px"> pz</td>
+    <td style="padding:6px 8px;text-align:right;white-space:nowrap">\${r.supplemento>0?'+ € '+Number(r.supplemento).toLocaleString('it-IT',{minimumFractionDigits:2}):'<span style="color:var(--green-tx)">incluso</span>'}</td>
+    <td style="padding:6px 8px;text-align:center"><button onclick="rimuoviCoprifilo(\${i})" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:15px" title="Rimuovi">×</button></td>
+  </tr>\`).join('');
+
+  const opzioniHtml = opzioni.map(s=>\`<div onclick="aggiungiCoprifiloDaSet(\${s.id})"
+    style="border:0.5px solid var(--border);border-radius:var(--radius);padding:8px 10px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px"
+    onmouseover="this.style.borderColor='var(--red)'" onmouseout="this.style.borderColor='var(--border)'">
+    <div><div style="font-size:12px;font-weight:500">\${s.descrizione||s.codice_coprifilo||'Opzione'}</div>
+      \${s.codice_coprifilo?'<div style="font-size:10px;font-family:monospace;color:var(--mid)">'+s.codice_coprifilo+'</div>':''}</div>
+    <div style="font-size:11px;color:var(--red);white-space:nowrap">\${(parseFloat(s.supplemento)||0)>0?'+ € '+Number(s.supplemento).toLocaleString('it-IT',{minimumFractionDigits:2}):'incluso'} &nbsp;+</div>
+  </div>\`).join('');
+
+  const noSet = set.length===0;
+  let html=\`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+    <div style="font-size:13px;font-weight:500">Coprifili <span style="color:var(--mid);font-weight:400">— \${CFG.nome_apertura||CFG.apertura||''}</span></div>
+    <button class="btn btn-sm" onclick="renderCfgStep('spessore')">← Indietro</button>
+  </div>
+  <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;padding:8px 12px;background:var(--beige);border-radius:var(--radius);cursor:pointer">
+    <input type="checkbox" \${escl?'checked':''} onchange="toggleEscludiCoprifili(this.checked)">
+    <span style="font-size:12px;color:var(--dark)"><strong>Escludi coprifili</strong> — la porta non prevede coprifili</span>
+  </label>
+  <div id="cfg-coprifili-wrap" style="display:\${escl?'none':'block'}">\`;
+
+  if(noSet){
+    html+=\`<div style="background:var(--amber-bg);border-radius:var(--radius);padding:10px 12px;font-size:12px;color:var(--amber-tx);margin-bottom:12px">
+      Nessun set coprifili definito in archivio per questa apertura (<strong>\${CFG.apertura||''}</strong>). Puoi aggiungere le righe manualmente qui sotto, oppure definire il set in Archivio → Telaio e componenti → Set coprifili.
+    </div>\`;
+  } else {
+    html+=\`<div style="background:var(--blue-bg);border-radius:var(--radius);padding:8px 12px;font-size:11px;color:var(--blue-tx);margin-bottom:12px">
+      Il set standard è già compreso nel prezzo della porta. Le opzioni aggiuntive possono comportare un supplemento.
+    </div>\`;
+  }
+
+  html+=\`<div style="font-size:12px;font-weight:500;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.4px;color:var(--mid)">Coprifili di questa posizione</div>
+    <table style="width:100%;border-collapse:collapse;margin-bottom:8px">
+      <tbody>\${righeSelHtml||'<tr><td colspan="4" style="padding:12px;text-align:center;color:var(--mid);font-style:italic;font-size:12px">Nessun coprifilo selezionato</td></tr>'}</tbody>
+    </table>
+    <div style="margin-bottom:16px"><button class="btn btn-sm" onclick="aggiungiCoprifiloManuale()" style="background:var(--light);color:var(--dark);border:0.5px solid var(--border)">+ Aggiungi riga manuale</button></div>\`;
+
+  if(opzioni.length){
+    html+=\`<div style="font-size:12px;font-weight:500;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.4px;color:var(--mid)">Opzioni aggiuntive</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:6px;margin-bottom:8px">\${opzioniHtml}</div>\`;
+  }
+
+  html+=\`</div>
+  <div style="display:flex;justify-content:flex-end;margin-top:8px">
+    <button class="btn btn-red btn-sm" onclick="renderCfgStep('ferramenta')">Avanti →</button>
+  </div>\`;
+  document.getElementById('cfg-body').innerHTML=html;
+}
+
+function ricalcolaPrezzoCoprifili(){
+  if(CFG.escludi_coprifili){ CFG.p_coprifili=0; CFG.nome_coprifili='Esclusi'; cfgUpdatePrice&&cfgUpdatePrice(); return; }
+  const sel = CFG.coprifili_config||[];
+  let supp=0;
+  sel.forEach(r=>{ supp += (parseFloat(r.supplemento)||0); });
+  CFG.p_coprifili = Math.round(supp*100)/100;
+  // Nome sintetico per descrizione/PDF
+  if(!sel.length) CFG.nome_coprifili='Nessuno';
+  else CFG.nome_coprifili = sel.map(r=>(r.descrizione||r.codice||'coprifilo')+(r.quantita>1?' ×'+r.quantita:'')).join(', ');
+}
+
+function toggleEscludiCoprifili(checked){
+  CFG.escludi_coprifili = !!checked;
+  const wrap=document.getElementById('cfg-coprifili-wrap');
+  if(wrap) wrap.style.display = checked?'none':'block';
+  ricalcolaPrezzoCoprifili();
+  cfgUpdatePrice();
+}
+
+function setQtaCoprifilo(idx,val){
+  if(!CFG.coprifili_config[idx]) return;
+  CFG.coprifili_config[idx].quantita = parseFloat(val)||0;
+  ricalcolaPrezzoCoprifili(); cfgUpdatePrice();
+}
+
+function rimuoviCoprifilo(idx){
+  CFG.coprifili_config.splice(idx,1);
+  ricalcolaPrezzoCoprifili();
+  renderCfgStep('coprifili');
+}
+
+function aggiungiCoprifiloDaSet(setId){
+  const s=(CFG._coprifili_set||[]).find(x=>x.id===setId);
+  if(!s) return;
+  CFG.coprifili_config.push({
+    set_id:s.id, codice:s.codice_coprifilo||'', descrizione:s.descrizione||'',
+    quantita:parseFloat(s.quantita)||1, is_standard:!!s.is_standard,
+    supplemento:parseFloat(s.supplemento)||0, manuale:false
+  });
+  ricalcolaPrezzoCoprifili();
+  renderCfgStep('coprifili');
+}
+
+function aggiungiCoprifiloManuale(){
+  const desc=prompt('Descrizione coprifilo (es. Coprifilo 90 mm):'); if(!desc) return;
+  const qta=parseFloat(prompt('Quantità (pz):','1'))||1;
+  const supp=parseFloat(prompt('Supplemento € (0 se incluso):','0'))||0;
+  CFG.coprifili_config.push({
+    set_id:null, codice:'', descrizione:desc.trim(), quantita:qta,
+    is_standard:false, supplemento:supp, manuale:true
+  });
+  ricalcolaPrezzoCoprifili();
+  renderCfgStep('coprifili');
 }
 
 async function cfgSerratura(){
@@ -4309,6 +4462,7 @@ async function cfgRiepilogo(){
     (p_misura_eff)>0&&{label:'Supplemento misura'+(CFG._pct_misura>0?\` (+\${CFG._pct_misura}%)\`:''),val:p_misura_eff},
     CFG.p_telaio>0&&{label:'Telaio / Spalla ('+CFG.spalla+')',val:CFG.p_telaio},
     CFG.p_acc_telaio>0&&{label:'Accessorio telaio ('+CFG.accessorio_telaio+')',val:CFG.p_acc_telaio},
+    (CFG.p_coprifili||0)>0&&{label:'Supplemento coprifili',val:CFG.p_coprifili},
     p_doppia_eff>0&&{label:'Supplemento doppia anta'+(CFG.apertura==='CS2A'?' incl. €124':''),val:p_doppia_eff},
     p_fh_eff>0&&{label:'Supplemento fuori misura H'+(CFG._fuori_h_pct?\` (+\${CFG._fuori_h_pct}%)\`:''),val:p_fh_eff},
     p_fl_eff>0&&{label:'Supplemento fuori misura L (+'+CFG._fuori_l_pct+'%)',val:p_fl_eff},
@@ -4333,6 +4487,13 @@ async function cfgRiepilogo(){
       <tr style="border-top:0.5px solid var(--border)"><td style="padding:8px 0;font-weight:500">Totale unitario</td><td style="text-align:right;font-size:16px;font-weight:500;color:var(--red)">€ \${tot.toLocaleString('it-IT',{minimumFractionDigits:2})}</td></tr>
       \${_imbTot>0?\`<tr><td style="padding:3px 0;color:var(--mid)">Imballo (\${CFG._imballo_desc})\${CFG._imballo_metodo==='a_scatola'?\` — \${Math.ceil((CFG.quantita||1)/Math.max(1,CFG._imballo_capienza||1))} scatola/e\`:''}</td><td style="text-align:right;font-weight:500">€ \${_imbTot.toLocaleString('it-IT',{minimumFractionDigits:2})}</td></tr>\`:''}
     </table>
+    \${(() => {
+      if(CFG.escludi_coprifili) return '<div style="font-size:11px;color:var(--mid);margin-bottom:12px">Coprifili: <strong>esclusi</strong></div>';
+      const cc = CFG.coprifili_config||[];
+      if(!cc.length) return '';
+      const txt = cc.map(r=>(r.descrizione||r.codice||'coprifilo')+(r.quantita>1?' ×'+r.quantita:'')).join(', ');
+      return '<div style="font-size:11px;color:var(--mid);margin-bottom:12px">Coprifili: '+txt+'</div>';
+    })()}
     \${_mostraPosa?\`<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:8px 12px;background:var(--beige);border-radius:var(--radius)">
       <input type="checkbox" id="cfg-posata" \${CFG.posata_da_noi?'checked':''} onchange="CFG.posata_da_noi=this.checked;cfgRiepilogo()">
       <label for="cfg-posata" style="font-size:12px;color:var(--dark);cursor:pointer">Porta <strong>posata da noi</strong> (cambia l'imballo)</label>
@@ -4408,6 +4569,9 @@ async function aggiungiRigaAlDocumento(){
     posata_da_noi:!!CFG.posata_da_noi,
     escludi_telaio:!!CFG.escludi_telaio,
     escludi_coprifili:!!CFG.escludi_coprifili,
+    // coprifili
+    coprifili_config: CFG.escludi_coprifili ? [] : (CFG.coprifili_config||[]),
+    prezzo_coprifili: CFG.escludi_coprifili ? 0 : (CFG.p_coprifili||0),
     note_riga:CFG.note_riga,
     stanza:CFG.stanza||null
   };
