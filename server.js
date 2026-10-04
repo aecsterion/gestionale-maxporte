@@ -3546,6 +3546,28 @@ async function cfgSpessore(){
     CFG.apertura==='ROTO'?'ROTO':
     CFG.apertura?.startsWith('CS')?'CS':'BAT';
 
+  // Filo muro: telaio in alluminio a misura unica, compreso nel prezzo della porta.
+  // Nessuna domanda spessore, nessuna spalla/prezzo telaio separato.
+  if(fam==='FM'){
+    CFG.escludi_telaio=false;
+    CFG.spessore=null; CFG.spalla='FM-ALU'; CFG.accessorio_telaio=null;
+    CFG.p_telaio=0; CFG.p_acc_telaio=0; CFG._cassone=null;
+    cfgUpdatePrice();
+    document.getElementById('cfg-body').innerHTML=\`
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div style="font-size:13px;font-weight:500">Telaio <span style="color:var(--mid);font-weight:400">— filo muro</span></div>
+        <button class="btn btn-sm" onclick="renderCfgStep('misure')">← Indietro</button>
+      </div>
+      <div style="background:var(--beige);border-radius:var(--radius);padding:14px;border:0.5px solid var(--border);margin-bottom:14px">
+        <div style="font-size:14px;font-weight:500">Telaio in alluminio filo muro</div>
+        <div style="font-size:12px;color:var(--mid);margin-top:4px">Misura unica — compreso nel prezzo della porta. Nessuno spessore muro da indicare.</div>
+      </div>
+      <div style="display:flex;justify-content:flex-end">
+        <button class="btn btn-red btn-sm" onclick="avanzaAFerramenta()">Avanti →</button>
+      </div>\`;
+    return;
+  }
+
   const escl = !!CFG.escludi_telaio;
   let html=\`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
     <div style="font-size:13px;font-weight:500">Spessore muro e telaio <span style="color:var(--mid);font-weight:400">— \${CFG.larghezza}×\${CFG.altezza} mm \${CFG.senso}</span></div>
@@ -3670,7 +3692,8 @@ function selCassone(kit, prezzo, cassone){
 }
 
 function avanzaAFerramenta(){
-  if(!CFG.escludi_telaio && !CFG.spessore){ toast('Inserisci lo spessore del muro (o spunta "Escludi telaio")','err'); return; }
+  const isFM = CFG.apertura && CFG.apertura.startsWith('FM');
+  if(!isFM && !CFG.escludi_telaio && !CFG.spessore){ toast('Inserisci lo spessore del muro (o spunta "Escludi telaio")','err'); return; }
   renderCfgStep('coprifili');
 }
 
