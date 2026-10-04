@@ -1323,11 +1323,13 @@ async function buildPreventivoPayload(id){
       tipologia:r.nome_apertura||'',
       spalla:r.codice_spalla||(r.spessore_muro_cm?r.spessore_muro_cm+'cm':''),
       ferramenta:r.nome_ferramenta||'',serratura:r.nome_serratura||'',
+      cilindro:r.nome_cilindro||'',pomolino:r.nome_pomolino||'',
       maniglia:r.nome_maniglia||'',versione_maniglia:'',
       colore_maniglia:r.nome_colore_maniglia||'',vetro:r.nome_tipo_vetro||'',
       bugna:r.pannello_bugna||'',colore_inserto:r.nome_colore_alu||r.nome_colore_pietra||'',
       stanza:r.stanza||'',note_riga:r.note_riga||'',
       lavorazioni_extra:r.lavorazioni_extra||'',
+      prezzo_cilindro:r.prezzo_cilindro||0,prezzo_pomolino:r.prezzo_pomolino||0,
       coprifili:descrCoprifiliPDF(r),
       finitura_coprifili:(r.codice_finitura_telaio&&r.codice_finitura_telaio!==r.codice_finitura)?(r.nome_finitura_telaio||''):'',
       finitura_telaio:(r.codice_finitura_telaio&&r.codice_finitura_telaio!==r.codice_finitura)?(r.nome_finitura_telaio||''):'',
@@ -2492,6 +2494,9 @@ async function modificaRiga(tabella, rigaId, docId, mode, listino_in){
   CFG.spessore=r.spessore_muro_cm||null;
   CFG.spalla=r.codice_spalla||null; CFG.accessorio_telaio=r.tipo_accessorio_telaio||null;
   CFG.ferramenta=r.codice_ferramenta||null; CFG.nome_ferramenta=r.nome_ferramenta||'';
+  CFG.serratura=r.codice_serratura||null; CFG.nome_serratura=r.nome_serratura||''; CFG.p_serratura=parseFloat(r.prezzo_serratura)||0;
+  CFG.cilindro=r.codice_cilindro||null; CFG.nome_cilindro=r.nome_cilindro||''; CFG.p_cilindro=parseFloat(r.prezzo_cilindro)||0;
+  CFG.pomolino=r.codice_pomolino||null; CFG.nome_pomolino=r.nome_pomolino||''; CFG.p_pomolino=parseFloat(r.prezzo_pomolino)||0;
   CFG.maniglia=r.codice_maniglia||null; CFG.nome_maniglia=r.nome_maniglia||'';
   CFG.colore_maniglia=r.codice_colore_maniglia||null; CFG.nome_colore_maniglia=r.nome_colore_maniglia||'';
   CFG.quantita=r.quantita||1; CFG.note_riga=r.note_riga||''; CFG.stanza=r.stanza||'';
@@ -4717,6 +4722,10 @@ async function aggiungiRigaAlDocumento(){
     prezzo_telaio:CFG.p_telaio, prezzo_accessorio_telaio:CFG.p_acc_telaio,
     prezzo_ferramenta:CFG.p_ferramenta, prezzo_maniglia:CFG.p_maniglia,
     prezzo_extra_incisioni:CFG.p_extra_incisioni,
+    // serratura / cilindro / pomolino
+    codice_serratura:CFG.serratura||null, nome_serratura:CFG.nome_serratura||'', prezzo_serratura:CFG.p_serratura||0,
+    codice_cilindro:CFG.cilindro||null, nome_cilindro:CFG.nome_cilindro||'', prezzo_cilindro:CFG.p_cilindro||0,
+    codice_pomolino:CFG.pomolino||null, nome_pomolino:CFG.nome_pomolino||'', prezzo_pomolino:CFG.p_pomolino||0,
     prezzo_unitario:tot, quantita:CFG.quantita,
     prezzo_totale_riga:Math.round((tot*CFG.quantita+_imbTot)*100)/100,
     // imballo
@@ -8080,6 +8089,8 @@ async function eseguiEsportaPDF() {
         spalla: r.codice_spalla || (r.spessore_muro_cm ? r.spessore_muro_cm+'cm' : ''),
         ferramenta: r.nome_ferramenta || '',
         serratura: r.nome_serratura || '',
+        cilindro: r.nome_cilindro || '',
+        pomolino: r.nome_pomolino || '',
         maniglia: r.nome_maniglia || '',
         versione_maniglia: '',
         colore_maniglia: r.nome_colore_maniglia || '',
@@ -8100,6 +8111,8 @@ async function eseguiEsportaPDF() {
         prezzo_ferramenta: r.prezzo_ferramenta || 0,
         prezzo_maniglia: r.prezzo_maniglia || 0,
         prezzo_serratura: r.prezzo_serratura || 0,
+        prezzo_cilindro: r.prezzo_cilindro || 0,
+        prezzo_pomolino: r.prezzo_pomolino || 0,
         prezzo_vetro: r.prezzo_vetro || 0,
         prezzo_bugna: r.prezzo_bugna || 0,
         prezzo_extra: r.prezzo_extra_incisioni || 0,
