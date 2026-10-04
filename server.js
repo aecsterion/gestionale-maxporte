@@ -1328,6 +1328,10 @@ async function buildPreventivoPayload(id){
       bugna:r.pannello_bugna||'',colore_inserto:r.nome_colore_alu||r.nome_colore_pietra||'',
       stanza:r.stanza||'',note_riga:r.note_riga||'',
       lavorazioni_extra:r.lavorazioni_extra||'',
+      coprifili:descrCoprifiliPDF(r),
+      finitura_coprifili:(r.codice_finitura_telaio&&r.codice_finitura_telaio!==r.codice_finitura)?(r.nome_finitura_telaio||''):'',
+      finitura_telaio:(r.codice_finitura_telaio&&r.codice_finitura_telaio!==r.codice_finitura)?(r.nome_finitura_telaio||''):'',
+      prezzo_coprifili:r.prezzo_coprifili||0,
       prezzo_base:r.prezzo_base||0,prezzo_finitura:r.prezzo_finitura||0,
       prezzo_apertura:r.prezzo_apertura||0,prezzo_telaio:r.prezzo_telaio||0,
       prezzo_ferramenta:r.prezzo_ferramenta||0,prezzo_maniglia:r.prezzo_maniglia||0,
@@ -1339,6 +1343,24 @@ async function buildPreventivoPayload(id){
       fuori_misura_l:r.fuori_misura_l?'Si':'',fuori_misura_h:r.fuori_misura_h?'Si':'',
       immagine_url:r.immagine_url||''};
   })};
+}
+
+// Descrizione coprifili per il PDF, dal coprifili_config salvato sulla riga
+function descrCoprifiliPDF(r){
+  if(r.escludi_coprifili) return 'Esclusi';
+  const cc = (r.coprifili_config && typeof r.coprifili_config==='object' && !Array.isArray(r.coprifili_config)) ? r.coprifili_config : null;
+  if(!cc) return '';
+  const sp=cc.spingere||{}, ti=cc.tirare||{};
+  const ls=sp.larghezza, lt=ti.larghezza;
+  let prof='';
+  if(ls&&lt) prof = (ls===lt) ? (ls+'mm') : ('spingere '+ls+'mm / tirare '+lt+'mm');
+  else if(ls||lt) prof = (ls||lt)+'mm';
+  const lav=[];
+  if(sp.lavorazione) lav.push('spingere: '+sp.lavorazione);
+  if(ti.lavorazione) lav.push('tirare: '+ti.lavorazione);
+  let txt = prof || 'Coprifili';
+  if(lav.length) txt += ' ('+lav.join('; ')+')';
+  return txt;
 }
 async function apriModalInvioPreventivo(docId){
   var r=await sb.from('preventivi').select('*,anagrafiche(*)').eq('id',docId).single();
@@ -8065,6 +8087,11 @@ async function eseguiEsportaPDF() {
         bugna: r.pannello_bugna || '',
         colore_inserto: r.nome_colore_alu || r.nome_colore_pietra || '',
         note_riga: r.note_riga || '',
+        // Coprifili + colore telaio (solo se diverso dalla porta)
+        coprifili: descrCoprifiliPDF(r),
+        finitura_coprifili: (r.codice_finitura_telaio && r.codice_finitura_telaio!==r.codice_finitura) ? (r.nome_finitura_telaio||'') : '',
+        finitura_telaio: (r.codice_finitura_telaio && r.codice_finitura_telaio!==r.codice_finitura) ? (r.nome_finitura_telaio||'') : '',
+        prezzo_coprifili: r.prezzo_coprifili || 0,
         // Prezzi
         prezzo_base: r.prezzo_base || 0,
         prezzo_finitura: r.prezzo_finitura || 0,

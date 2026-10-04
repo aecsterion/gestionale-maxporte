@@ -30,6 +30,7 @@ DETAIL_MAP = [
     ('Colore',                  'finitura',                'prezzo_finitura', 'prezzo_finitura_scontato', 'totale_riga_colore'),
     ('Colore telaio',           'finitura_telaio',         'supplemento_bicolore', 'supplemento_bicolore_scontato', 'totale_riga_colore_telaio'),
     ('Colore coprifili',        'finitura_coprifili',      'supplemento_bicolore', 'supplemento_bicolore_scontato', 'totale_riga_colore_coprifili'),
+    ('Coprifili',               'coprifili',               'prezzo_coprifili', 'prezzo_coprifili_scontato', 'totale_riga_coprifili'),
     ('Colore pietra',           'colore_pietra',           'supplemento_colore_pietra', 'supplemento_colore_pietra_scontato', 'totale_riga_colore_pietra'),
     ('Colore inserto',          'colore_inserto',          'supplemento_colore_inserto', 'supplemento_colore_inserto_scontato', 'totale_riga_colore_inserto'),
     ('Vetro',                   'vetro',                   'prezzo_vetro', 'prezzo_vetro_scontato', 'totale_riga_vetro'),
