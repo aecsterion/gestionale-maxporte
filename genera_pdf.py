@@ -12,7 +12,8 @@ from openpyxl.utils import get_column_letter
 VERSION = "2026-05-25-v2"
 
 # ── Costanti impaginazione (pt) ────────────────────────────────────────────
-ROW_H = 13.9          # altezza riga default del template
+ROW_H = 13.9          # altezza riga default del template (header)
+ROW_H_DETT = 16.5     # altezza righe dettaglio posizione (più respiro)
 HEADER_FIRST_END = 30  # ultima riga header prima pagina
 HEADER_INTER_END = 18  # ultima riga header pagine intermedie
 
@@ -273,16 +274,16 @@ def write_position(ws_dst, ws_tmpl_inter, cur_row, riga, sconto_str, sconto_pct=
         # La cella valore (col 16-26) è larga ~11 colonne da 2.42 char ≈ 50 caratteri
         CHARS_PER_LINE = 50
         n_lines = max(1, -(-len(str(value)) // CHARS_PER_LINE))  # ceil division
-        if n_lines > 1:
-            ws_dst.row_dimensions[cur_row].height = ROW_H * n_lines
+        ws_dst.row_dimensions[cur_row].height = ROW_H_DETT * n_lines
         cur_row += 1
     
-    # Footer posizione (template riga 47)
-    for cell in ws_tmpl_inter[47]:
+    # Footer posizione (template riga 48: nota immagine B48:O48 + Totale posizione V48 + importo AJ48)
+    FOOTER_ROW = 48
+    for cell in ws_tmpl_inter[FOOTER_ROW]:
         if isinstance(cell, MergedCell): continue
         dst = ws_dst.cell(row=cur_row, column=cell.column)
         copy_style(cell, dst)
-    
+
     ws_dst.cell(row=cur_row, column=2).value = "** L'immagine è puramente rappresentativa"
     ws_dst.cell(row=cur_row, column=22).value = "Totale posizione (IVA esclusa)"
     # Totale posizione = somma dei netti delle voci × quantità
@@ -292,9 +293,15 @@ def write_position(ws_dst, ws_tmpl_inter, cur_row, riga, sconto_str, sconto_pct=
         qta = 1
     tot_pos = round(tot_netto_pos * qta, 2)
     ws_dst.cell(row=cur_row, column=36).value = ('€ ' + fmt_eur(tot_pos)) if fmt_eur(tot_pos) else ''
-    
-    for mc, xc in get_merges_for_row(ws_tmpl_inter, 47):
+
+    # Merge dal template riga 48 (include B..O per la nota immagine)
+    for mc, xc in get_merges_for_row(ws_tmpl_inter, FOOTER_ROW):
         ws_dst.merge_cells(start_row=cur_row, start_column=mc, end_row=cur_row, end_column=xc)
+    # Fallback: assicura il merge della nota immagine B..O anche se il template cambia
+    try:
+        ws_dst.merge_cells(start_row=cur_row, start_column=2, end_row=cur_row, end_column=15)
+    except Exception:
+        pass
     # NON forzare altezza footer — si espande se le note sono lunghe
     cur_row += 1
     
@@ -479,11 +486,16 @@ def genera_workbook(data, template_path):
     page_num = 1
     pos_idx = 0
     
+    # Altezza reale di una posizione: top + footer con ROW_H, dettagli con ROW_H_DETT
+    def pos_height(riga):
+        tot = count_visible_rows(riga)       # top + dettagli + footer
+        dett = max(0, tot - 2)
+        return 2*ROW_H + dett*ROW_H_DETT
+
     while pos_idx < len(righe):
         riga = righe[pos_idx]
-        pos_rows = count_visible_rows(riga)
-        pos_h = pos_rows * ROW_H
-        
+        pos_h = pos_height(riga)
+
         if used_h + pos_h > avail_h and used_h > 0:
             # Non ci sta — nuova pagina
             page_num += 1
@@ -492,9 +504,9 @@ def genera_workbook(data, template_path):
             cur = copy_rows(ws_inter, ws, 1, HEADER_INTER_END, 1, m)
             used_h = 0
             avail_h = PAGE_H - header_inter_h
-        
+
         cur, written = write_position(ws, ws_inter, cur, riga, sconto_str, sconto_pct, solo_netti)
-        used_h += written * ROW_H
+        used_h += pos_h
         pos_idx += 1
     
     # ── Ultimo foglio: Pagina finale (riepilogo) ──────────────────────────
