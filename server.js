@@ -2307,10 +2307,10 @@ function resetCFG(){
     escludi_telaio:false, escludi_coprifili:false,
     // coprifili (varianti per apertura, profilo per lato; colore = finitura telaio; lunghezza allo scarico)
     coprifili_variante_id:null,
-    cf_larg_spingere:null, cf_aste_spingere:2.5,
-    cf_larg_tirare:null, cf_aste_tirare:2.5,
+    cf_larg_spingere:null, cf_aste_spingere:2.5, cf_lav_spingere:'',
+    cf_larg_tirare:null, cf_aste_tirare:2.5, cf_lav_tirare:'',
     coprifili_config:null,    // snapshot salvato sulla riga
-    _coprifili_varianti:undefined, _coprifili_set_apertura:null,
+    _coprifili_varianti:undefined, _coprifili_set_apertura:null, _coprifili_escludi_tocco:false,
     p_coprifili:0,
     nome_coprifili:''
   };
@@ -2480,8 +2480,10 @@ async function modificaRiga(tabella, rigaId, docId, mode, listino_in){
   CFG.coprifili_variante_id = _cc && _cc.variante_id!=null ? _cc.variante_id : null;
   CFG.cf_larg_spingere = _cc && _cc.spingere ? (_cc.spingere.larghezza||null) : null;
   CFG.cf_aste_spingere = _cc && _cc.spingere && _cc.spingere.aste!=null ? parseFloat(_cc.spingere.aste) : 2.5;
+  CFG.cf_lav_spingere = _cc && _cc.spingere ? (_cc.spingere.lavorazione||'') : '';
   CFG.cf_larg_tirare = _cc && _cc.tirare ? (_cc.tirare.larghezza||null) : null;
   CFG.cf_aste_tirare = _cc && _cc.tirare && _cc.tirare.aste!=null ? parseFloat(_cc.tirare.aste) : 2.5;
+  CFG.cf_lav_tirare = _cc && _cc.tirare ? (_cc.tirare.lavorazione||'') : '';
   CFG.p_coprifili = parseFloat(r.prezzo_coprifili)||0;
   CFG._coprifili_varianti = undefined; CFG._coprifili_set_apertura = null; // forza ricarica in cfgCoprifili
   // Precarica i prezzi salvati, così scorrendo con "Avanti" (senza ri-selezionare)
@@ -3688,6 +3690,8 @@ function _applicaVarianteCoprifilo(v){
   CFG.cf_larg_tirare = v.larghezza_tirare||null;
   CFG.cf_aste_spingere = v.aste_spingere!=null?parseFloat(v.aste_spingere):2.5;
   CFG.cf_aste_tirare = v.aste_tirare!=null?parseFloat(v.aste_tirare):2.5;
+  CFG.cf_lav_spingere = v.lavorazione_spingere||'';
+  CFG.cf_lav_tirare = v.lavorazione_tirare||'';
 }
 async function cfgCoprifili(){
   // Carica le varianti dell'apertura una volta sola
@@ -3701,6 +3705,8 @@ async function cfgCoprifili(){
     if(CFG.coprifili_variante_id==null){
       const std = (vars||[]).find(v=>v.is_standard) || (vars||[])[0];
       if(std) _applicaVarianteCoprifilo(std);
+      // Apertura senza varianti (es. filo muro) → coprifili esclusi di default
+      else if(!CFG._coprifili_escludi_tocco) CFG.escludi_coprifili = true;
     } else {
       // In modifica: riallinea l'oggetto variante se presente
       const cur = (vars||[]).find(v=>v.id===CFG.coprifili_variante_id);
@@ -3752,10 +3758,12 @@ async function cfgCoprifili(){
         <div style="padding:8px 10px;background:var(--white);border-radius:var(--radius);border:0.5px solid var(--border)">
           <div style="font-size:10px;color:var(--mid);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:4px">Lato a spingere</div>
           <div style="font-size:14px;font-weight:500">\${ls} mm · \${as} aste</div>
+          \${CFG.cf_lav_spingere?\`<div style="font-size:11px;color:var(--amber-tx);margin-top:3px">⚙ \${CFG.cf_lav_spingere}</div>\`:''}
         </div>
         <div style="padding:8px 10px;background:var(--white);border-radius:var(--radius);border:0.5px solid var(--border)">
           <div style="font-size:10px;color:var(--mid);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:4px">Lato a tirare</div>
           <div style="font-size:14px;font-weight:500">\${lt} mm · \${at} aste</div>
+          \${CFG.cf_lav_tirare?\`<div style="font-size:11px;color:var(--amber-tx);margin-top:3px">⚙ \${CFG.cf_lav_tirare}</div>\`:''}
         </div>
       </div>
       <div style="margin-top:12px;padding-top:12px;border-top:0.5px solid var(--border);display:flex;justify-content:space-between;align-items:center">
@@ -3795,6 +3803,7 @@ function ricalcolaPrezzoCoprifili(){
 
 function toggleEscludiCoprifili(checked){
   CFG.escludi_coprifili = !!checked;
+  CFG._coprifili_escludi_tocco = true; // l'operatore ha deciso: non riforzare l'auto-escludi
   const wrap=document.getElementById('cfg-coprifili-wrap');
   if(wrap) wrap.style.display = checked?'none':'block';
   ricalcolaPrezzoCoprifili();
@@ -4675,8 +4684,8 @@ async function aggiungiRigaAlDocumento(){
     // coprifili (snapshot: variante + profilo per lato; colore=finitura telaio; lunghezza allo scarico)
     coprifili_config: CFG.escludi_coprifili ? null : {
       variante_id: CFG.coprifili_variante_id||null,
-      spingere: { larghezza: CFG.cf_larg_spingere||null, aste: CFG.cf_aste_spingere!=null?CFG.cf_aste_spingere:2.5 },
-      tirare:   { larghezza: CFG.cf_larg_tirare||null,   aste: CFG.cf_aste_tirare!=null?CFG.cf_aste_tirare:2.5 },
+      spingere: { larghezza: CFG.cf_larg_spingere||null, aste: CFG.cf_aste_spingere!=null?CFG.cf_aste_spingere:2.5, lavorazione: CFG.cf_lav_spingere||null },
+      tirare:   { larghezza: CFG.cf_larg_tirare||null,   aste: CFG.cf_aste_tirare!=null?CFG.cf_aste_tirare:2.5, lavorazione: CFG.cf_lav_tirare||null },
       colore_codice: CFG.finitura_telaio || CFG.finitura || null,
       colore_nome: CFG.nome_finitura_telaio || CFG.nome_finitura || null
     },
@@ -6679,10 +6688,12 @@ async function adminCoprifiliSet(){
   const varianti=(sets||[]).filter(s=>s.codice_apertura===apSel);
   const rows=varianti.map(s=>\`<tr>
     <td>\${inlineInput(s.descrizione_variante||'',\`adminSalva('coprifili_set','\${s.id}','descrizione_variante',this.value)\`,'130px','text','es. Standard 65/65')}</td>
-    <td style="white-space:nowrap">\${_coprLargSel(apSel,s.id,'larghezza_spingere',s.larghezza_spingere)} mm
-      · <input type="number" value="\${s.aste_spingere!=null?s.aste_spingere:2.5}" min="0" step="0.5" onchange="adminSalva('coprifili_set','\${s.id}','aste_spingere',this.value)" style="width:48px;padding:3px 5px;border:0.5px solid var(--border);border-radius:4px;font-size:12px"> aste</td>
-    <td style="white-space:nowrap">\${_coprLargSel(apSel,s.id,'larghezza_tirare',s.larghezza_tirare)} mm
-      · <input type="number" value="\${s.aste_tirare!=null?s.aste_tirare:2.5}" min="0" step="0.5" onchange="adminSalva('coprifili_set','\${s.id}','aste_tirare',this.value)" style="width:48px;padding:3px 5px;border:0.5px solid var(--border);border-radius:4px;font-size:12px"> aste</td>
+    <td style="white-space:nowrap"><div>\${_coprLargSel(apSel,s.id,'larghezza_spingere',s.larghezza_spingere)} mm
+      · <input type="number" value="\${s.aste_spingere!=null?s.aste_spingere:2.5}" min="0" step="0.5" onchange="adminSalva('coprifili_set','\${s.id}','aste_spingere',this.value)" style="width:48px;padding:3px 5px;border:0.5px solid var(--border);border-radius:4px;font-size:12px"> aste</div>
+      <div style="margin-top:3px">\${inlineInput(s.lavorazione_spingere||'',\`adminSalva('coprifili_set','\${s.id}','lavorazione_spingere',this.value)\`,'130px','text','lavoraz. (es. complanare)')}</div></td>
+    <td style="white-space:nowrap"><div>\${_coprLargSel(apSel,s.id,'larghezza_tirare',s.larghezza_tirare)} mm
+      · <input type="number" value="\${s.aste_tirare!=null?s.aste_tirare:2.5}" min="0" step="0.5" onchange="adminSalva('coprifili_set','\${s.id}','aste_tirare',this.value)" style="width:48px;padding:3px 5px;border:0.5px solid var(--border);border-radius:4px;font-size:12px"> aste</div>
+      <div style="margin-top:3px">\${inlineInput(s.lavorazione_tirare||'',\`adminSalva('coprifili_set','\${s.id}','lavorazione_tirare',this.value)\`,'130px','text','lavoraz. (opz.)')}</div></td>
     <td style="text-align:center"><input type="radio" name="copstd-\${apSel}" \${s.is_standard?'checked':''} onchange="setVarianteStandard('\${apSel}','\${s.id}')" style="cursor:pointer;accent-color:var(--red)" title="Variante standard (precaricata, inclusa nel prezzo)"></td>
     <td>\${inlineInput(s.supplemento??0,\`adminSalva('coprifili_set','\${s.id}','supplemento',this.value)\`,'60px','number','€')}</td>
     <td>\${inlineInput(s.ordine??0,\`adminSalva('coprifili_set','\${s.id}','ordine',this.value)\`,'42px','number')}</td>
@@ -6698,7 +6709,7 @@ async function adminCoprifiliSet(){
   </div>
   \${adminCard('Set coprifili — '+apSel+(nomeApt?' · '+nomeApt:''),\`
     <div style="background:var(--blue-bg);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--blue-tx);margin-bottom:10px">
-      Definisci le <b>varianti</b> di coprifilo per questa apertura. Per ogni variante imposta la larghezza e il n. di aste <b>per lato</b> (a spingere / a tirare) — così gestisci anche i casi 65 da un lato e 90 dall'altro. Segna come <b>Standard</b> la variante precaricata nel configuratore (compresa nel prezzo); le altre restano selezionabili come opzioni con eventuale <b>supplemento</b>. Il colore segue la finitura telaio; la lunghezza 2250/3000 (sopraluce) si risolve allo scarico.
+      Definisci le <b>varianti</b> di coprifilo per questa apertura. Per ogni variante imposta la larghezza e il n. di aste <b>per lato</b> (a spingere / a tirare) — così gestisci anche i casi 65 da un lato e 90 dall'altro. Il campo <b>lavorazione</b> per lato serve per casi come la <b>complanare</b> (stessa asta ma con una lavorazione speciale su un lato): viene riportato in produzione, non cambia l'articolo a magazzino. Segna come <b>Standard</b> la variante precaricata nel configuratore (compresa nel prezzo); le altre restano selezionabili come opzioni con eventuale <b>supplemento</b>. Il colore segue la finitura telaio; la lunghezza 2250/3000 (sopraluce) si risolve allo scarico. Lascia un'apertura <b>senza varianti</b> (es. filo muro) per farla partire già su "coprifili esclusi".
     </div>
     <div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-red btn-sm" onclick="nuovaVarianteCoprifilo('\${apSel}',\${varianti.length})">+ Aggiungi variante</button>
