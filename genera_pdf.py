@@ -283,8 +283,8 @@ def write_position(ws_dst, ws_tmpl_inter, cur_row, riga, sconto_str, sconto_pct=
         ws_dst.row_dimensions[cur_row].height = ROW_H_DETT * n_lines
         cur_row += 1
     
-    # Footer posizione (template riga 48: nota immagine B48:O48 + Totale posizione V48 + importo AJ48)
-    FOOTER_ROW = 48
+    # Footer posizione (template riga 49: nota immagine B49:O49 + Totale posizione V49 + importo AJ49)
+    FOOTER_ROW = 49
     for cell in ws_tmpl_inter[FOOTER_ROW]:
         if isinstance(cell, MergedCell): continue
         dst = ws_dst.cell(row=cur_row, column=cell.column)
