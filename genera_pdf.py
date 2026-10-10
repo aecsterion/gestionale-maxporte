@@ -251,13 +251,21 @@ def write_position(ws_dst, ws_tmpl_inter, cur_row, riga, sconto_str, sconto_pct=
         ws_dst.cell(row=cur_row, column=8).value = label
         val_cell = ws_dst.cell(row=cur_row, column=16)
         val_cell.value = value
-        # Assicura wrap_text per testi lunghi
+        # Assicura wrap_text + allineamento in alto (così label e valore wrappato
+        # partono dalla stessa riga e il testo multi-linea non viene tagliato)
         from openpyxl.styles import Alignment as Al
         old_al = val_cell.alignment or Al()
         val_cell.alignment = Al(
-            horizontal=old_al.horizontal, vertical=old_al.vertical or 'top',
+            horizontal=old_al.horizontal, vertical='top',
             wrap_text=True, shrink_to_fit=old_al.shrink_to_fit,
             indent=old_al.indent, text_rotation=old_al.text_rotation)
+        # Etichetta (col 8) anch'essa in alto per allinearla alla prima riga del valore
+        lbl_cell = ws_dst.cell(row=cur_row, column=8)
+        lbl_al = lbl_cell.alignment or Al()
+        lbl_cell.alignment = Al(
+            horizontal=lbl_al.horizontal, vertical='top',
+            wrap_text=lbl_al.wrap_text, shrink_to_fit=lbl_al.shrink_to_fit,
+            indent=lbl_al.indent, text_rotation=lbl_al.text_rotation)
         
         if has_price:
             eur = lambda x: ('€ ' + fmt_eur(x)) if fmt_eur(x) else ''
@@ -277,10 +285,16 @@ def write_position(ws_dst, ws_tmpl_inter, cur_row, riga, sconto_str, sconto_pct=
             ws_dst.merge_cells(start_row=cur_row, start_column=mc, end_row=cur_row, end_column=xc)
         
         # LibreOffice non auto-espande righe con celle merged → calcolo altezza
-        # La cella valore (col 16-26) è larga ~11 colonne da 2.42 char ≈ 50 caratteri
-        CHARS_PER_LINE = 50
-        n_lines = max(1, -(-len(str(value)) // CHARS_PER_LINE))  # ceil division
-        ws_dst.row_dimensions[cur_row].height = ROW_H_DETT * n_lines
+        # La cella valore (col 16-26) è larga ~11 colonne da 2.42 char ≈ 46 caratteri.
+        # Altezza = aria fissa + altezza-testo per ogni riga wrappata, così le righe
+        # multi-linea non restano tagliate sopra/sotto.
+        # Stima prudente delle righe: la cella valore contiene ~28 caratteri/riga.
+        # Meglio sovrastimare (più aria) che tagliare il testo.
+        CHARS_PER_LINE = 28
+        LINE_TXT_H = 13.0   # altezza di una riga di testo pura
+        ROW_AIR    = 4.0    # aria/padding verticale (1 riga ≈ 17)
+        n_lines = max(1, -(-len(str(value).strip()) // CHARS_PER_LINE))  # ceil division
+        ws_dst.row_dimensions[cur_row].height = round(ROW_AIR + LINE_TXT_H * n_lines, 1)
         cur_row += 1
     
     # Footer posizione (template riga 49: nota immagine B49:O49 + Totale posizione V49 + importo AJ49)
@@ -492,11 +506,18 @@ def genera_workbook(data, template_path):
     page_num = 1
     pos_idx = 0
     
-    # Altezza reale di una posizione: top + footer con ROW_H, dettagli con ROW_H_DETT
+    # Altezza reale di una posizione: top + footer con ROW_H, dettagli con
+    # l'altezza effettiva (tiene conto del wrapping dei valori lunghi)
     def pos_height(riga):
-        tot = count_visible_rows(riga)       # top + dettagli + footer
-        dett = max(0, tot - 2)
-        return 2*ROW_H + dett*ROW_H_DETT
+        CHARS_PER_LINE = 28; LINE_TXT_H = 13.0; ROW_AIR = 4.0
+        h = 2 * ROW_H  # top + footer
+        for label, campo_val, campo_prz, campo_net, campo_tot in DETAIL_MAP:
+            value = v(riga, campo_val)
+            prezzo = v(riga, campo_prz) if campo_prz else ''
+            if has_val(value) or has_val(prezzo):
+                nlin = max(1, -(-len(str(value).strip()) // CHARS_PER_LINE))
+                h += round(ROW_AIR + LINE_TXT_H * nlin, 1)
+        return h
 
     tot_posizioni = 0.0   # somma reale dei "Totale posizione" (imballo pieno + voci scontate)
     while pos_idx < len(righe):
