@@ -342,8 +342,9 @@ def count_visible_rows(riga):
 
 # ── Setup pagina ──────────────────────────────────────────────────────────
 
-def setup_page(ws, ws_tmpl):
-    """Applica setup pagina dal template."""
+def setup_page(ws, ws_tmpl, page_num=None, page_tot=None):
+    """Applica setup pagina dal template. Se page_num/page_tot sono dati,
+    scrive il piè di pagina 'Pag. N di T' (ogni foglio = 1 pagina PDF)."""
     ws.sheet_format.defaultColWidth = 2.42578125
     ws.sheet_format.defaultRowHeight = ROW_H
     ws.sheet_format.customHeight = True
@@ -353,6 +354,20 @@ def setup_page(ws, ws_tmpl):
     ws.page_setup.fitToHeight = 0
     ws.sheet_properties.pageSetUpPr.fitToPage = True
     ws.page_margins = copy(ws_tmpl.page_margins)
+    # Piè di pagina: riporta il testo del template, sostituendo i placeholder
+    # del numero pagina con i valori reali (ogni foglio corrisponde a 1 pagina).
+    try:
+        for sec in ('left', 'center', 'right'):
+            t = getattr(ws_tmpl.oddFooter, sec).text
+            if not t:
+                continue
+            if page_num is not None:
+                t = t.replace('*NUMERO_PAGINA*', str(page_num))
+            if page_tot is not None:
+                t = t.replace('*TOTALE_PAGINE*', str(page_tot))
+            getattr(ws.oddFooter, sec).text = t
+    except Exception:
+        pass
 
 # ── Genera il workbook completo ───────────────────────────────────────────
 
@@ -579,7 +594,21 @@ def genera_workbook(data, template_path):
     # Copia tutto il contenuto della pagina finale
     max_row_finale = ws_finale.max_row
     copy_rows(ws_finale, ws_last, 1, max_row_finale, 1, m)
-    
+
+    # ── Piè di pagina "Pag. N di T" su ogni foglio (= 1 pagina PDF) ────────
+    try:
+        fogli = wb.worksheets
+        tot = len(fogli)
+        for i, ws in enumerate(fogli, start=1):
+            for sec in ('left', 'center', 'right'):
+                t = getattr(ws_inter.oddFooter, sec).text
+                if not t:
+                    continue
+                t = t.replace('*NUMERO_PAGINA*', str(i)).replace('*TOTALE_PAGINE*', str(tot))
+                getattr(ws.oddFooter, sec).text = t
+    except Exception:
+        pass
+
     return wb
 
 # ── Logo overlay sul PDF ──────────────────────────────────────────────────
