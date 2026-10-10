@@ -361,20 +361,8 @@ def setup_page(ws, ws_tmpl, page_num=None, page_tot=None):
         ws.page_margins.footer = 0.2   # ~5mm (il footer sta tra bordo e bottom)
     except Exception:
         pass
-    # Piè di pagina: riporta il testo del template, sostituendo i placeholder
-    # del numero pagina con i valori reali (ogni foglio corrisponde a 1 pagina).
-    try:
-        for sec in ('left', 'center', 'right'):
-            t = getattr(ws_tmpl.oddFooter, sec).text
-            if not t:
-                continue
-            if page_num is not None:
-                t = t.replace('*NUMERO_PAGINA*', str(page_num))
-            if page_tot is not None:
-                t = t.replace('*TOTALE_PAGINE*', str(page_tot))
-            getattr(ws.oddFooter, sec).text = t
-    except Exception:
-        pass
+    # Il piè di pagina (testo + formattazione) è impostato a fine genera_workbook,
+    # quando si conosce il totale pagine.
 
 # ── Genera il workbook completo ───────────────────────────────────────────
 
@@ -604,16 +592,27 @@ def genera_workbook(data, template_path):
     copy_rows(ws_finale, ws_last, 1, max_row_finale, 1, m)
 
     # ── Piè di pagina "Pag. N di T" su ogni foglio (= 1 pagina PDF) ────────
+    # Preserva la formattazione (font, dimensione, colore) impostata nel template:
+    # scrivere solo .text la resetterebbe ai default.
     try:
         fogli = wb.worksheets
         tot = len(fogli)
         for i, ws in enumerate(fogli, start=1):
             for sec in ('left', 'center', 'right'):
-                t = getattr(ws_inter.oddFooter, sec).text
+                src = getattr(ws_inter.oddFooter, sec)
+                t = src.text
                 if not t:
                     continue
                 t = t.replace('*NUMERO_PAGINA*', str(i)).replace('*TOTALE_PAGINE*', str(tot))
-                getattr(ws.oddFooter, sec).text = t
+                dst = getattr(ws.oddFooter, sec)
+                dst.text = t
+                # Ripristina gli attributi di formattazione dal template
+                try:
+                    if src.font is not None:  dst.font = src.font
+                    if src.size is not None:  dst.size = src.size
+                    if src.color is not None: dst.color = src.color
+                except Exception:
+                    pass
     except Exception:
         pass
 
