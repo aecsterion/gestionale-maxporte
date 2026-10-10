@@ -490,8 +490,9 @@ def genera_workbook(data, template_path):
     header_first_h = real_header_h(ws_prima, HEADER_FIRST_END)
     header_inter_h = real_header_h(ws_inter, HEADER_INTER_END)
     
-    # Capacità pagina effettiva (calibrata su output reale LibreOffice)
-    PAGE_H = 760
+    # Capacità pagina effettiva (calibrata su output reale LibreOffice).
+    # A4 = 842pt; l'area stampabile utile dall'inizio foglio è ~730pt.
+    PAGE_H = 730
     
     # ── Foglio 1: Prima pagina + posizioni ────────────────────────────────
     ws = wb.active
@@ -506,17 +507,18 @@ def genera_workbook(data, template_path):
     page_num = 1
     pos_idx = 0
     
-    # Altezza reale di una posizione: top + footer con ROW_H, dettagli con
-    # l'altezza effettiva (tiene conto del wrapping dei valori lunghi)
+    # Altezza RESA (non impostata) di una posizione, per l'impaginazione.
+    # LibreOffice rende ~12.7pt per riga di testo: usiamo quello, non l'altezza
+    # impostata sulla cella (più generosa), così lo spazio pagina è sfruttato meglio.
     def pos_height(riga):
-        CHARS_PER_LINE = 28; LINE_TXT_H = 13.0; ROW_AIR = 4.0
+        CHARS_PER_LINE = 28; LINE_RENDER_H = 13.7
         h = 2 * ROW_H  # top + footer
         for label, campo_val, campo_prz, campo_net, campo_tot in DETAIL_MAP:
             value = v(riga, campo_val)
             prezzo = v(riga, campo_prz) if campo_prz else ''
             if has_val(value) or has_val(prezzo):
                 nlin = max(1, -(-len(str(value).strip()) // CHARS_PER_LINE))
-                h += round(ROW_AIR + LINE_TXT_H * nlin, 1)
+                h += LINE_RENDER_H * nlin
         return h
 
     tot_posizioni = 0.0   # somma reale dei "Totale posizione" (imballo pieno + voci scontate)
