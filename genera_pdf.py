@@ -354,6 +354,13 @@ def setup_page(ws, ws_tmpl, page_num=None, page_tot=None):
     ws.page_setup.fitToHeight = 0
     ws.sheet_properties.pageSetUpPr.fitToPage = True
     ws.page_margins = copy(ws_tmpl.page_margins)
+    # Il footer di stampa ha bisogno di spazio: margine inferiore > margine footer,
+    # altrimenti "Pag. N di T" resta schiacciato sul bordo o fuori pagina.
+    try:
+        ws.page_margins.bottom = 0.5   # ~12.7mm
+        ws.page_margins.footer = 0.2   # ~5mm (il footer sta tra bordo e bottom)
+    except Exception:
+        pass
     # Piè di pagina: riporta il testo del template, sostituendo i placeholder
     # del numero pagina con i valori reali (ogni foglio corrisponde a 1 pagina).
     try:
@@ -506,8 +513,9 @@ def genera_workbook(data, template_path):
     header_inter_h = real_header_h(ws_inter, HEADER_INTER_END)
     
     # Capacità pagina effettiva (calibrata su output reale LibreOffice).
-    # A4 = 842pt; l'area stampabile utile dall'inizio foglio è ~730pt.
-    PAGE_H = 730
+    # A4 = 842pt; con margine inferiore ampliato (per il footer) l'area utile
+    # dall'inizio foglio è ~705pt.
+    PAGE_H = 705
     
     # ── Foglio 1: Prima pagina + posizioni ────────────────────────────────
     ws = wb.active
