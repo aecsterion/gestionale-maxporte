@@ -1266,6 +1266,8 @@ async function buildPreventivoPayload(id){
   var doc=r1.data;if(!doc)return null;
   var r2=await sb.from('righe_preventivo').select('*').eq('preventivo_id',id).order('riga_numero',{ascending:true});
   var righe=r2.data||[];var an=doc.anagrafiche||{};var ag=doc.agenti||{};var sc1=doc.sconto1||0;
+  var rImb=await sb.from('listino_imballi').select('codice,descrizione');
+  var _imbMap={}; (rImb.data||[]).forEach(function(x){_imbMap[x.codice]=x.descrizione||x.codice;});
   return {documento:{tipo:'PREVENTIVO',numero:doc.numero||'',
     data:(doc.data_documento||doc.created_at||'').slice(0,10),
     data_modifica:(doc.updated_at||'').slice(0,10),
@@ -1275,7 +1277,7 @@ async function buildPreventivoPayload(id){
     condizioni_pagamento:doc.condizioni_pagamento||an.condizioni_pagamento||'',
     trasporto:doc.trasporto||'',
     resa:doc.resa||'Franco fabbrica',note:doc.note||'',
-    sconto1:sc1,totale_imponibile:doc.totale_imponibile||0,totale_netto:doc.totale_netto||0,
+    sconto1:sc1,totale_imponibile:Math.round(((doc.totale_imponibile||0)-(parseFloat(doc.costo_trasporto)||0))*100)/100,totale_netto:doc.totale_netto||0,totale_trasporto:parseFloat(doc.costo_trasporto)||0,
     ragione_sociale:an.ragione_sociale||'',indirizzo:an.indirizzo||'',
     cap:an.cap||'',citta:an.citta||'',provincia:an.provincia||'',paese:an.paese||'Italia',
     partita_iva:an.partita_iva||'',codice_fiscale:an.codice_fiscale||'',
@@ -1334,6 +1336,7 @@ async function buildPreventivoPayload(id){
       finitura_coprifili:(r.codice_finitura_telaio&&r.codice_finitura_telaio!==r.codice_finitura)?(r.nome_finitura_telaio||''):'',
       finitura_telaio:(r.codice_finitura_telaio&&r.codice_finitura_telaio!==r.codice_finitura)?(r.nome_finitura_telaio||''):'',
       prezzo_coprifili:r.prezzo_coprifili||0,
+      imballo:r.codice_imballo?(_imbMap[r.codice_imballo]||r.codice_imballo):'',prezzo_imballo:r.prezzo_imballo_totale||0,
       prezzo_base:r.prezzo_base||0,prezzo_finitura:r.prezzo_finitura||0,
       prezzo_apertura:r.prezzo_apertura||0,prezzo_telaio:r.prezzo_telaio||0,
       prezzo_ferramenta:r.prezzo_ferramenta||0,prezzo_maniglia:r.prezzo_maniglia||0,
@@ -7999,11 +8002,13 @@ async function eseguiEsportaPDF() {
     const fkRiga = tipo==='preventivo' ? 'preventivo_id' : 'ordine_id';
 
     // Carica documento completo
-    const [{data:doc}, {data:righe}, {data:cliente}] = await Promise.all([
+    const [{data:doc}, {data:righe}, {data:cliente}, {data:imballiList}] = await Promise.all([
       sb.from(tabDoc).select('*,anagrafiche(*),agenti(nome,cognome)').eq('id',id).single(),
       sb.from(tabRighe).select('*').eq(fkRiga,id).order('riga_numero'),
       sb.from(tabDoc).select('*,anagrafiche(*)').eq('id',id).single(),
+      sb.from('listino_imballi').select('codice,descrizione'),
     ]);
+    const _imbMap = {}; (imballiList||[]).forEach(x=>{_imbMap[x.codice]=x.descrizione||x.codice;});
 
     if(!doc){ toast('Documento non trovato','err'); return; }
 
@@ -8066,8 +8071,11 @@ async function eseguiEsportaPDF() {
         // Sconto
         sconto1: doc.sconto1 || 0,
         sconto2: doc.sconto2 || 0,
-        totale_imponibile: doc.totale_imponibile || 0,
-        totale_netto: Math.round((doc.totale_imponibile||0)*(1-(doc.sconto1||0)/100)*(1-(doc.sconto2||0)/100)*100)/100,
+        // Scorporo il trasporto: il motore PDF lo ri-aggiunge come voce separata
+        // (totale_imponibile nel DB = somma posizioni + costo_trasporto).
+        totale_imponibile: Math.round(((doc.totale_imponibile||0)-(parseFloat(doc.costo_trasporto)||0))*100)/100,
+        totale_netto: Math.round(((doc.totale_imponibile||0)-(parseFloat(doc.costo_trasporto)||0))*(1-(doc.sconto1||0)/100)*(1-(doc.sconto2||0)/100)*100)/100,
+        totale_trasporto: parseFloat(doc.costo_trasporto)||0,
         arrotondamento: doc.arrotondamento_euro || 0,
         totale_netto_arrotondato: doc.totale_arrotondato || 0,
       },
@@ -8103,6 +8111,9 @@ async function eseguiEsportaPDF() {
         finitura_coprifili: (r.codice_finitura_telaio && r.codice_finitura_telaio!==r.codice_finitura) ? (r.nome_finitura_telaio||'') : '',
         finitura_telaio: (r.codice_finitura_telaio && r.codice_finitura_telaio!==r.codice_finitura) ? (r.nome_finitura_telaio||'') : '',
         prezzo_coprifili: r.prezzo_coprifili || 0,
+        // Imballo per posizione
+        imballo: r.codice_imballo ? (_imbMap[r.codice_imballo] || r.codice_imballo) : '',
+        prezzo_imballo: r.prezzo_imballo_totale || 0,
         // Prezzi
         prezzo_base: r.prezzo_base || 0,
         prezzo_finitura: r.prezzo_finitura || 0,

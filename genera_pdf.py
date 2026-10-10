@@ -53,9 +53,13 @@ DETAIL_MAP = [
     ('Fuori misura larghezza (L)','fuori_misura_l',        'supplemento_fuori_misura_l', 'supplemento_fuori_misura_l_scontato', 'totale_riga_fuori_misura_l'),
     ('Fuori misura altezza (H)','fuori_misura_h',          'supplemento_fuori_misura_h', 'supplemento_fuori_misura_h_scontato', 'totale_riga_fuori_misura_h'),
     ('Rifilatura telaio',       'rifilatura',              'supplemento_rifilatura', 'supplemento_rifilatura_scontato', 'totale_riga_rifilatura'),
+    ('Imballo',                 'imballo',                 'prezzo_imballo', 'prezzo_imballo', 'prezzo_imballo'),
     ('Stanza',                  'stanza',                  None, None, None),
     ('Note posizione',          'note_riga',               None, None, None),
 ]
+
+# Voci che NON seguono lo sconto riga (prezzo pieno): es. imballo
+NO_DISCOUNT = {'imballo'}
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -221,12 +225,14 @@ def write_position(ws_dst, ws_tmpl_inter, cur_row, riga, sconto_str, sconto_pct=
             continue
         
         # Calcola netto e totale dal prezzo di listino e dallo sconto
+        # (le voci in NO_DISCOUNT, es. imballo, non seguono lo sconto riga)
+        no_disc = campo_val in NO_DISCOUNT
         netto = ''
         totale = ''
         if has_val(prezzo):
             try:
                 p = to_num(prezzo)
-                netto_n = round(p * (1 - sc/100), 2)
+                netto_n = p if no_disc else round(p * (1 - sc/100), 2)
                 netto = netto_n
                 totale = netto_n  # quantità 1 per voce componente
                 tot_netto_pos += netto_n
@@ -261,7 +267,7 @@ def write_position(ws_dst, ws_tmpl_inter, cur_row, riga, sconto_str, sconto_pct=
                 ws_dst.cell(row=cur_row, column=36).value = eur(totale)
             else:
                 ws_dst.cell(row=cur_row, column=28).value = eur(prezzo)
-                ws_dst.cell(row=cur_row, column=31).value = sconto_str
+                ws_dst.cell(row=cur_row, column=31).value = ('0%' if no_disc else sconto_str)
                 ws_dst.cell(row=cur_row, column=33).value = eur(netto)
                 ws_dst.cell(row=cur_row, column=36).value = eur(totale)
         
@@ -306,7 +312,7 @@ def write_position(ws_dst, ws_tmpl_inter, cur_row, riga, sconto_str, sconto_pct=
     cur_row += 1
     
     rows_written = cur_row - start_row
-    return cur_row, rows_written
+    return cur_row, rows_written, tot_pos
 
 # ── Stima righe visibili per una posizione ────────────────────────────────
 
@@ -492,6 +498,7 @@ def genera_workbook(data, template_path):
         dett = max(0, tot - 2)
         return 2*ROW_H + dett*ROW_H_DETT
 
+    tot_posizioni = 0.0   # somma reale dei "Totale posizione" (imballo pieno + voci scontate)
     while pos_idx < len(righe):
         riga = righe[pos_idx]
         pos_h = pos_height(riga)
@@ -505,10 +512,37 @@ def genera_workbook(data, template_path):
             used_h = 0
             avail_h = PAGE_H - header_inter_h
 
-        cur, written = write_position(ws, ws_inter, cur, riga, sconto_str, sconto_pct, solo_netti)
+        cur, written, pos_tot = write_position(ws, ws_inter, cur, riga, sconto_str, sconto_pct, solo_netti)
+        tot_posizioni += pos_tot
         used_h += pos_h
         pos_idx += 1
-    
+
+    # ── Ricalcolo riepilogo con la somma reale delle posizioni ────────────
+    # tot_posizioni = netto reale (porta scontata + imballo pieno, tutte le righe).
+    # Il trasporto è una voce di testata a parte, aggiunta all'imponibile.
+    tot_posizioni = round(tot_posizioni, 2)
+    if tot_posizioni > 0:
+        trasporto2 = num(doc.get('totale_trasporto'))
+        spese2     = num(doc.get('totale_spese'))
+        omaggi2    = num(doc.get('omaggi'))
+        scpag2     = num(doc.get('sconto_pagamento'))
+        netto_arr2 = num(doc.get('totale_netto_arrotondato'))
+        base_imp   = netto_arr2 if netto_arr2 > 0 else tot_posizioni
+        imponibile2 = round(base_imp - omaggi2 - scpag2 + trasporto2 + spese2, 2)
+        iva2 = round(imponibile2 * 0.22, 2)
+        tot_fin2 = round(imponibile2 + iva2, 2)
+        m['*TOTALE_MERCE_SCONTATO*'] = fmt_eur(tot_posizioni)
+        # Sconto in euro coerente: lordo posizioni - netto posizioni
+        # (totale_imponibile nel payload è già SENZA trasporto)
+        if not solo_netti:
+            sconto_eur2 = round(num(doc.get('totale_imponibile')) - tot_posizioni, 2)
+            if sconto_eur2 > 0:
+                m['*SCONTO*'] = fmt_eur(sconto_eur2)
+        m['*TOTALE_TRASPORTO*'] = fmt_eur(trasporto2)
+        m['*TOTALE_IMPONIBILE*'] = fmt_eur(imponibile2)
+        m['*TOTALE_IVA*'] = fmt_eur(iva2)
+        m['*SOMMA_RIEPILOGO_OFFERTA*'] = fmt_eur(tot_fin2)
+
     # ── Ultimo foglio: Pagina finale (riepilogo) ──────────────────────────
     page_num += 1
     ws_last = wb.create_sheet(title=f'Pag{page_num}')
