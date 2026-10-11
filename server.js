@@ -1453,7 +1453,7 @@ async function apriModalInvioPreventivo(docId){
     'in allegato trova la nostra *offerta n. '+numero+'*'+(doc.riferimento_cliente?' - riferimento *'+doc.riferimento_cliente+'*':'')+' relativa alla Sua richiesta.'+nl+nl+
     'La preghiamo di verificare attentamente *quantità, misure, descrizioni e prezzi* degli articoli, oltre alle condizioni di vendita. Per confermare l\\'ordine può restituirci l\\'offerta *firmata per accettazione*.'+nl+nl+
     '*NB:* eventuali modifiche vanno comunicate per email in modo chiaro ed evidente. Non saranno ritenute valide modifiche apportate direttamente sul file PDF.'+nl+nl+
-    'La ringraziamo per averci interpellato e restiamo a Sua disposizione per qualsiasi chiarimento.'+nl+nl+
+    'Congratulandoci per la Sua scelta, Le ricordiamo che i nostri servizi commerciali sono a Sua completa disposizione.'+nl+nl+
     'Cordiali saluti,'+nl+FIRMA_EMAIL;
   document.getElementById('invia-email-cc').value='';
   document.getElementById('invia-oggetto').value='Max Porte - Offerta n. '+numero+(doc.riferimento_cliente?' rif. '+doc.riferimento_cliente:'');
@@ -9098,7 +9098,7 @@ async function apriModalInvioConferma(docId, diretto){
     'in allegato trova la nostra *conferma d\\'ordine n. '+numero+'*'+(doc.riferimento_cliente?' - riferimento *'+doc.riferimento_cliente+'*':'')+'.'+nl+nl+
     'La preghiamo di verificare attentamente *quantità, misure, descrizioni e prezzi* degli articoli, oltre alle condizioni di vendita, e di restituircela *firmata per accettazione*: la produzione partirà solo dopo aver ricevuto la conferma firmata.'+nl+nl+
     '*NB:* eventuali modifiche vanno comunicate per email in modo chiaro ed evidente. Non saranno ritenute valide modifiche apportate direttamente sul file PDF.'+nl+nl+
-    'La ringraziamo per aver scelto i nostri prodotti e restiamo a Sua disposizione per qualsiasi chiarimento.'+nl+nl+
+    'Congratulandoci per la Sua scelta, Le ricordiamo che i nostri servizi commerciali sono a Sua completa disposizione.'+nl+nl+
     'Cordiali saluti,'+nl+FIRMA_EMAIL_UFFICIO);
   _invioDocId=docId; _invioNumero=numero; _invioPayload={}; _invioMode = diretto?'conferma_diretta':'conferma';
   document.getElementById('invia-titolo').textContent = diretto?'Invia conferma d\\'ordine al cliente':'Invia conferma d\\'ordine';
