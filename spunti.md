@@ -36,7 +36,7 @@ Formato: `## data — titolo`, **Area**, **Spunto**, **Stato** (`da valutare` / 
 ## 2026-09-06 — Servizi accessori su preventivi/ordini
 **Area:** Preventivi / Ordini
 **Spunto:** Trasporto per zona geografica, imballo, posa (a scaglioni per quantità di porte, tariffe separate per blindate e relativi telai), trasferta.
-**Stato:** `approvato` — imballo per riga e trasporto nei totali FATTI (ott 2026); restano zone/tariffe trasporto e posa/trasferta.
+**Stato:** `approvato` — imballo per riga, trasporto nei totali e tariffe trasporto per zona/mezzo (porta, blindata, accessorio, minimo) FATTI (11 ott 2026); restano posa/installazione e trasferta.
 
 ---
 
