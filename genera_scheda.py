@@ -81,7 +81,11 @@ def fill_header(ws, t):
     for row in ws.iter_rows(min_row=1, max_row=7):
         for c in row:
             if isinstance(c.value, str) and c.value in HEADER_MAP:
-                c.value = s(t.get(HEADER_MAP[c.value]))
+                key = HEADER_MAP[c.value]
+                c.value = s(t.get(key))
+                if key not in ('ordine_abbr',):
+                    al = copy.copy(c.alignment); al.shrink_to_fit = True; al.wrap_text = False
+                    c.alignment = al
     # il placeholder barcode viene sostituito dall'immagine
     for row in ws.iter_rows(min_row=1, max_row=7):
         for c in row:
@@ -148,14 +152,18 @@ def build_scheda(ws, t, posizioni):
             c = ws[f'{col}{r}']
             c.value = s(p.get(key))
             al = copy.copy(c.alignment)
-            al.wrap_text = True
+            if key in ('telaio', 'serratura', 'ferramenta', 'tipo', 'senso', 'l', 'h', 's', 'qta', 'pos'):
+                al.wrap_text = False
+                al.shrink_to_fit = True
+            else:
+                al.wrap_text = True
             al.vertical = 'center'
             c.alignment = al
         # altezza: la nota e i campi lunghi vanno a capo
-        lines = max(est_lines(p.get('note'), 34), est_lines(p.get('modello'), 30),
-                    est_lines(p.get('finitura'), 30), est_lines(p.get('finitura_telaio'), 30),
-                    est_lines(p.get('coprifili'), 14), est_lines(p.get('inserto'), 12))
-        ws.row_dimensions[r].height = max(POS_ROW_H, 12.5 * lines + 6)
+        lines = max(est_lines(p.get('note'), 28), est_lines(p.get('modello'), 22),
+                    est_lines(p.get('finitura'), 22), est_lines(p.get('finitura_telaio'), 22),
+                    est_lines(p.get('coprifili'), 10), est_lines(p.get('inserto'), 9))
+        ws.row_dimensions[r].height = max(POS_ROW_H, 13.5 * lines + 7)
     last = POS_ROW + n - 1
     ws.print_area = f'A1:BI{last}'
     ws.print_title_rows = '1:8'
@@ -176,7 +184,10 @@ def build_packing(ws, t, pk):
             if i < len(items):
                 ensure_row_like(ws, PK_ROW, r, c1, c2)
                 for col, field in cols:
-                    ws[f'{col}{r}'].value = s(items[i].get(field))
+                    c = ws[f'{col}{r}']
+                    c.value = s(items[i].get(field))
+                    al = copy.copy(c.alignment); al.shrink_to_fit = True; al.wrap_text = False
+                    c.alignment = al
             else:
                 # blocco senza voci su questa riga: niente testo né casella, resta solo la riga divisoria
                 for col, field in cols:

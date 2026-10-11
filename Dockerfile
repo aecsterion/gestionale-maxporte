@@ -6,6 +6,8 @@ RUN apt-get update && apt-get install -y \
     libreoffice-calc \
     libreoffice-writer \
     pdftk \
+    fonts-crosextra-carlito \
+    fonts-crosextra-caladea \
     --no-install-recommends \
     && pip3 install openpyxl pypdf reportlab python-barcode pillow --break-system-packages \
     && rm -rf /var/lib/apt/lists/*
