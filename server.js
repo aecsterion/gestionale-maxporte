@@ -1450,8 +1450,10 @@ async function apriModalInvioPreventivo(docId){
   var email=emailDocumentiCliente(an);
   var nl='\\n';
   var testo='Gentile '+nome+','+nl+nl+
-    'in allegato trova il nostro preventivo n. '+numero+'.'+nl+nl+
-    'Restiamo a Sua disposizione per qualsiasi chiarimento.'+nl+nl+
+    'in allegato trova la nostra *offerta n. '+numero+'*'+(doc.riferimento_cliente?' - riferimento *'+doc.riferimento_cliente+'*':'')+' relativa alla Sua richiesta.'+nl+nl+
+    'La preghiamo di verificare attentamente *quantità, misure, descrizioni e prezzi* degli articoli, oltre alle condizioni di vendita. Per confermare l\\'ordine può restituirci l\\'offerta *firmata per accettazione*.'+nl+nl+
+    '*NB:* eventuali modifiche vanno comunicate per email in modo chiaro ed evidente. Non saranno ritenute valide modifiche apportate direttamente sul file PDF.'+nl+nl+
+    'La ringraziamo per averci interpellato e restiamo a Sua disposizione per qualsiasi chiarimento.'+nl+nl+
     'Cordiali saluti,'+nl+FIRMA_EMAIL;
   document.getElementById('invia-email-cc').value='';
   document.getElementById('invia-oggetto').value='Preventivo n. '+numero+' - Max Porte';
