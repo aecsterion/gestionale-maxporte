@@ -9546,8 +9546,7 @@ function testoEmailInHtml(text){
     '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f2f2f0;padding:24px 0"><tr><td align="center">'+
     '<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-top:4px solid #d0201a">'+
     '<tr><td style="padding:22px 32px 18px;border-bottom:1px solid #e6e6e6">'+
-      (LOGO_EMAIL_B64?'<img src="cid:logo-maxporte" alt="Max Porte" width="44" height="47" style="vertical-align:middle;border:0">':'')+
-      '<span style="vertical-align:middle;margin-left:12px;font:bold 20px Arial,Helvetica,sans-serif;letter-spacing:2px;color:#1a1a1a">MAX PORTE</span></td></tr>'+
+      (LOGO_EMAIL_B64?'<img src="cid:logo-maxporte" alt="Max Porte" width="104" height="110" style="display:block;border:0">':'<span style="font:bold 20px Arial,Helvetica,sans-serif;color:#1a1a1a">Max Porte</span>')+'</td></tr>'+
     '<tr><td style="padding:28px 32px 12px;font:15px/1.55 Arial,Helvetica,sans-serif;color:#333333">'+corpo+'</td></tr>'+
     '<tr><td style="padding:14px 32px;background:#1a1a1a;font:12px/1.5 Arial,Helvetica,sans-serif;color:#bbbbbb">Max Porte &middot; Bruino (TO) &middot; Tel. 011 9084622 &middot; <a href="https://www.maxporte.it" style="color:#ffffff;text-decoration:none">www.maxporte.it</a></td></tr>'+
     '</table></td></tr></table></body></html>';
