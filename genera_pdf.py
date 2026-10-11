@@ -278,6 +278,12 @@ def write_position(ws_dst, ws_tmpl_inter, cur_row, riga, sconto_str, sconto_pct=
                 ws_dst.cell(row=cur_row, column=31).value = ('0%' if no_disc else sconto_str)
                 ws_dst.cell(row=cur_row, column=33).value = eur(netto)
                 ws_dst.cell(row=cur_row, column=36).value = eur(totale)
+            # Prezzi allineati in alto come etichetta e valore (righe su più linee, es. imballo)
+            for pc in (28, 31, 33, 36):
+                c = ws_dst.cell(row=cur_row, column=pc)
+                a = c.alignment or Al()
+                c.alignment = Al(horizontal=a.horizontal, vertical='top', wrap_text=a.wrap_text,
+                                 shrink_to_fit=a.shrink_to_fit, indent=a.indent, text_rotation=a.text_rotation)
         
         # Merge
         merges = get_merges_for_row(ws_tmpl_inter, src_row)
