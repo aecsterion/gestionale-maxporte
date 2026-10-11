@@ -131,14 +131,33 @@ def add_images(ws, numero):
         im = PILImage.open(png); w, hh = im.size; png.seek(0)
         img = XLImage(png)
         # area AI4:AR6 = righe 4-6 (~45px): il barcode resta DENTRO i bordi con margine sopra/sotto
-        # le larghezze colonna lette da openpyxl non sono affidabili: misura fissa, ancorata a sinistra dell'area AI..AR
-        h_px = 30; w_px = 140
+        # area AI4:AR6: 10 colonne x (13.5+7+13.5 pt) -> ~234 x 45 px; barcode centrato con margine
+        area_w, area_h = 10 * COL_PX, 34 * 96 / 72
+        h_px = 36
+        w_px = min(int(h_px * w / hh * 1.35), int(area_w - 16))
         img.height = h_px; img.width = w_px
-        col = column_index_from_string('AI') - 1
-        col_off = 10
-        marker = AnchorMarker(col=col, colOff=pixels_to_EMU(col_off), row=3, rowOff=pixels_to_EMU(7))
+        col_off_tot = (area_w - w_px) / 2
+        col = column_index_from_string('AI') - 1 + int(col_off_tot // COL_PX)
+        col_off = int(col_off_tot % COL_PX)
+        row_off = int((area_h - h_px) / 2)
+        marker = AnchorMarker(col=col, colOff=pixels_to_EMU(col_off), row=3, rowOff=pixels_to_EMU(row_off))
         img.anchor = OneCellAnchor(_from=marker, ext=XDRPositiveSize2D(pixels_to_EMU(w_px), pixels_to_EMU(h_px)))
         ws.add_image(img)
+
+
+COL_PX = 23.4   # larghezza resa di una colonna del template (2.36 caratteri)
+
+def _chars_per_line(ws, row, col, cell):
+    """Caratteri per riga stimati per la cella (larghezza del merge / larghezza media carattere)."""
+    ci = column_index_from_string(col)
+    span = 1
+    for m in ws.merged_cells.ranges:
+        if m.min_row == row and m.min_col == ci:
+            span = m.max_col - m.min_col + 1
+            break
+    sz = (cell.font.sz or 10)
+    char_px = sz * (0.62 if cell.font.b else 0.58)   # Calibri/Carlito, media prudente
+    return max(4, int(span * COL_PX / char_px))
 
 
 def est_lines(text, chars):
@@ -158,26 +177,15 @@ def build_scheda(ws, t, posizioni):
         r = POS_ROW + i
         ensure_row_like(ws, POS_ROW, r)
         p = posizioni[i] if i < len(posizioni) else {}
+        # Allineamenti e "testo a capo" li decide il TEMPLATE: qui si scrivono solo i valori
+        # e si calcola l'altezza riga in base alle celle che nel template vanno a capo.
+        lines = 1
         for col, key in POS_COLS:
             c = ws[f'{col}{r}']
             c.value = s(p.get(key))
-            al = copy.copy(c.alignment)
-            if key in ('telaio', 'serratura', 'ferramenta', 'tipo', 'senso', 'l', 'h', 's', 'qta', 'pos'):
-                al.wrap_text = False
-                al.shrink_to_fit = True
-            else:
-                al.wrap_text = True
-                if key in ('modello', 'finitura', 'finitura_telaio'):
-                    if al.horizontal in (None, 'general'):
-                        al.horizontal = 'left'
-                    al.indent = 1
-            al.vertical = 'center'
-            c.alignment = al
-        # altezza: la nota e i campi lunghi vanno a capo
-        lines = max(est_lines(p.get('note'), 24), est_lines(p.get('modello'), 22),
-                    est_lines(p.get('finitura'), 22), est_lines(p.get('finitura_telaio'), 22),
-                    est_lines(p.get('coprifili'), 10), est_lines(p.get('inserto'), 8))
-        ws.row_dimensions[r].height = max(POS_ROW_H + 3, 14 * lines + 10)
+            if c.alignment.wrap_text:
+                lines = max(lines, est_lines(c.value, _chars_per_line(ws, POS_ROW, col, c)))
+        ws.row_dimensions[r].height = max(POS_ROW_H, 12.5 * lines + 5)
     last = POS_ROW + n - 1
     ws.print_area = f'A1:BI{last}'
     ws.print_title_rows = '1:8'
