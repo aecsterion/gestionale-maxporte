@@ -2995,6 +2995,7 @@ async function caricaEsclusioni(){
       .select('entita_b_tipo,entita_b_codice')
       .eq('entita_a_tipo', s.tipo)
       .eq('entita_a_codice', s.codice)
+      .neq('tipo_regola', 'verifica')
   );
   const risultati = await Promise.all(promises);
 
@@ -5761,57 +5762,90 @@ async function eliminaRiga(tabella, rigaId, docId, mode){
 }
 
 // ══ COMPATIBILITÀ DINAMICHE ══════════════════════════════
-// Ogni combinazione di una porta è: vietata (regola di esclusione), consentita
-// (consentita esplicitamente o valore "verificato" per quella categoria) oppure da verificare.
-// Le righe da verificare bloccano invio preventivo/conferma e lancio in produzione
-// finché il responsabile tecnico non le approva (solo qui / e ricorda) o le vieta.
-const COMPAT_CHECK = [
-  {b:"apertura",  label:"Apertura",  levels:["modello","serie"], val:function(r){ return r.codice_apertura||null; }},
-  {b:"finitura",  label:"Finitura",  levels:["modello"],         val:function(r){ return r.codice_finitura||null; }},
-  {b:"maniglia",  label:"Maniglia",  levels:["apertura"],        val:function(r){ return (r.codice_maniglia && r.codice_maniglia!=="NESSUNA") ? r.codice_maniglia : null; }},
-  {b:"serratura", label:"Serratura", levels:["apertura"],        val:function(r){ return r.codice_serratura||null; }}
-];
-const COMPAT_LABEL = {serie:"Serie", modello:"Modello", apertura:"Apertura", finitura:"Finitura", maniglia:"Maniglia", serratura:"Serratura"};
-function _compatAval(level, r){
-  if(level==="serie") return r.codice_serie||null;
-  if(level==="modello") return r.codice_modello||null;
-  if(level==="apertura") return r.codice_apertura||null;
-  return null;
+// Principio: ciò che il configuratore permette è consentito (la configurazione admin è la fonte di verità).
+// Per ogni riga porta si segnala:
+//  - "vietata": una regola di esclusione del pannello Compatibilità colpisce la combinazione;
+//  - "non più fattibile": la riga non è più componibile con la configurazione di oggi
+//    (serie/modello/apertura disattivati, finitura non più del modello, maniglia esclusa per l'apertura);
+//  - "da verificare": regola "richiede verifica" del pannello, oppure casi a rischio automatici
+//    (misure fuori standard, colore speciale porta o telaio).
+// Le righe da verificare vanno approvate dal tecnico (solo qui), le altre vanno corrette.
+const COMPAT_LABEL = {serie:"Serie", modello:"Modello", finitura:"Finitura", apertura:"Apertura", ferramenta:"Ferramenta",
+  vetro:"Vetro", inserto_alu:"Inserto alluminio", inserto_pietra:"Inserto pietra", serratura:"Serratura", maniglia:"Maniglia"};
+const COMPAT_CAMPI = {serie:"codice_serie", modello:"codice_modello", finitura:"codice_finitura", apertura:"codice_apertura",
+  ferramenta:"codice_ferramenta", vetro:"codice_tipo_vetro", inserto_alu:"codice_colore_alu", inserto_pietra:"codice_colore_pietra",
+  serratura:"codice_serratura", maniglia:"codice_maniglia"};
+function _compatVal(tipo, r){
+  const v=r[COMPAT_CAMPI[tipo]];
+  if(!v || v==="NESSUNA" || v==="NESSUNO") return null;
+  return v;
 }
 function _rigaPorta(r){ return !!r.codice_apertura && r.codice_serie!=="ACC" && r.codice_serie!=="PAN-BL"; }
+function _aperturaEsclusa(listaCsv, ap){
+  if(!listaCsv || !ap) return false;
+  const A=String(ap).toUpperCase();
+  return listaCsv.split(",").map(function(s){ return s.trim().toUpperCase(); }).filter(Boolean)
+    .some(function(e){ return A===e || A.indexOf(e+"/")===0 || A.indexOf(e+" ")===0; });
+}
 
 async function valutaCompatRighe(righe){
   const porte=(righe||[]).filter(_rigaPorta);
   if(!porte.length) return [];
-  const aCod=new Set();
-  porte.forEach(function(r){ ["serie","modello","apertura"].forEach(function(l){ const v=_compatAval(l,r); if(v) aCod.add(v); }); });
-  const cods=Array.from(aCod);
+  const vals=new Set(), serieS=new Set(), modS=new Set(), apS=new Set(), manS=new Set();
+  porte.forEach(function(r){
+    Object.keys(COMPAT_CAMPI).forEach(function(t){ const v=_compatVal(t,r); if(v) vals.add(v); });
+    if(r.codice_serie) serieS.add(r.codice_serie);
+    if(r.codice_modello) modS.add(r.codice_modello);
+    if(r.codice_apertura) apS.add(r.codice_apertura);
+    if(r.codice_maniglia && r.codice_maniglia!=="NESSUNA") manS.add(r.codice_maniglia);
+  });
   const res=await Promise.all([
-    sb.from("regole_compatibilita").select("entita_a_tipo,entita_a_codice,entita_b_tipo,entita_b_codice").in("entita_a_codice",cods),
-    sb.from("compat_verifiche").select("entita_a_tipo,entita_a_codice,entita_b_tipo").in("entita_a_codice",cods),
-    sb.from("compat_consentite").select("entita_a_tipo,entita_a_codice,entita_b_tipo,entita_b_codice").in("entita_a_codice",cods)
+    sb.from("regole_compatibilita").select("id,entita_a_tipo,entita_a_codice,entita_b_tipo,entita_b_codice,tipo_regola").in("entita_a_codice",Array.from(vals)),
+    sb.from("serie").select("codice,attiva").in("codice",Array.from(serieS)),
+    sb.from("modelli").select("codice,attivo").in("codice",Array.from(modS)),
+    sb.from("tipologie_apertura").select("codice,attiva").in("codice",Array.from(apS)),
+    sb.from("finiture").select("codice_finitura,codice_serie,codice_modello,attiva").in("codice_serie",Array.from(serieS)),
+    sb.from("maniglie").select("codice,attivo,aperture_escluse").in("codice",Array.from(manS).length?Array.from(manS):["-"])
   ]);
-  const escl=new Set((res[0].data||[]).map(function(x){ return x.entita_a_tipo+":"+x.entita_a_codice+">"+x.entita_b_tipo+":"+x.entita_b_codice; }));
-  const ver=new Set((res[1].data||[]).map(function(x){ return x.entita_a_tipo+":"+x.entita_a_codice+">"+x.entita_b_tipo; }));
-  const cons=new Set((res[2].data||[]).map(function(x){ return x.entita_a_tipo+":"+x.entita_a_codice+">"+x.entita_b_tipo+":"+x.entita_b_codice; }));
+  const regole=res[0].data||[];
+  const serieM={}; (res[1].data||[]).forEach(function(x){ serieM[x.codice]=x; });
+  const modM={}; (res[2].data||[]).forEach(function(x){ modM[x.codice]=x; });
+  const apM={}; (res[3].data||[]).forEach(function(x){ apM[x.codice]=x; });
+  const fin=res[4].data||[];
+  const manM={}; (res[5].data||[]).forEach(function(x){ manM[x.codice]=x; });
   const out=[];
   porte.forEach(function(r){
     const appr=Array.isArray(r.compat_approvate)?r.compat_approvate:[];
-    COMPAT_CHECK.forEach(function(c){
-      const bv=c.val(r); if(!bv) return;
-      let vietato=null, ok=false;
-      c.levels.forEach(function(l){
-        const av=_compatAval(l,r); if(!av) return;
-        if(escl.has(l+":"+av+">"+c.b+":"+bv)) vietato={a_tipo:l,a_codice:av};
-        if(cons.has(l+":"+av+">"+c.b+":"+bv) || ver.has(l+":"+av+">"+c.b)) ok=true;
-      });
-      const aLev=c.levels.find(function(l){ return !!_compatAval(l,r); });
-      const aCodV=_compatAval(aLev,r);
-      const key=c.b+":"+bv+"@"+aLev+":"+aCodV;
-      if(vietato){ out.push({riga_id:r.id, riga_numero:r.riga_numero, nome:r.nome_modello||r.codice_modello, stato:"vietato", b_tipo:c.b, b_codice:bv, a_tipo:vietato.a_tipo, a_codice:vietato.a_codice, key:key}); return; }
-      if(ok || appr.indexOf(key)>=0) return;
-      out.push({riga_id:r.id, riga_numero:r.riga_numero, nome:r.nome_modello||r.codice_modello, stato:"da_verificare", b_tipo:c.b, b_codice:bv, a_tipo:aLev, a_codice:aCodV, key:key});
+    const add=function(stato, key, descr, extra){ const it={riga_id:r.id, riga_numero:r.riga_numero, nome:r.nome_modello||r.codice_modello, stato:stato, key:key, descr:descr};
+      if(extra) Object.keys(extra).forEach(function(k){ it[k]=extra[k]; }); out.push(it); };
+    // 1) regole del pannello Compatibilità
+    regole.forEach(function(g){
+      if(_compatVal(g.entita_a_tipo,r)!==g.entita_a_codice) return;
+      if(_compatVal(g.entita_b_tipo,r)!==g.entita_b_codice) return;
+      const descr=(COMPAT_LABEL[g.entita_a_tipo]||g.entita_a_tipo)+" "+g.entita_a_codice+" + "+(COMPAT_LABEL[g.entita_b_tipo]||g.entita_b_tipo)+" "+g.entita_b_codice;
+      const key="regola:"+g.entita_a_tipo+":"+g.entita_a_codice+">"+g.entita_b_tipo+":"+g.entita_b_codice;
+      if(g.tipo_regola==="verifica"){ if(appr.indexOf(key)<0) add("da_verificare",key,descr,{regola_id:g.id}); }
+      else add("vietato",key,descr,{regola_id:g.id});
     });
+    // 2) ancora componibile con la configurazione di oggi?
+    const nf=function(k,d){ add("non_fattibile","nf:"+k,d); };
+    if(serieM[r.codice_serie] && serieM[r.codice_serie].attiva===false) nf("serie","Serie "+r.codice_serie+" non più attiva");
+    if(!modM[r.codice_modello] || modM[r.codice_modello].attivo===false) nf("modello","Modello "+r.codice_modello+" non più attivo");
+    if(!apM[r.codice_apertura] || apM[r.codice_apertura].attiva===false) nf("apertura","Apertura "+r.codice_apertura+" non più attiva");
+    if(r.codice_finitura && r.codice_finitura!=="SPECIALE"){
+      const ok=fin.some(function(f){ return f.codice_finitura===r.codice_finitura && f.codice_serie===r.codice_serie && (!f.codice_modello || f.codice_modello===r.codice_modello) && f.attiva!==false; });
+      if(!ok) nf("finitura","Finitura "+(r.nome_finitura||r.codice_finitura)+" non più disponibile per "+(r.nome_modello||r.codice_modello));
+    }
+    if(r.codice_maniglia && r.codice_maniglia!=="NESSUNA"){
+      const m=manM[r.codice_maniglia];
+      if(!m || m.attivo===false) nf("maniglia","Maniglia "+r.codice_maniglia+" non più attiva");
+      else if(_aperturaEsclusa(m.aperture_escluse, r.codice_apertura)) nf("maniglia_ap","Maniglia "+r.codice_maniglia+" esclusa per l'apertura "+r.codice_apertura);
+    }
+    // 3) casi a rischio automatici
+    const auto=function(k,d){ if(appr.indexOf(k)<0) add("da_verificare",k,d,{auto:true}); };
+    if(r.misura_custom) auto("auto:misura:"+r.larghezza_mm+"x"+r.altezza_mm, "Misure fuori standard "+r.larghezza_mm+" × "+r.altezza_mm+" mm");
+    if(r.codice_finitura==="SPECIALE") auto("auto:colore:"+(r.nome_finitura||""), (r.nome_finitura||"Colore speciale")+" (porta)");
+    if(r.codice_finitura_telaio==="SPECIALE") auto("auto:colore_telaio:"+(r.nome_finitura_telaio||""), (r.nome_finitura_telaio||"Colore speciale")+" (telaio)");
   });
   return out;
 }
@@ -5823,14 +5857,15 @@ async function controlloCompatDoc(mode, id, azione){
   const r=await sb.from(tab).select("*").eq(fk,id);
   const prob=await valutaCompatRighe(r.data||[]);
   if(!prob.length) return true;
-  const viet=prob.filter(function(p){ return p.stato==="vietato"; }).length;
-  // Modalità "solo avviso" (Admin › Compatibilità): le combinazioni da verificare non bloccano, quelle vietate sì
+  const gravi=prob.filter(function(p){ return p.stato!=="da_verificare"; }).length;
+  const daVer=prob.length-gravi;
+  // Modalità "solo avviso" (Admin › Compatibilità): le righe da verificare non bloccano; vietate e non fattibili sì
   const imp=await sb.from("impostazioni").select("valore").eq("chiave","compat_controllo").maybeSingle();
-  if(imp.data && imp.data.valore==="avviso" && !viet){
-    toast("Attenzione: "+prob.length+" combinazioni non ancora verificate dal tecnico","err");
+  if(imp.data && imp.data.valore==="avviso" && !gravi){
+    toast("Attenzione: "+daVer+" punti da far verificare al tecnico","err");
     return true;
   }
-  toast((azione||"Operazione")+" bloccata: "+(viet?viet+" combinazioni vietate":"")+(viet&&prob.length>viet?" e ":"")+(prob.length>viet?(prob.length-viet)+" da verificare dal tecnico":""),"err");
+  toast((azione||"Operazione")+" bloccata: "+(gravi?gravi+" righe vietate o non più fattibili":"")+(gravi&&daVer?" e ":"")+(daVer?daVer+" punti da verificare dal tecnico":""),"err");
   return false;
 }
 
@@ -5846,31 +5881,35 @@ async function renderCompatBox(mode, id, righe){
     box.innerHTML=""; return;
   }
   const tec=isRespTec()||isAdmin();
-  const q=function(s){ return "&#39;"+String(s).replace(/&/g,"&amp;").replace(/"/g,"&quot;")+"&#39;"; };
+  const q=function(s){ return "&#39;"+String(s==null?"":s).replace(/&/g,"&amp;").replace(/"/g,"&quot;")+"&#39;"; };
+  const BADGE={vietato:'<span class="badge br">Vietata</span>', non_fattibile:'<span class="badge br">Non più fattibile</span>', da_verificare:'<span class="badge ba">Da verificare</span>'};
   const righeHtml=prob.map(function(p){
-    const viet=p.stato==="vietato";
     let az="";
-    if(!viet && tec){
-      const args=q(mode)+","+q(id)+","+q(p.riga_id)+","+q(p.key)+","+q(p.a_tipo)+","+q(p.a_codice)+","+q(p.b_tipo)+","+q(p.b_codice);
-      az='<button class="btn btn-sm" onclick="compatDecidi(&#39;qui&#39;,'+args+')">Approva solo qui</button> '+
-         '<button class="btn btn-sm" style="color:var(--green-tx)" onclick="compatDecidi(&#39;ricorda&#39;,'+args+')">Approva e ricorda</button> '+
-         '<button class="btn btn-sm" style="color:var(--red)" onclick="compatDecidi(&#39;vieta&#39;,'+args+')">Vieta e ricorda</button>';
-    } else if(viet){
-      az='<span style="font-size:11px;color:var(--red-tx)">Modifica la posizione</span>';
+    if(p.stato==="da_verificare" && tec){
+      const args=q(mode)+","+q(id)+","+q(p.riga_id)+","+q(p.key)+","+q(p.regola_id||"");
+      az='<button class="btn btn-sm" onclick="compatDecidi(&#39;qui&#39;,'+args+')">Approva solo qui</button>';
+      if(p.regola_id){
+        az+=' <button class="btn btn-sm" style="color:var(--green-tx)" onclick="compatDecidi(&#39;sempre&#39;,'+args+')">Sempre ok (togli verifica)</button>'+
+            ' <button class="btn btn-sm" style="color:var(--red)" onclick="compatDecidi(&#39;vieta&#39;,'+args+')">Vieta sempre</button>';
+      }
+    } else if(p.stato!=="da_verificare"){
+      az='<span style="font-size:11px;color:var(--red-tx)">Correggi la posizione</span>';
     }
     return '<tr><td style="padding:5px 6px">Pos. '+p.riga_numero+' — '+(p.nome||"")+'</td>'+
-      '<td style="padding:5px 6px">'+(COMPAT_LABEL[p.a_tipo]||p.a_tipo)+' <strong>'+p.a_codice+'</strong> + '+(COMPAT_LABEL[p.b_tipo]||p.b_tipo)+' <strong>'+p.b_codice+'</strong></td>'+
-      '<td style="padding:5px 6px">'+(viet?'<span class="badge br">Vietata</span>':'<span class="badge ba">Da verificare</span>')+'</td>'+
+      '<td style="padding:5px 6px">'+p.descr+'</td>'+
+      '<td style="padding:5px 6px">'+(BADGE[p.stato]||"")+'</td>'+
       '<td style="padding:5px 6px;white-space:nowrap">'+az+'</td></tr>';
   }).join("");
-  const nViet=prob.filter(function(p){ return p.stato==="vietato"; }).length;
+  const gravi=prob.filter(function(p){ return p.stato!=="da_verificare"; }).length;
+  const daVer=prob.length-gravi;
   let testa;
-  if(tec) testa="Approva o vieta le combinazioni non ancora verificate. Finché restano aperte il documento non si può inviare né lanciare in produzione.";
-  else if(richiesta) testa="Verifica richiesta al responsabile tecnico: il documento si potrà inviare quando le combinazioni saranno approvate.";
-  else testa="Ci sono combinazioni non ancora verificate dall'ufficio tecnico: il documento non si può inviare finché non vengono approvate.";
-  box.innerHTML='<div class="card" style="margin-bottom:14px;border:1px solid '+(nViet?'var(--red)':'var(--amber-tx)')+'">'+
-    '<div class="card-header"><span class="card-title">Verifica tecnica — '+prob.length+' combinazion'+(prob.length===1?'e':'i')+'</span>'+
-    ((!tec && !richiesta && nViet<prob.length)?'<button class="btn btn-sm" onclick="richiediVerificaTecnica('+q(mode)+','+q(id)+')">Richiedi verifica tecnica</button>':'')+
+  if(gravi && !daVer) testa="Alcune posizioni non sono fattibili con la configurazione attuale: vanno corrette prima di inviare o lanciare il documento.";
+  else if(tec) testa="Controlla i punti da verificare e approvali. Finché restano aperti il documento non si può inviare né lanciare in produzione.";
+  else if(richiesta) testa="Verifica richiesta al responsabile tecnico: il documento si potrà inviare quando i punti saranno approvati.";
+  else testa="Ci sono punti che l'ufficio tecnico deve verificare prima che il documento possa partire.";
+  box.innerHTML='<div class="card" style="margin-bottom:14px;border:1px solid '+(gravi?'var(--red)':'var(--amber-tx)')+'">'+
+    '<div class="card-header"><span class="card-title">Verifica tecnica — '+prob.length+' punt'+(prob.length===1?'o':'i')+'</span>'+
+    ((!tec && !richiesta && daVer)?'<button class="btn btn-sm" onclick="richiediVerificaTecnica('+q(mode)+','+q(id)+')">Richiedi verifica tecnica</button>':'')+
     (richiesta?'<span class="badge ba">Verifica richiesta</span>':'')+'</div>'+
     '<div style="font-size:12px;color:var(--mid);margin-bottom:8px">'+testa+'</div>'+
     '<table style="width:100%;font-size:12px"><tbody>'+righeHtml+'</tbody></table></div>';
@@ -5883,25 +5922,23 @@ async function richiediVerificaTecnica(mode, id){
   if(mode==="preventivo") renderPreventivoDetail(id); else renderOrdineDetail(id);
 }
 
-async function compatDecidi(tipo, mode, id, rigaId, key, aTipo, aCod, bTipo, bCod){
+async function compatDecidi(tipo, mode, id, rigaId, key, regolaId){
   const tab = mode==="preventivo" ? "righe_preventivo" : "righe_ordine";
-  const chi=currentNomeUtente||(currentUser&&currentUser.email)||"tecnico";
   let err=null;
   if(tipo==="qui"){
     const r=await sb.from(tab).select("compat_approvate").eq("id",rigaId).maybeSingle();
     const arr=(r.data && Array.isArray(r.data.compat_approvate)) ? r.data.compat_approvate : [];
     if(arr.indexOf(key)<0) arr.push(key);
     err=(await sb.from(tab).update({compat_approvate:arr}).eq("id",rigaId)).error;
-  } else if(tipo==="ricorda"){
-    err=(await sb.from("compat_consentite").insert([{entita_a_tipo:aTipo,entita_a_codice:aCod,entita_b_tipo:bTipo,entita_b_codice:bCod,approvato_da:chi}])).error;
-    if(err && String(err.message).indexOf("duplicate")>=0) err=null;
-  } else if(tipo==="vieta"){
-    if(!confirm("Vietare sempre "+(COMPAT_LABEL[aTipo]||aTipo)+" "+aCod+" con "+(COMPAT_LABEL[bTipo]||bTipo)+" "+bCod+"? La posizione andrà modificata.")) return;
-    err=(await sb.from("regole_compatibilita").insert([{entita_a_tipo:aTipo,entita_a_codice:aCod,entita_b_tipo:bTipo,entita_b_codice:bCod}])).error;
-    if(err && String(err.message).indexOf("duplicate")>=0) err=null;
+  } else if(tipo==="sempre" && regolaId){
+    if(!confirm("Togliere la regola «richiede verifica»? La combinazione diventerà sempre consentita.")) return;
+    err=(await sb.from("regole_compatibilita").delete().eq("id",regolaId)).error;
+  } else if(tipo==="vieta" && regolaId){
+    if(!confirm("Vietare sempre questa combinazione? La posizione andrà modificata.")) return;
+    err=(await sb.from("regole_compatibilita").update({tipo_regola:"escludi"}).eq("id",regolaId)).error;
   }
   if(err){ toast("Errore: "+err.message,"err"); return; }
-  toast(tipo==="vieta"?"Combinazione vietata":"Combinazione approvata","ok");
+  toast(tipo==="vieta"?"Combinazione vietata":"Approvato","ok");
   if(mode==="preventivo") renderPreventivoDetail(id); else renderOrdineDetail(id);
 }
 
@@ -5909,13 +5946,16 @@ async function compatDecidi(tipo, mode, id, rigaId, key, aTipo, aCod, bTipo, bCo
 async function avvisoCompatConfiguratore(){
   const el=document.getElementById("cfg-compat-avviso"); if(!el) return;
   const pseudo={id:null, riga_numero:0, codice_serie:CFG.serie, codice_modello:CFG.modello, nome_modello:CFG.nome_modello,
-    codice_finitura:CFG.finitura, codice_apertura:CFG.apertura, codice_maniglia:CFG.maniglia, codice_serratura:CFG.serratura};
-  const prob=await valutaCompatRighe([pseudo]);
+    codice_finitura:CFG.finitura, nome_finitura:CFG.nome_finitura, codice_finitura_telaio:CFG.finitura_telaio, nome_finitura_telaio:CFG.nome_finitura_telaio,
+    codice_apertura:CFG.apertura, codice_maniglia:CFG.maniglia, codice_serratura:CFG.serratura, codice_ferramenta:CFG.ferramenta,
+    codice_tipo_vetro:CFG.tipo_vetro, codice_colore_alu:CFG.colore_alu, codice_colore_pietra:CFG.colore_pietra,
+    misura_custom:CFG.misura_custom, larghezza_mm:CFG.larghezza, altezza_mm:CFG.altezza};
+  const prob=(await valutaCompatRighe([pseudo])).filter(function(p){ return p.stato==="da_verificare" || p.stato==="vietato"; });
   if(!prob.length){ el.innerHTML=""; return; }
   el.innerHTML='<div style="background:var(--amber-bg);color:var(--amber-tx);border-radius:var(--radius);padding:10px 12px;font-size:12px;margin-bottom:10px">'+
-    '<strong>Combinazione da verificare dall&#39;ufficio tecnico:</strong> '+
-    prob.map(function(p){ return (COMPAT_LABEL[p.a_tipo]||p.a_tipo)+" "+p.a_codice+" + "+(COMPAT_LABEL[p.b_tipo]||p.b_tipo)+" "+p.b_codice+(p.stato==="vietato"?" (vietata)":""); }).join(" · ")+
-    '. Puoi aggiungerla, ma il documento non potrà essere inviato finché il tecnico non la approva.</div>';
+    '<strong>Da far verificare all&#39;ufficio tecnico:</strong> '+
+    prob.map(function(p){ return p.descr+(p.stato==="vietato"?" (vietata)":""); }).join(" · ")+
+    '. Puoi aggiungere la porta, ma il documento potrà partire solo dopo l&#39;approvazione del tecnico.</div>';
 }
 
 // Netto documento: sconti sulle righe, trasporto a prezzo pieno.
@@ -8117,43 +8157,31 @@ async function adminCompatibilita(){
       .eq('entita_a_codice', aCodice);
     regoleFiltrate = rf||[];
   }
-  const esclusiB = new Set(regoleFiltrate.filter(r=>r.entita_b_tipo===bTipo).map(r=>r.entita_b_codice));
-  // Stato "verificato" della coppia A→categoria B (compatibilità dinamiche)
-  const coppiaControllata = COMPAT_CHECK.some(c=>c.b===bTipo && c.levels.includes(aTipo));
-  let verificato=false, consentiteB=new Set();
-  if(aCodice && coppiaControllata){
-    const [{data:vv},{data:cc}] = await Promise.all([
-      sb.from('compat_verifiche').select('id').eq('entita_a_tipo',aTipo).eq('entita_a_codice',aCodice).eq('entita_b_tipo',bTipo).maybeSingle(),
-      sb.from('compat_consentite').select('entita_b_codice').eq('entita_a_tipo',aTipo).eq('entita_a_codice',aCodice).eq('entita_b_tipo',bTipo)
-    ]);
-    verificato=!!vv; consentiteB=new Set((cc||[]).map(x=>x.entita_b_codice));
-  }
-  const {data:coper} = await sb.from('compat_verifiche').select('entita_a_tipo,entita_b_tipo');
+  const esclusiB = new Set(regoleFiltrate.filter(r=>r.entita_b_tipo===bTipo && r.tipo_regola!=='verifica').map(r=>r.entita_b_codice));
+  const verificaB = new Set(regoleFiltrate.filter(r=>r.entita_b_tipo===bTipo && r.tipo_regola==='verifica').map(r=>r.entita_b_codice));
   const {data:impC} = await sb.from('impostazioni').select('valore').eq('chiave','compat_controllo').maybeSingle();
   const modoCompat = (impC&&impC.valore)||'blocco';
-  const coperMap={}; (coper||[]).forEach(x=>{ const k=x.entita_a_tipo+'→'+x.entita_b_tipo; coperMap[k]=(coperMap[k]||0)+1; });
 
   // Lista opzioni B con stato
   const opzioniHtml = bItems.map(op=>{
     const cod = op.codice||op[ENTITA[bTipo].codKey];
     const nome = op.nome||op[ENTITA[bTipo].nameKey];
     const escluso = esclusiB.has(cod);
+    const daVer = verificaB.has(cod);
     const regola = regoleFiltrate.find(r=>r.entita_b_tipo===bTipo&&r.entita_b_codice===cod);
     const aNome = aItems.find(i=>(i.codice||i[ENTITA[aTipo].codKey])===aCodice)?.nome||aCodice;
-    return \`<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border-bottom:0.5px solid var(--border);background:\${escluso?'var(--red-bg)':'transparent'}">
+    const btnStyle = 'padding:3px 10px;border-radius:4px;border:0.5px solid var(--border);font-size:11px;cursor:pointer;background:none;color:var(--mid);font-family:inherit';
+    const dataAttr = \`data-a-tipo="\${aTipo}" data-a-codice="\${aCodice}" data-a-nome="\${aNome.replace(/"/g,'&quot;')}" data-b-tipo="\${bTipo}" data-b-codice="\${cod}" data-b-nome="\${nome.replace(/"/g,'&quot;')}"\`;
+    return \`<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border-bottom:0.5px solid var(--border);background:\${escluso?'var(--red-bg)':daVer?'var(--amber-bg)':'transparent'}">
       <div style="display:flex;align-items:center;gap:8px">
-        <span style="font-size:13px">\${escluso?'🚫':'✓'}</span>
-        <span style="font-size:12px;font-weight:500;color:\${escluso?'var(--red-tx)':'var(--dark)'}">\${cod}</span>
-        <span style="font-size:12px;color:\${escluso?'var(--red-tx)':'var(--mid)'}">\${nome}</span>
+        <span style="font-size:13px">\${escluso?'🚫':daVer?'⚠':'✓'}</span>
+        <span style="font-size:12px;font-weight:500;color:\${escluso?'var(--red-tx)':daVer?'var(--amber-tx)':'var(--dark)'}">\${cod}</span>
+        <span style="font-size:12px;color:\${escluso?'var(--red-tx)':daVer?'var(--amber-tx)':'var(--mid)'}">\${nome}</span>
       </div>
       \${aCodice
-        ? escluso
-          ? \`<button onclick="rimuoviRegola('\${regola?.id}')" style="padding:3px 12px;border-radius:4px;border:0.5px solid var(--green-tx);font-size:11px;cursor:pointer;background:var(--green-bg);color:var(--green-tx);font-family:inherit">↺ Riabilita</button>\`
-          : \`<button
-              data-a-tipo="\${aTipo}" data-a-codice="\${aCodice}" data-a-nome="\${aNome.replace(/"/g,'&quot;')}"
-              data-b-tipo="\${bTipo}" data-b-codice="\${cod}" data-b-nome="\${nome.replace(/"/g,'&quot;')}"
-              onclick="aggiungiRegolaBtn(this)"
-              style="padding:3px 12px;border-radius:4px;border:0.5px solid var(--border);font-size:11px;cursor:pointer;background:none;color:var(--mid);font-family:inherit">🚫 Escludi</button>\`
+        ? (escluso||daVer)
+          ? \`<button onclick="rimuoviRegola('\${regola?.id}')" style="padding:3px 12px;border-radius:4px;border:0.5px solid var(--green-tx);font-size:11px;cursor:pointer;background:var(--green-bg);color:var(--green-tx);font-family:inherit">↺ \${escluso?'Riabilita':'Togli verifica'}</button>\`
+          : \`<span style="display:flex;gap:4px"><button \${dataAttr} data-tipo="escludi" onclick="aggiungiRegolaBtn(this)" style="\${btnStyle}">🚫 Escludi</button><button \${dataAttr} data-tipo="verifica" onclick="aggiungiRegolaBtn(this)" style="\${btnStyle}">⚠ Richiede verifica</button></span>\`
         : '<span style="font-size:11px;color:var(--mid)">Seleziona un valore A</span>'
       }
     </div>\`;
@@ -8164,7 +8192,7 @@ async function adminCompatibilita(){
     <td style="padding:5px 8px"><span class="tag" style="font-size:10px">\${ENTITA[r.entita_a_tipo]?.label||r.entita_a_tipo}</span></td>
     <td style="padding:5px 8px;font-weight:500">\${r.entita_a_codice}</td>
     <td style="padding:5px 8px;color:var(--mid)">\${r.entita_a_nome||''}</td>
-    <td style="padding:5px 8px;color:var(--mid)">→ esclude</td>
+    <td style="padding:5px 8px;color:var(--mid)">\${r.tipo_regola==='verifica'?'→ richiede verifica':'→ esclude'}</td>
     <td style="padding:5px 8px"><span class="tag" style="font-size:10px;background:var(--red-bg);color:var(--red-tx)">\${ENTITA[r.entita_b_tipo]?.label||r.entita_b_tipo}</span></td>
     <td style="padding:5px 8px;font-weight:500;color:var(--red-tx)">\${r.entita_b_codice}</td>
     <td style="padding:5px 8px;color:var(--mid)">\${r.entita_b_nome||''}</td>
@@ -8178,7 +8206,7 @@ async function adminCompatibilita(){
     <div style="width:420px;min-width:420px;display:flex;flex-direction:column;gap:10px">
       \${adminCard('Aggiungi regola di esclusione',\`
         <div style="background:var(--green-bg);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--green-tx);margin-bottom:12px">
-          Tutto è disponibile per default. Definisci solo le esclusioni: <em>"Se si sceglie A → escludi B"</em>
+          Tutto ciò che il configuratore permette è consentito. Definisci le eccezioni: <em>"Se si sceglie A → escludi B"</em> oppure <em>"→ B richiede verifica tecnica"</em>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
           <div>
@@ -8199,10 +8227,6 @@ async function adminCompatibilita(){
             <div style="font-size:11px;color:var(--mid)">\${bItems.length} opzioni disponibili</div>
           </div>
         </div>
-        \${(aCodice && coppiaControllata) ? \`<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;margin-bottom:8px;border-radius:var(--radius);background:\${verificato?'var(--green-bg)':'var(--amber-bg)'};font-size:12px;color:\${verificato?'var(--green-tx)':'var(--amber-tx)'}">
-          <span>\${verificato?'✓ Verificato: le opzioni non escluse sono consentite':'Non verificato: le combinazioni non escluse risultano \"da verificare\"'}\${consentiteB.size?' · '+consentiteB.size+' consentite singolarmente':''}</span>
-          <button class="btn btn-sm" onclick="toggleVerificaCompat('\${aTipo}','\${aCodice}','\${bTipo}',\${verificato})">\${verificato?'Togli verifica':'Segna come verificato'}</button>
-        </div>\` : ''}
         <div style="max-height:calc(100vh - 380px);overflow-y:auto;border:0.5px solid var(--border);border-radius:var(--radius)">
           \${aCodice
             ? opzioniHtml||'<div style="padding:16px;text-align:center;color:var(--mid);font-size:12px">Nessuna opzione B per questa categoria</div>'
@@ -8213,16 +8237,14 @@ async function adminCompatibilita(){
 
     <!-- Pannello destro: elenco tutte le regole -->
     <div style="flex:1;overflow-y:auto">
-      \${adminCard('Copertura verifiche',\`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px">
-          <span>Combinazioni da verificare:</span>
+      \${adminCard('Controllo sui documenti',\`<div style="display:flex;align-items:center;gap:8px;font-size:12px;flex-wrap:wrap">
+          <span>Punti da verificare (regole ⚠, fuori misura, colori speciali):</span>
           <select onchange="salvaModoCompat(this.value)" style="padding:4px 8px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:12px;font-family:inherit">
             <option value="blocco" \${modoCompat!=='avviso'?'selected':''}>Bloccano invio e lancio</option>
             <option value="avviso" \${modoCompat==='avviso'?'selected':''}>Solo avviso (non bloccano)</option>
           </select>
-          <span style="color:var(--mid)">Le combinazioni vietate bloccano sempre.</span>
-        </div>
-        <div style="font-size:12px;color:var(--mid);margin-bottom:6px">Valori segnati come "verificati" per coppia di categorie. Le combinazioni di valori non verificati vanno approvate dal tecnico sui documenti.</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">\${COMPAT_CHECK.flatMap(c=>c.levels.map(l=>\`<span class="tag">\${COMPAT_LABEL[l]} → \${COMPAT_LABEL[c.b]}: <strong>\${coperMap[l+'→'+c.b]||0}</strong> verificati</span>\`)).join('')}</div>\`)}
+          <span style="color:var(--mid)">Combinazioni vietate e righe non più fattibili bloccano sempre.</span>
+        </div>\`)}
       \${adminCard(\`Tutte le regole attive (\${regole?.length||0})\`,\`
         \${tutteRegole
           ? \`<div style="overflow-x:auto"><table style="width:100%">
@@ -8238,13 +8260,13 @@ async function adminCompatibilita(){
 function aggiungiRegolaBtn(btn){
   const at=btn.dataset.aTipo, ac=btn.dataset.aCodice, an=btn.dataset.aNome;
   const bt=btn.dataset.bTipo, bc=btn.dataset.bCodice, bn=btn.dataset.bNome;
-  aggiungiRegola(at,ac,an,bt,bc,bn);
+  aggiungiRegola(at,ac,an,bt,bc,bn,btn.dataset.tipo||'escludi');
 }
 
-async function aggiungiRegola(aTipo, aCodice, aNome, bTipo, bCodice, bNome){
+async function aggiungiRegola(aTipo, aCodice, aNome, bTipo, bCodice, bNome, tipoRegola){
   const {error}=await sb.from('regole_compatibilita').insert([{
     entita_a_tipo:aTipo, entita_a_codice:aCodice, entita_a_nome:aNome,
-    entita_b_tipo:bTipo, entita_b_codice:bCodice, entita_b_nome:bNome
+    entita_b_tipo:bTipo, entita_b_codice:bCodice, entita_b_nome:bNome, tipo_regola:tipoRegola||'escludi'
   }]);
   if(error){
     if(error.code==='23505'||error.message?.includes('duplicate')||error.message?.includes('unique')){
@@ -8255,7 +8277,7 @@ async function aggiungiRegola(aTipo, aCodice, aNome, bTipo, bCodice, bNome){
     adminCompatibilita();
     return;
   }
-  toast('Regola aggiunta','ok');
+  toast(tipoRegola==='verifica'?'Combinazione: richiede verifica tecnica':'Esclusione aggiunta','ok');
   adminCompatibilita();
 }
 
