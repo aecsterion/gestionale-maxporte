@@ -1480,6 +1480,10 @@ async function confermaInvioPreventivo(){
     renderOrdineDetail(_invioDocId);
     return;
   }
+  if(_invioMode==='comunicazione'){
+    await inviaComunicazioneOrdine(emailTo, document.getElementById('invia-email-cc').value.trim(), oggetto, testo);
+    return;
+  }
   if(_invioMode==='conferma_diretta'){
     var b=document.getElementById('btn-invia-conferma'); b.disabled=true; b.textContent='Invio in corso...';
     try{
@@ -6171,6 +6175,57 @@ async function segnaTutteLette(ev){
   disegnaCampanella();
 }
 
+// ══ COMUNICAZIONI D'ORDINE AL CLIENTE ═════════════════════════
+// Lancio in produzione, commessa pronta, slittamento approntamento: si apre la finestra email
+// già compilata (mittente ufficio@), si controlla e si invia; chiudendo non parte nulla.
+var _comunicazione=null;
+async function apriComunicazioneOrdine(ordineId, tipo, extra){
+  const r=await sb.from("ordini_vendita").select("*,anagrafiche(*)").eq("id",ordineId).single();
+  const o=r.data; if(!o) return;
+  const an=o.anagrafiche||{};
+  const to=emailDocumentiCliente(an);
+  const rif=o.riferimento_cliente?(" (vostro riferimento: "+o.riferimento_cliente+")"):"";
+  const nl=String.fromCharCode(10);
+  const saluti=nl+nl+"Restiamo a disposizione per qualsiasi chiarimento."+nl+nl+"Cordiali saluti,"+nl+FIRMA_EMAIL_UFFICIO;
+  let oggetto="", testo="Gentile "+(an.ragione_sociale||"cliente")+","+nl+nl;
+  if(tipo==="lancio"){
+    oggetto="Ordine n. "+o.numero+" in produzione - Max Porte";
+    testo+="le confermiamo che il suo ordine n. "+o.numero+rif+" è stato messo in produzione."+
+      (o.settimana_consegna?nl+"La merce sarà pronta presso la nostra sede nella settimana "+o.settimana_consegna+".":"");
+  } else if(tipo==="pronto"){
+    oggetto="Ordine n. "+o.numero+" pronto - Max Porte";
+    testo+="la informiamo che il suo ordine n. "+o.numero+rif+" è pronto."+nl+
+      (o.trasporto_mezzo==="ritiro" ? "La merce è disponibile per il ritiro presso la nostra sede di Bruino (TO)." : "La contatteremo a breve per concordare la consegna.");
+  } else if(tipo==="slittamento"){
+    oggetto="Ordine n. "+o.numero+" - aggiornamento data di approntamento - Max Porte";
+    testo+="la informiamo che l'approntamento del suo ordine n. "+o.numero+rif+" passa dalla settimana "+(extra&&extra.da||"—")+" alla settimana "+(extra&&extra.a||"—")+"."+nl+"Ci scusiamo per l'eventuale disagio.";
+  }
+  testo+=saluti;
+  _comunicazione={ordineId:ordineId, numero:o.numero, tipo:tipo};
+  _invioDocId=ordineId; _invioNumero=o.numero; _invioPayload={}; _invioMode="comunicazione";
+  document.getElementById("invia-email-to").value=to;
+  document.getElementById("invia-email-cc").value="";
+  document.getElementById("invia-oggetto").value=oggetto;
+  document.getElementById("invia-testo").value=testo;
+  const tit={lancio:"Comunica al cliente: ordine in produzione", pronto:"Comunica al cliente: ordine pronto", slittamento:"Comunica al cliente: nuova settimana di approntamento"};
+  document.getElementById("invia-titolo").textContent=tit[tipo]||"Comunicazione al cliente";
+  document.getElementById("invia-nota").textContent="Email da ufficio@maxporte.it, senza allegati. Chiudi la finestra per non inviarla.";
+  ensureModalInBody("modal-invia-preventivo").classList.add("open");
+}
+async function inviaComunicazioneOrdine(to, cc, oggetto, testo){
+  const b=document.getElementById("btn-invia-conferma"); b.disabled=true; b.textContent="Invio in corso...";
+  try{
+    const resp=await fetch("/invia-email",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({email_to:to,email_cc:cc,oggetto:oggetto,testo:testo,mittente:"ufficio"})});
+    const res=await resp.json();
+    if(!res.ok){ toast("Invio non riuscito: "+res.error,"err"); return; }
+    await sb.from("log_approvazioni").insert([{ordine_id:_comunicazione.ordineId,user_id:(currentUser&&currentUser.id)||null,azione:"email_"+_comunicazione.tipo}]);
+    toast("Email inviata a "+to,"ok");
+    closeForm("modal-invia-preventivo");
+  }catch(e){ toast("Invio non riuscito: "+e.message,"err"); }
+  finally{ b.disabled=false; b.textContent="Invia"; }
+}
+
 // Netto documento: sconti sulle righe, trasporto a prezzo pieno.
 // (nel DB totale_imponibile = somma righe + costo_trasporto)
 function nettoDoc(d){
@@ -6233,6 +6288,7 @@ async function lanciaInProduzione(id){
   if(upd.fido_forzato_da) notifica({tipo:'fido', titolo:'Fido forzato: '+(ord.numero||''), testo:(ord.anagrafiche&&ord.anagrafiche.ragione_sociale||'')+' — lanciato in produzione oltre il fido da '+upd.fido_forzato_da, link_tipo:'ordine', link_id:id, ruoli:['admin','super_admin']});
   toast(upd.fido_forzato_da?'Lanciato in produzione (fido forzato)':'Lanciato in produzione','ok');
   renderOrdineDetail(id);
+  apriComunicazioneOrdine(id,'lancio');
 }
 
 // ── Scarico coprifili ─────────────────────────────────
@@ -6309,6 +6365,7 @@ async function segnaCommessaPronta(id){
   notifica({tipo:'pronto', titolo:'Commessa pronta: '+(op&&op.numero||''), testo:(op&&op.anagrafiche&&op.anagrafiche.ragione_sociale)||'', link_tipo:'ordine', link_id:id, utente:op&&op.creato_da, ruoli:['back_office','super_admin']});
   toast('Commessa pronta','ok');
   renderOrdineDetail(id);
+  apriComunicazioneOrdine(id,'pronto');
 }
 
 async function segnaPagato(id, pagato){
@@ -6707,9 +6764,15 @@ async function salvaRiferimento(tipo, id, val){
 }
 
 async function salvaSettimanaAppront(id, val){
-  const { error } = await sb.from('ordini_vendita').update({settimana_consegna: val.trim()||null}).eq('id', id);
+  const nuovo = val.trim()||null;
+  const {data:prima} = await sb.from('ordini_vendita').select('settimana_consegna,stato').eq('id',id).single();
+  if(prima && (prima.settimana_consegna||null)===nuovo) return;
+  const { error } = await sb.from('ordini_vendita').update({settimana_consegna: nuovo}).eq('id', id);
   if(error){ toast('Errore salvataggio: '+error.message,'err'); return; }
   toast('Settimana approntamento salvata','ok');
+  // Ordine già lanciato e data cambiata: proponi la comunicazione al cliente
+  if(prima && prima.settimana_consegna && nuovo && ['in_produzione','inviato'].includes(prima.stato))
+    apriComunicazioneOrdine(id,'slittamento',{da:prima.settimana_consegna, a:nuovo});
 }
 
 async function approvaOrdine(id, tipo){
@@ -9450,10 +9513,10 @@ function inviaConResend({to, cc, subject, text, attachmentName, attachmentData, 
     ...(cc ? {cc: Array.isArray(cc) ? cc : [cc]} : {}),
     subject,
     text,
-    attachments: [{
+    ...(attachmentData ? {attachments: [{
       filename: attachmentName,
       content: attachmentData.toString('base64'),
-    }]
+    }]} : {})
   });
 
   const options = {
@@ -9523,6 +9586,21 @@ const server = http.createServer(function(req, res) {
           }
         }, 'genera_scheda.py');
       } catch(e) { res.writeHead(400,{'Content-Type':'text/plain'}); res.end('JSON: '+e.message); }
+    });
+    return;
+  }
+  if(req.method==='POST'&&req.url==='/invia-email'){
+    let body='';
+    req.on('data',function(c){body+=c.toString();});
+    req.on('end',function(){
+      try{
+        const d=JSON.parse(body);
+        if(!d.email_to||!d.oggetto||!d.testo){res.writeHead(400,{'Content-Type':'application/json'});res.end(JSON.stringify({ok:false,error:'Dati mancanti'}));return;}
+        inviaConResend({to:d.email_to, cc:d.email_cc||'', subject:d.oggetto, text:d.testo, from: MITTENTI[d.mittente] || MAIL_FROM},function(e2){
+          if(e2){res.writeHead(500,{'Content-Type':'application/json'});res.end(JSON.stringify({ok:false,error:e2.message}));}
+          else{res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({ok:true}));}
+        });
+      }catch(e){res.writeHead(400,{'Content-Type':'application/json'});res.end(JSON.stringify({ok:false,error:e.message}));}
     });
     return;
   }
