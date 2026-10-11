@@ -128,3 +128,17 @@ Formato: `## data — titolo`, **Area**, **Spunto**, **Stato** (`da valutare` / 
 **Area:** Magazzino
 **Spunto:** Tre livelli: magazzino reale (utenti abilitati) e due magazzini teorici in simbiosi, visibili solo a super admin e titolari. Logica di interazione da definire.
 **Stato:** `da valutare`
+
+---
+
+## 2026-10-11 — Notifiche interne al gestionale
+**Area:** Trasversale
+**Spunto:** Campanella con notifiche per utente/ruolo: cosa c'è da fare, cosa manca, problemi, ordini pronti. Proposta: tabella notifiche + aggiornamento in tempo reale (Supabase Realtime); due tipi: eventi (es. ordine da approvare, fido forzato, giacenza negativa dopo scarico, ordine pronto) e liste "da fare" calcolate (es. approntamento vicino e commessa non pronta). In futuro anche email/push.
+**Stato:** `da valutare`
+
+---
+
+## 2026-10-11 — Compatibilità dinamiche + blocco in produzione
+**Area:** Configuratore / Produzione / Ufficio tecnico
+**Spunto:** Non tutte le combinazioni sono configurate. Proposta: regole di compatibilità a tabella (vietato / da verificare / consentito); le combinazioni non coperte da nessuna regola = "non verificate" → l'ordine richiede approvazione tecnica; il resp. tecnico approva o vieta con "ricorda" → nasce la regola (la configurazione cresce dai casi reali). Doppio controllo: nel configuratore e al lancio in produzione (blocco se ci sono righe vietate o non verificate).
+**Stato:** `da valutare`
