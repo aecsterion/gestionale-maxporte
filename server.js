@@ -305,6 +305,8 @@ tr.data-row:hover td{background:var(--beige);cursor:pointer}
         <span class="topbar-bc" id="topbar-bc">Panoramica generale</span>
       </div>
       <div style="display:flex;gap:8px;align-items:center">
+        <input type="text" id="scan-campo" placeholder="Cerca / codice…" onkeydown="cercaDaCampo(event)" title="Numero ordine o preventivo, codice articolo, nome cliente — Invio per aprire. Lo scanner funziona anche senza cliccare qui." style="padding:5px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:12px;width:170px;font-family:inherit">
+        <button class="btn btn-sm" onclick="apriScannerCamera()" title="Scansiona con la fotocamera">📷</button>
         <span style="font-size:12px;color:var(--mid)" id="topbar-date"></span>
         <button class="btn btn-red btn-sm" id="topbar-action" onclick="openForm()" style="display:none">+ Nuovo</button>
       </div>
@@ -5956,6 +5958,97 @@ async function avvisoCompatConfiguratore(){
     '<strong>Da far verificare all&#39;ufficio tecnico:</strong> '+
     prob.map(function(p){ return p.descr+(p.stato==="vietato"?" (vietata)":""); }).join(" · ")+
     '. Puoi aggiungere la porta, ma il documento potrà partire solo dopo l&#39;approvazione del tecnico.</div>';
+}
+
+// ══ LETTORE BARCODE / RICERCA RAPIDA ══════════════════════
+// Lo scanner USB/Bluetooth si comporta come una tastiera: scrive il codice velocissimo e preme Invio.
+// L'ascoltatore globale riconosce la raffica (tasti a meno di ~40 ms l'uno dall'altro) senza
+// bisogno di cliccare in un campo. Il campo in alto serve solo per scrivere a mano; il pulsante
+// fotocamera usa il telefono/tablet come lettore.
+const _scan = {buf:"", t0:0, tLast:0};
+document.addEventListener("keydown", function(e){
+  const el=e.target;
+  const editabile = el && (el.tagName==="INPUT" || el.tagName==="TEXTAREA" || el.tagName==="SELECT" || el.isContentEditable);
+  if(editabile && el.id!=="scan-campo") return;
+  if(el && el.id==="scan-campo") return; // il campo manuale gestisce da sé l'Invio
+  const now=Date.now();
+  if(e.key==="Enter"){
+    const n=_scan.buf.length;
+    const media = n>1 ? (_scan.tLast-_scan.t0)/(n-1) : 999;
+    if(n>=5 && media<40){ e.preventDefault(); const cod=_scan.buf; _scan.buf=""; apriDaCodice(cod, true); return; }
+    _scan.buf=""; return;
+  }
+  if(e.key.length!==1) return;
+  if(now-_scan.tLast>60){ _scan.buf=""; _scan.t0=now; }
+  _scan.buf+=e.key; _scan.tLast=now;
+});
+
+async function apriDaCodice(codice, daScanner){
+  const c=String(codice||"").trim().toUpperCase();
+  if(!c) return;
+  if(!currentUser){ return; }
+  // Conferma d'ordine (numero completo o solo il numero finale)
+  if(c.indexOf("ORD-")===0 || /^[0-9]{3,6}$/.test(c)){
+    let q=sb.from("ordini_vendita").select("id,numero");
+    q = c.indexOf("ORD-")===0 ? q.eq("numero",c) : q.like("numero","%-"+c);
+    const r=await q.limit(2);
+    if(r.data && r.data.length===1){ chiudiScanner(); renderOrdineDetail(r.data[0].id); return; }
+    if(r.data && r.data.length>1){ toast("Più conferme con numero "+c+": usa il numero completo","err"); return; }
+  }
+  if(c.indexOf("PRV-")===0){
+    const r=await sb.from("preventivi").select("id").eq("numero",c).maybeSingle();
+    if(r.data){ chiudiScanner(); renderPreventivoDetail(r.data.id); return; }
+  }
+  // Articolo di magazzino
+  const a=await sb.from("magazzino").select("id").or("codice_mp.eq."+c+",codice.eq."+c).limit(1);
+  if(a.data && a.data.length){
+    chiudiScanner();
+    evidenziaSezione("magazzino"); await renderMagazzino(); apriDettaglioMagazzino(a.data[0].id); return;
+  }
+  // Solo da ricerca manuale: cliente per nome
+  if(!daScanner && c.length>=3){
+    const an=await sb.from("anagrafiche").select("id,ragione_sociale").ilike("ragione_sociale","%"+String(codice).trim()+"%").limit(2);
+    if(an.data && an.data.length===1){ evidenziaSezione("anagrafiche"); await renderAnagrafiche(); editAnagrafica(an.data[0].id); return; }
+    if(an.data && an.data.length>1){ toast("Più clienti corrispondono: cerca dalla sezione Anagrafiche","err"); return; }
+  }
+  toast("Codice non riconosciuto: "+c,"err");
+}
+
+function cercaDaCampo(ev){
+  if(ev.key!=="Enter") return;
+  const el=document.getElementById("scan-campo");
+  const v=el.value; el.value=""; el.blur();
+  apriDaCodice(v, false);
+}
+
+// Fotocamera (telefono/tablet): libreria caricata solo al primo uso
+let _scanCam=null;
+async function apriScannerCamera(){
+  let ov=document.getElementById("scan-overlay");
+  if(!ov){
+    ov=document.createElement("div"); ov.id="scan-overlay";
+    ov.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:20000;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px";
+    ov.innerHTML='<div id="scan-video" style="width:100%;max-width:480px;background:#000;border-radius:8px;overflow:hidden"></div>'+
+      '<div style="color:#fff;font-size:13px;margin:12px 0">Inquadra il barcode della scheda o dell&#39;etichetta</div>'+
+      '<button class="btn" onclick="chiudiScanner()">Chiudi</button>';
+    document.body.appendChild(ov);
+  }
+  ov.style.display="flex";
+  if(!window.Html5Qrcode){
+    await new Promise(function(ok, ko){ const s=document.createElement("script"); s.src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"; s.onload=ok; s.onerror=ko; document.head.appendChild(s); })
+      .catch(function(){ toast("Impossibile caricare il lettore fotocamera","err"); });
+    if(!window.Html5Qrcode){ chiudiScanner(); return; }
+  }
+  try{
+    _scanCam=new Html5Qrcode("scan-video");
+    await _scanCam.start({facingMode:"environment"}, {fps:10, qrbox:{width:300,height:120}},
+      function(testo){ apriDaCodice(testo, true); }, function(){});
+  }catch(err){ toast("Fotocamera non disponibile: "+(err&&err.message?err.message:err),"err"); chiudiScanner(); }
+}
+function chiudiScanner(){
+  const ov=document.getElementById("scan-overlay");
+  if(_scanCam){ const c=_scanCam; _scanCam=null; c.stop().then(function(){ c.clear(); }).catch(function(){}); }
+  if(ov) ov.style.display="none";
 }
 
 // Netto documento: sconti sulle righe, trasporto a prezzo pieno.
