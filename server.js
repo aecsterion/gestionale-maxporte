@@ -1456,7 +1456,7 @@ async function apriModalInvioPreventivo(docId){
     'La ringraziamo per averci interpellato e restiamo a Sua disposizione per qualsiasi chiarimento.'+nl+nl+
     'Cordiali saluti,'+nl+FIRMA_EMAIL;
   document.getElementById('invia-email-cc').value='';
-  document.getElementById('invia-oggetto').value='Preventivo n. '+numero+' - Max Porte';
+  document.getElementById('invia-oggetto').value='Max Porte - Offerta n. '+numero+(doc.riferimento_cliente?' rif. '+doc.riferimento_cliente:'');
   document.getElementById('invia-testo').value=testo;
   _invioDocId=docId;_invioNumero=numero;_invioMode='preventivo';
   document.getElementById('invia-titolo').textContent='Invia preventivo';
@@ -9093,9 +9093,9 @@ async function apriModalInvioConferma(docId, diretto){
   const pend=doc.invio_pendente||{};
   document.getElementById('invia-email-to').value=pend.to||emailDocumentiCliente(an);
   document.getElementById('invia-email-cc').value=pend.cc||'';
-  document.getElementById('invia-oggetto').value=pend.oggetto||('Conferma d\\'ordine n. '+numero+' - Max Porte');
+  document.getElementById('invia-oggetto').value=pend.oggetto||('Max Porte - Conferma d\\'ordine n. '+numero+(doc.riferimento_cliente?' rif. '+doc.riferimento_cliente:''));
   document.getElementById('invia-testo').value=pend.testo||('Gentile '+(an.ragione_sociale||'')+','+nl+nl+
-    'in allegato trova la nostra *conferma d\\'ordine n. '+numero+'*'+(doc.riferimento_cliente?' - riferimento '+doc.riferimento_cliente:'')+'.'+nl+nl+
+    'in allegato trova la nostra *conferma d\\'ordine n. '+numero+'*'+(doc.riferimento_cliente?' - riferimento *'+doc.riferimento_cliente+'*':'')+'.'+nl+nl+
     'La preghiamo di verificare attentamente *quantità, misure, descrizioni e prezzi* degli articoli, oltre alle condizioni di vendita, e di restituircela *firmata per accettazione*: la produzione partirà solo dopo aver ricevuto la conferma firmata.'+nl+nl+
     '*NB:* eventuali modifiche vanno comunicate per email in modo chiaro ed evidente. Non saranno ritenute valide modifiche apportate direttamente sul file PDF.'+nl+nl+
     'La ringraziamo per aver scelto i nostri prodotti e restiamo a Sua disposizione per qualsiasi chiarimento.'+nl+nl+
