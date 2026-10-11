@@ -636,7 +636,7 @@ tr.data-row:hover td{background:var(--beige);cursor:pointer}
 <div id="modal-invia-preventivo" class="form-overlay" style="justify-content:center;align-items:flex-start;padding:20px">
   <div class="form-modal" style="max-width:600px">
     <div class="form-modal-head">
-      <span class="form-modal-title">Invia preventivo</span>
+      <span class="form-modal-title" id="invia-titolo">Invia preventivo</span>
       <button class="form-close" onclick="closeForm('modal-invia-preventivo')">&times;</button>
     </div>
     <div class="form-modal-body">
@@ -648,7 +648,7 @@ tr.data-row:hover td{background:var(--beige);cursor:pointer}
         <input type="text" id="invia-oggetto"></div>
       <div class="form-field"><label>Testo <span class="req">*</span></label>
         <textarea id="invia-testo" rows="10" style="font-size:13px;line-height:1.5"></textarea></div>
-      <div style="font-size:12px;color:var(--mid);margin-top:4px">Il PDF sara allegato automaticamente</div>
+      <div id="invia-nota" style="font-size:12px;color:var(--mid);margin-top:4px">Il PDF sara allegato automaticamente</div>
     </div>
     <div class="form-modal-foot">
       <button class="btn" onclick="closeForm('modal-invia-preventivo')">Annulla</button>
@@ -1003,12 +1003,14 @@ function badgeStato(s){
   const map={attivo:'bg',dormiente:'ba',prospect:'bb',nuovo:'bb',
     bozza:'ba',inviato:'bb',firmato:'bg',rifiutato:'bgr',non_concluso:'bgr',
     confermato:'bb',in_produzione:'ba',spedito:'bg',ritardo:'br',annullato:'bgr',
+    in_attesa:'ba',approvato_comm:'bg',approvato_tec:'bg',evaso:'bg',bloccato:'br',
     emessa:'bb',pagata:'bg',scaduta:'br','in_scadenza':'ba',
     presente:'bg',ferie:'ba',malattia:'br',
     pianificato:'bb','in_corso':'ba',completato:'bg'};
   const labels={attivo:'Attivo',dormiente:'Dormiente',prospect:'Prospect',nuovo:'Nuovo',
     bozza:'Bozza',inviato:'Inviato',firmato:'Firmato',rifiutato:'Rifiutato',non_concluso:'Non concluso',
     confermato:'Confermato',in_produzione:'In produzione',spedito:'Spedito',ritardo:'In ritardo',annullato:'Annullato',
+    in_attesa:'In approvazione',approvato_comm:'Approvato (comm.)',approvato_tec:'Approvato (tecn.)',evaso:'Evaso',bloccato:'Bloccato',
     emessa:'Emessa',pagata:'Pagata',scaduta:'Scaduta',in_scadenza:'In scadenza',
     presente:'Presente',ferie:'Ferie',malattia:'Malattia',
     pianificato:'Pianificato',in_corso:'In corso',completato:'Completato'};
@@ -1363,6 +1365,7 @@ function descrCoprifiliPDF(r){
   if(lav.length) txt += ' ('+lav.join('; ')+')';
   return txt;
 }
+var _invioMode='preventivo';
 async function apriModalInvioPreventivo(docId){
   var r=await sb.from('preventivi').select('*,anagrafiche(*)').eq('id',docId).single();
   var doc=r.data;if(!doc){toast('Preventivo non trovato','err');return;}
@@ -1381,7 +1384,9 @@ async function apriModalInvioPreventivo(docId){
   document.getElementById('invia-email-cc').value='';
   document.getElementById('invia-oggetto').value='Preventivo n. '+numero+' - Max Porte';
   document.getElementById('invia-testo').value=testo;
-  _invioDocId=docId;_invioNumero=numero;
+  _invioDocId=docId;_invioNumero=numero;_invioMode='preventivo';
+  document.getElementById('invia-titolo').textContent='Invia preventivo';
+  document.getElementById('invia-nota').textContent='Il PDF sara allegato automaticamente';
   _invioPayload=await buildPreventivoPayload(docId);
   var modal=ensureModalInBody('modal-invia-preventivo');
   modal.classList.add('open');
@@ -1391,6 +1396,27 @@ async function confermaInvioPreventivo(){
   var oggetto=document.getElementById('invia-oggetto').value.trim();
   var testo=document.getElementById('invia-testo').value.trim();
   if(!emailTo||!oggetto||!testo){toast('Compila tutti i campi obbligatori','err');return;}
+  if(_invioMode==='conferma'){
+    // Avvia il ciclo di approvazioni: l'email parte in automatico alla fine
+    var mail={to:emailTo,cc:document.getElementById('invia-email-cc').value.trim(),oggetto:oggetto,testo:testo};
+    const {error}=await sb.from('ordini_vendita').update({stato:'in_attesa',invio_pendente:mail,
+      approvato_da_comm:null,approvato_da_tec:null,data_approvazione_comm:null,data_approvazione_tec:null}).eq('id',_invioDocId);
+    if(error){toast('Errore: '+error.message,'err');return;}
+    await sb.from('log_approvazioni').insert([{ordine_id:_invioDocId,user_id:currentUser?.id,azione:'inviata_in_approvazione'}]);
+    closeForm('modal-invia-preventivo');
+    toast('Conferma in approvazione: partirà verso il cliente appena approvata','ok');
+    renderOrdineDetail(_invioDocId);
+    return;
+  }
+  if(_invioMode==='conferma_diretta'){
+    var b=document.getElementById('btn-invia-conferma'); b.disabled=true; b.textContent='Invio in corso...';
+    try{
+      await sb.from('ordini_vendita').update({invio_pendente:{to:emailTo,cc:document.getElementById('invia-email-cc').value.trim(),oggetto:oggetto,testo:testo}}).eq('id',_invioDocId);
+      const ok=await inviaConfermaAlCliente(_invioDocId);
+      if(ok){ closeForm('modal-invia-preventivo'); renderOrdineDetail(_invioDocId); }
+    } finally { b.disabled=false; b.textContent='Invia'; }
+    return;
+  }
   if(!_invioPayload){toast('Errore: payload mancante','err');return;}
   var btn=document.getElementById('btn-invia-conferma');
   btn.disabled=true;btn.textContent='Invio in corso...';
@@ -2545,7 +2571,8 @@ function cfgUpdatePrice(){
 }
 
 // ── MODAL CONFIGURATORE ───────────────────────────────
-function openConfiguratore(mode, targetId, listino_in){
+async function openConfiguratore(mode, targetId, listino_in){
+  if(targetId && await docBloccato(mode, targetId)) return;
   CFG_MODE = mode;
   CFG_TARGET_ID = targetId;
   CFG_EDIT_RIGA_ID = null;   // nuova riga
@@ -2561,6 +2588,7 @@ function openConfiguratore(mode, targetId, listino_in){
 // L'utente naviga con "Avanti" (ricalcolando prezzi/flag correttamente) e alla fine
 // la riga viene AGGIORNATA invece di crearne una nuova.
 async function modificaRiga(tabella, rigaId, docId, mode, listino_in){
+  if(await docBloccato(mode, docId)) return;
   const {data:r, error} = await sb.from(tabella).select('*').eq('id',rigaId).maybeSingle();
   if(error || !r){ toast('Riga non trovata','err'); return; }
   CFG_MODE = mode;
@@ -5064,7 +5092,7 @@ async function renderTrasportoCard(mode, doc, righe){
   const ritiro = (mezzo==='ritiro');
   const costo = parseFloat(doc.costo_trasporto)||0;
   const zoneOpts = '<option value="">— nessuna —</option>'+(zone||[]).map(z=>\`<option value="\${z.id}" \${String(z.id)===String(zonaId)?'selected':''}>\${z.nome}</option>\`).join('');
-  const bloccato = (mode==='preventivo' && doc.stato==='confermato');
+  const bloccato = (mode==='preventivo' ? prevBloccato(doc) : ordBloccato(doc));
   const dis = bloccato || ritiro;  // ritiro cliente → campi trasporto spenti
   return \`<div class="card">
     <div class="card-title">Trasporto</div>
@@ -5145,6 +5173,7 @@ async function ricalcolaTotale(docId, mode){
   if(avevaArr){
     toast('Arrotondamento azzerato: il totale e cambiato, reimpostalo se necessario','err');
   }
+  await documentoModificato(mode, docId);
 }
 
 // Conta le "porte" del documento per lo scaglione trasporto:
@@ -5245,7 +5274,7 @@ function filtraPrev(filtro){
 async function apriModificaPreventivo(id){
   const {data:prev}=await sb.from('preventivi').select('*').eq('id',id).single();
   if(!prev){toast('Preventivo non trovato','err');return;}
-  if(prev.stato==='confermato'){toast('Preventivo confermato: non modificabile','err');return;}
+  if(prevBloccato(prev)){toast('Preventivo firmato: le modifiche si fanno sulla conferma d\\'ordine','err');return;}
   const [{data:clienti},{data:agenti}]=await Promise.all([
     sb.from('anagrafiche').select('*').order('ragione_sociale'),
     sb.from('agenti').select('*').eq('attivo',true).order('cognome'),
@@ -5473,7 +5502,9 @@ async function salvaNuovoDoc(){
       docData.data_ultima_modifica = new Date().toISOString();
       // Se il preventivo era già stato inviato, torna a bozza — va reinviato
       if(mode==='preventivo') docData.stato = 'bozza';
+      else if(await docBloccato('ordine', editId)) return;
       const {data:updated, error} = await sb.from(tabDoc).update(docData).eq('id',editId).select().single();
+      if(mode!=='preventivo') await documentoModificato('ordine', editId);
       if(error){ toast('Errore aggiornamento: '+error.message,'err'); return; }
       docId = editId;
       docNumero = updated.numero;
@@ -5544,9 +5575,9 @@ async function renderPreventivoDetail(id){
       <td style="text-align:center">\${r.quantita}</td>
       <td style="text-align:right">\${fmtEuro(r.prezzo_unitario)}</td>
       <td style="text-align:right;font-weight:500">\${fmtEuro(r.prezzo_totale_riga)}</td>
-      <td style="white-space:nowrap">
+      <td style="white-space:nowrap">\${prevBloccato(prev)?'':\`
         <button class="btn btn-sm" title="Modifica" onclick="modificaRiga('righe_preventivo','\${r.id}','\${id}','preventivo','\${prev.listino}')">&#9998;</button>
-        <button class="btn btn-sm" style="color:var(--red)" title="Elimina" onclick="eliminaRiga('righe_preventivo','\${r.id}','\${id}','preventivo')">×</button>
+        <button class="btn btn-sm" style="color:var(--red)" title="Elimina" onclick="eliminaRiga('righe_preventivo','\${r.id}','\${id}','preventivo')">×</button>\`}
       </td>
     </tr>\`).join('');
 
@@ -5556,13 +5587,13 @@ async function renderPreventivoDetail(id){
       <button class="btn btn-sm" onclick="renderPreventivi()">← Tutti i preventivi</button>
     </div>
     <div style="display:flex;gap:8px">
-      <button class="btn btn-sm" onclick="openConfiguratore('preventivo','\${id}','\${prev.listino}')">+ Aggiungi porta</button>
+      \${prevBloccato(prev)?'':\`<button class="btn btn-sm" onclick="openConfiguratore('preventivo','\${id}','\${prev.listino}')">+ Aggiungi porta</button>\`}
       <button class="btn btn-sm" onclick="esportaPDF('preventivo','\${id}')">📄 Esporta PDF</button>
       \${prev.stato==='bozza'?\`<button class="btn btn-sm" onclick="apriModalInvioPreventivo('\${id}')" style="display:inline-flex;align-items:center;gap:5px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>Invia</button>\`:''}
       \${prev.stato==='inviato'?\`<button class="btn btn-red btn-sm" onclick="firmaPreventivo('\${id}')">Firma e converti in ordine</button>\`:''}
-      \${prev.stato!=='confermato'?\`<button class="btn btn-sm" onclick="apriModificaPreventivo('\${id}')" style="display:inline-flex;align-items:center;gap:5px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Modifica</button>\`:''}
+      \${!prevBloccato(prev)?\`<button class="btn btn-sm" onclick="apriModificaPreventivo('\${id}')" style="display:inline-flex;align-items:center;gap:5px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Modifica</button>\`:''}
       \${prev.stato==='bozza'||prev.stato==='inviato'?\`<button class="btn btn-sm" style="color:var(--red);display:inline-flex;align-items:center;gap:5px" onclick="cambiaStatoPreventivo('\${id}','non_concluso')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>Non concluso</button>\`:''}
-      \${prev.stato!=='confermato'?\`<button class="btn btn-sm" style="color:var(--red);display:inline-flex;align-items:center;gap:5px" onclick="eliminaPreventivo('\${id}')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>Elimina</button>\`:''}
+      \${!prevBloccato(prev)?\`<button class="btn btn-sm" style="color:var(--red);display:inline-flex;align-items:center;gap:5px" onclick="eliminaPreventivo('\${id}')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>Elimina</button>\`:''}
 
     </div>
   </div>
@@ -5606,6 +5637,7 @@ async function renderPreventivoDetail(id){
 }
 
 async function eliminaRiga(tabella, rigaId, docId, mode){
+  if(await docBloccato(mode, docId)) return;
   if(!confirm('Eliminare questa riga?')) return;
   const {data:rDel}=await sb.from(tabella).select('collegamento_id,auto_sopraluce').eq('id',rigaId).maybeSingle();
   await sb.from(tabella).delete().eq('id',rigaId);
@@ -5647,7 +5679,7 @@ async function lanciaInProduzione(id){
   const {data:ord,error}=await sb.from('ordini_vendita').select('*,anagrafiche(ragione_sociale,fido_commerciale)').eq('id',id).single();
   if(error||!ord){ toast('Ordine non trovato','err'); return; }
   const fido=parseFloat(ord.anagrafiche&&ord.anagrafiche.fido_commerciale)||0;
-  const upd={stato:'in_produzione'};
+  const upd={stato:'in_produzione', data_firma:new Date().toISOString()};
   if(fido>0){
     const {data:aperti}=await sb.from('ordini_vendita')
       .select('id,numero,totale_imponibile,costo_trasporto,sconto1,sconto2,totale_arrotondato,pagato,stato')
@@ -5773,6 +5805,7 @@ async function salvaArrotondamento(id, netto, tipo){
   }).eq('id', id);
   if(error){ toast('Errore salvataggio: '+error.message,'err'); return; }
   toast('Arrotondamento salvato','ok');
+  await documentoModificato(tipo==='ordine'?'ordine':'preventivo', id);
   refresh(id);
 }
 
@@ -5786,6 +5819,7 @@ async function rimuoviArrotondamento(id, tipo){
   }).eq('id', id);
   if(error){ toast('Errore: '+error.message,'err'); return; }
   toast('Arrotondamento rimosso','ok');
+  await documentoModificato(tipo==='ordine'?'ordine':'preventivo', id);
   refresh(id);
 }
 
@@ -5821,7 +5855,7 @@ async function firmaPreventivo(prevId){
     totale_arrotondato:prev.totale_arrotondato||null,
     arrotondamento_euro:prev.arrotondamento_euro||null,
     richiede_approvazione_tecnica:haCustom,
-    stato:'in_attesa', creato_da:currentUser?.id, nome_compilatore:currentNomeUtente||currentUser?.email||'—'
+    stato:'bozza', creato_da:currentUser?.id, nome_compilatore:currentNomeUtente||currentUser?.email||'—'
   }]).select().single();
 
   if(ord?.data||ord){
@@ -5853,12 +5887,12 @@ async function renderOrdiniDiretti(){
       .order('created_at',{ascending:false});
     if(error) throw error;
     window._ordData = data||[];
-    const stats={in_attesa:0,approvato_comm:0,approvato_tec:0,in_produzione:0,evaso:0,bloccato:0};
+    const stats={bozza:0,in_attesa:0,approvato_comm:0,approvato_tec:0,inviato:0,in_produzione:0,evaso:0,bloccato:0};
     window._ordData.forEach(function(o){ if(stats[o.stato]!==undefined) stats[o.stato]++; });
     document.getElementById('main-content').innerHTML=
       '<div class="grid-4" style="margin-bottom:16px">'+
-      '<div class="metric"><div class="metric-label">In attesa</div><div class="metric-value">'+stats.in_attesa+'</div></div>'+
-      '<div class="metric"><div class="metric-label">Approvati</div><div class="metric-value" style="color:var(--green-tx)">'+(stats.approvato_comm+stats.approvato_tec)+'</div></div>'+
+      '<div class="metric"><div class="metric-label">Bozze / in approvazione</div><div class="metric-value">'+(stats.bozza+stats.in_attesa+stats.approvato_comm+stats.approvato_tec)+'</div></div>'+
+      '<div class="metric"><div class="metric-label">Inviate, da firmare</div><div class="metric-value" style="color:var(--green-tx)">'+stats.inviato+'</div></div>'+
       '<div class="metric"><div class="metric-label">In produzione</div><div class="metric-value" style="color:var(--red)">'+stats.in_produzione+'</div></div>'+
       '<div class="metric"><div class="metric-label">Evasi</div><div class="metric-value">'+stats.evaso+'</div></div>'+
       '</div>'+
@@ -5918,6 +5952,7 @@ function filtraOrd(filtro){
 async function apriModificaOrdine(id){
   const {data:ord}=await sb.from('ordini_vendita').select('*').eq('id',id).single();
   if(!ord){toast('Ordine non trovato','err');return;}
+  if(ordBloccato(ord)){toast('Ordine già in produzione: non più modificabile','err');return;}
   const [{data:clienti},{data:agenti}]=await Promise.all([
     sb.from('anagrafiche').select('*').order('ragione_sociale'),
     sb.from('agenti').select('*').eq('attivo',true).order('cognome'),
@@ -6018,8 +6053,8 @@ async function renderOrdineDetail(id){
       '<td style="text-align:center">'+r.quantita+'</td>'+
       '<td style="text-align:right">'+fmtEuro(r.prezzo_unitario)+'</td>'+
       '<td style="text-align:right;font-weight:500">'+fmtEuro(r.prezzo_totale_riga)+'</td>'+
-      '<td style="white-space:nowrap">'+'<button class="btn btn-sm" title="Modifica" onclick="modificaRiga(\\'righe_ordine\\',\\''+r.id+'\\',\\''+id+'\\',\\'ordine\\',\\''+(ord.listino||'A')+'\\')">✎</button>'+
-      '<button class="btn btn-sm" style="color:var(--red)" onclick="eliminaRiga(\\'righe_ordine\\',\\''+r.id+'\\',\\''+id+'\\',\\'ordine\\')">&times;</button>'+
+      '<td style="white-space:nowrap">'+(ordBloccato(ord)?'':'<button class="btn btn-sm" title="Modifica" onclick="modificaRiga(\\'righe_ordine\\',\\''+r.id+'\\',\\''+id+'\\',\\'ordine\\',\\''+(ord.listino||'A')+'\\')">✎</button>'+
+      '<button class="btn btn-sm" style="color:var(--red)" onclick="eliminaRiga(\\'righe_ordine\\',\\''+r.id+'\\',\\''+id+'\\',\\'ordine\\')">&times;</button>')+
       '</td>'+
       '</tr>';
   }).join('');
@@ -6032,11 +6067,19 @@ async function renderOrdineDetail(id){
   if(ord.stato==='approvato_comm'&&ord.richiede_approvazione_tecnica&&possoApprovaTec){
     bottoniApprovazione+='<button class="btn btn-red btn-sm" onclick="approvaOrdine(\\''+id+'\\',\\'tec\\')">Approva (tecnico)</button>';
   }
-  if((ord.stato==='approvato_comm'&&!ord.richiede_approvazione_tecnica)||(ord.stato==='approvato_tec')){
-    bottoniApprovazione+='<button class="btn btn-red btn-sm" onclick="lanciaInProduzione(\\''+id+'\\')">Lancia in produzione</button>';
+  var approvataFinale = (ord.stato==='approvato_comm'&&!ord.richiede_approvazione_tecnica)||(ord.stato==='approvato_tec');
+  if(ord.stato==='bozza'){
+    bottoniApprovazione+='<button class="btn btn-red btn-sm" onclick="apriModalInvioConferma(\\''+id+'\\',false)">Invia</button>';
+  }
+  if(approvataFinale){
+    // approvata ma email non partita (dati mancanti o invio fallito): invio manuale
+    bottoniApprovazione+='<button class="btn btn-red btn-sm" onclick="apriModalInvioConferma(\\''+id+'\\',true)">Invia al cliente</button>';
+  }
+  if(ord.stato==='inviato'){
+    bottoniApprovazione+='<button class="btn btn-red btn-sm" onclick="lanciaInProduzione(\\''+id+'\\')">Firma e lancia in produzione</button>';
   }
 
-  var puoModificare = ord.stato==='in_attesa';
+  var puoModificare = !ordBloccato(ord);
 
   document.getElementById('main-content').innerHTML=
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'+
@@ -6127,6 +6170,9 @@ async function approvaOrdine(id, tipo){
   await sb.from('ordini_vendita').update({stato,[campoData]:new Date().toISOString(),[campoUser]:currentUser?.id}).eq('id',id);
   await sb.from('log_approvazioni').insert([{ordine_id:id,user_id:currentUser?.id,azione:stato}]);
   toast('Ordine approvato','ok');
+  const {data:o}=await sb.from('ordini_vendita').select('richiede_approvazione_tecnica,invio_pendente').eq('id',id).single();
+  const finale = tipo==='tec' || (tipo==='comm' && !(o&&o.richiede_approvazione_tecnica));
+  if(finale && o && o.invio_pendente) await inviaConfermaAlCliente(id);
   renderOrdineDetail(id);
 }
 
@@ -8363,6 +8409,82 @@ function ensureModalInBody(id) {
 })();
 
 // ── ESPORTA PDF ───────────────────────────────────────
+// ── FLUSSO CONFERME D'ORDINE ──────────────────────────
+// bozza → [Invia] → in_attesa (approvazioni) → inviata al cliente in automatico → [Firma e lancia] → in_produzione
+const STATI_ORD_BLOCCATI = ['in_produzione','evaso','spedito','consegnato'];
+function ordBloccato(o){ return !!o && STATI_ORD_BLOCCATI.includes(o.stato); }
+function prevBloccato(p){ return !!p && ['firmato','confermato'].includes(p.stato); }
+
+async function docBloccato(mode, id){
+  const tab = mode==='preventivo'?'preventivi':'ordini_vendita';
+  const {data:d}=await sb.from(tab).select('stato').eq('id',id).maybeSingle();
+  if(mode==='preventivo' && prevBloccato(d)){ toast('Preventivo firmato: le modifiche si fanno sulla conferma d\\'ordine','err'); return true; }
+  if(mode!=='preventivo' && ordBloccato(d)){ toast('Ordine già in produzione: non più modificabile','err'); return true; }
+  return false;
+}
+
+// Un documento modificato torna "da inviare": preventivo inviato → bozza;
+// conferma in approvazione/approvata/inviata → bozza con approvazioni azzerate
+async function documentoModificato(mode, id){
+  const tab = mode==='preventivo'?'preventivi':'ordini_vendita';
+  const {data:d}=await sb.from(tab).select('stato').eq('id',id).maybeSingle();
+  if(!d) return;
+  if(mode==='preventivo'){
+    if(d.stato==='inviato'){
+      await sb.from('preventivi').update({stato:'bozza'}).eq('id',id);
+      toast('Preventivo modificato: torna in bozza, va reinviato','err');
+    }
+    return;
+  }
+  if(['in_attesa','approvato_comm','approvato_tec','inviato'].includes(d.stato)){
+    await sb.from('ordini_vendita').update({stato:'bozza',invio_pendente:null,approvato_da_comm:null,approvato_da_tec:null,
+      data_approvazione_comm:null,data_approvazione_tec:null,data_invio:null}).eq('id',id);
+    toast('Conferma modificata: approvazioni azzerate, va reinviata','err');
+  }
+}
+
+async function apriModalInvioConferma(docId, diretto){
+  const {data:doc}=await sb.from('ordini_vendita').select('*,anagrafiche(*)').eq('id',docId).single();
+  if(!doc){toast('Conferma non trovata','err');return;}
+  const an=doc.anagrafiche||{}; const nl='\\n';
+  const numero=doc.numero||'conferma';
+  const pend=doc.invio_pendente||{};
+  document.getElementById('invia-email-to').value=pend.to||an.email_principale||an.email||'';
+  document.getElementById('invia-email-cc').value=pend.cc||'';
+  document.getElementById('invia-oggetto').value=pend.oggetto||('Conferma d\\'ordine n. '+numero+' - Max Porte');
+  document.getElementById('invia-testo').value=pend.testo||('Gentile '+(an.ragione_sociale||'')+','+nl+nl+
+    'in allegato trova la nostra conferma d\\'ordine n. '+numero+'.'+nl+
+    'La preghiamo di verificarla e di restituircela firmata per accettazione.'+nl+nl+
+    'Restiamo a Sua disposizione per qualsiasi chiarimento.'+nl+nl+
+    'Cordiali saluti,'+nl+'Max Porte di Rimasti Massimilian'+nl+'Tel. 011 9084622'+nl+'info@maxporte.it');
+  _invioDocId=docId; _invioNumero=numero; _invioPayload={}; _invioMode = diretto?'conferma_diretta':'conferma';
+  document.getElementById('invia-titolo').textContent = diretto?'Invia conferma d\\'ordine al cliente':'Invia conferma d\\'ordine';
+  document.getElementById('invia-nota').textContent = diretto
+    ? 'Il PDF della conferma sarà allegato automaticamente.'
+    : 'La conferma passa prima dalle approvazioni (commerciale e, se serve, tecnica): l\\'email con il PDF parte in automatico appena approvata.';
+  ensureModalInBody('modal-invia-preventivo').classList.add('open');
+}
+
+// Invia al cliente la conferma con il PDF, usando l'email salvata in invio_pendente
+async function inviaConfermaAlCliente(id){
+  const {data:ord}=await sb.from('ordini_vendita').select('numero,invio_pendente').eq('id',id).single();
+  const m=ord&&ord.invio_pendente;
+  if(!m||!m.to){ toast('Email del cliente mancante: usa "Invia al cliente"','err'); return false; }
+  toast('Invio conferma al cliente…','ok');
+  try{
+    const payload=await costruisciPayloadPDF('ordine', id, false);
+    if(!payload) return false;
+    const resp=await fetch('/invia-preventivo',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({payload,email_to:m.to,email_cc:m.cc||'',oggetto:m.oggetto,testo:m.testo,numero_preventivo:ord.numero})});
+    const res=await resp.json();
+    if(!res.ok){ toast('Invio non riuscito: '+res.error,'err'); return false; }
+    await sb.from('ordini_vendita').update({stato:'inviato',data_invio:new Date().toISOString(),invio_pendente:null}).eq('id',id);
+    await sb.from('log_approvazioni').insert([{ordine_id:id,user_id:currentUser?.id,azione:'inviata_al_cliente'}]);
+    toast('Conferma inviata a '+m.to,'ok');
+    return true;
+  }catch(e){ toast('Invio non riuscito: '+e.message,'err'); return false; }
+}
+
 async function esportaPDF(tipo, id) {
   // Apri modal opzioni export
   _exportTipo = tipo;
@@ -8373,12 +8495,7 @@ async function esportaPDF(tipo, id) {
 
 var _exportTipo=null, _exportId=null;
 
-async function eseguiEsportaPDF() {
-  const tipo = _exportTipo, id = _exportId;
-  const soloNetti = document.getElementById('exp-solo-netti')?.checked || false;
-  closeForm('modal-export');
-  toast('Generazione PDF in corso...', 'ok');
-  try {
+async function costruisciPayloadPDF(tipo, id, soloNetti) {
     const tabDoc = tipo==='preventivo' ? 'preventivi' : 'ordini_vendita';
     const tabRighe = tipo==='preventivo' ? 'righe_preventivo' : 'righe_ordine';
     const fkRiga = tipo==='preventivo' ? 'preventivo_id' : 'ordine_id';
@@ -8392,7 +8509,7 @@ async function eseguiEsportaPDF() {
     ]);
     const _imbMap = {}; (imballiList||[]).forEach(x=>{_imbMap[x.codice]=x.descrizione||x.codice;});
 
-    if(!doc){ toast('Documento non trovato','err'); return; }
+    if(!doc){ toast('Documento non trovato','err'); return null; }
 
     const an = doc.anagrafiche || {};
     const ag = doc.agenti || {};
@@ -8530,6 +8647,19 @@ async function eseguiEsportaPDF() {
     payload.opzioni = {
       solo_netti: soloNetti
     };
+
+    return payload;
+}
+
+async function eseguiEsportaPDF() {
+  const tipo = _exportTipo, id = _exportId;
+  const soloNetti = document.getElementById('exp-solo-netti')?.checked || false;
+  closeForm('modal-export');
+  toast('Generazione PDF in corso...', 'ok');
+  try {
+    const payload = await costruisciPayloadPDF(tipo, id, soloNetti);
+    if(!payload) return;
+    const doc = {numero: (payload.documento && payload.documento.numero) || 'documento'};
 
     // Chiama il server per generare il PDF
     const resp = await fetch('/genera-pdf', {
