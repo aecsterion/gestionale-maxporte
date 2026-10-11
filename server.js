@@ -5297,7 +5297,7 @@ async function renderPreventivoDetail(id){
   const trasportoCardHtml = await renderTrasportoCard('preventivo', prev, righe);
 
   const sc1=prev.sconto1||0; const sc2=prev.sconto2||0;
-  const netto=prev.totale_imponibile*(1-sc1/100)*(1-sc2/100);
+  const netto=nettoDoc(prev);
 
   const rowsRighe=(righe||[]).map(r=>\`
     <tr>
@@ -5388,6 +5388,61 @@ async function eliminaRiga(tabella, rigaId, docId, mode){
   if(mode==='preventivo') renderPreventivoDetail(docId);
   else renderOrdineDetail(docId);
   toast('Riga eliminata','ok');
+}
+
+// Netto documento: sconti sulle righe, trasporto a prezzo pieno.
+// (nel DB totale_imponibile = somma righe + costo_trasporto)
+function nettoDoc(d){
+  const tr=parseFloat(d&&d.costo_trasporto)||0;
+  const righe=(parseFloat(d&&d.totale_imponibile)||0)-tr;
+  const sc1=parseFloat(d&&d.sconto1)||0, sc2=parseFloat(d&&d.sconto2)||0;
+  return Math.round((righe*(1-sc1/100)*(1-sc2/100)+tr)*100)/100;
+}
+// Importo che pesa sul fido: imponibile netto (o arrotondato se impostato)
+function importoFido(d){ return d && d.totale_arrotondato!=null ? parseFloat(d.totale_arrotondato) : nettoDoc(d); }
+const STATI_ESPOSIZIONE = ['in_produzione','evaso','spedito','consegnato'];
+
+// Lancio in produzione con controllo fido:
+// esposizione = ordini del cliente già lanciati e NON pagati + questo ordine (imponibile netto)
+async function lanciaInProduzione(id){
+  const {data:ord,error}=await sb.from('ordini_vendita').select('*,anagrafiche(ragione_sociale,fido_commerciale)').eq('id',id).single();
+  if(error||!ord){ toast('Ordine non trovato','err'); return; }
+  const fido=parseFloat(ord.anagrafiche&&ord.anagrafiche.fido_commerciale)||0;
+  const upd={stato:'in_produzione'};
+  if(fido>0){
+    const {data:aperti}=await sb.from('ordini_vendita')
+      .select('id,numero,totale_imponibile,costo_trasporto,sconto1,sconto2,totale_arrotondato,pagato,stato')
+      .eq('anagrafica_id',ord.anagrafica_id).in('stato',STATI_ESPOSIZIONE).neq('id',id);
+    const nonPagati=(aperti||[]).filter(o=>!o.pagato);
+    const esposto=Math.round(nonPagati.reduce((s,o)=>s+importoFido(o),0)*100)/100;
+    const questo=importoFido(ord);
+    const totale=Math.round((esposto+questo)*100)/100;
+    if(totale>fido){
+      const msg='FIDO SFORATO — '+(ord.anagrafiche.ragione_sociale||'cliente')+'\\n\\n'+
+        'Fido: '+fmtEuro(fido)+'\\n'+
+        'Già esposto (ordini lanciati non pagati: '+nonPagati.length+'): '+fmtEuro(esposto)+'\\n'+
+        'Questo ordine: '+fmtEuro(questo)+'\\n'+
+        'Totale: '+fmtEuro(totale)+'  (sforamento '+fmtEuro(totale-fido)+')';
+      if(!isAdmin()){
+        alert(msg+'\\n\\nL\\'ordine non può andare in produzione. Serve lo sblocco di un amministratore.');
+        return;
+      }
+      if(!confirm(msg+'\\n\\nSei amministratore: vuoi FORZARE il lancio in produzione?')) return;
+      upd.fido_forzato_da=currentNomeUtente||currentUser?.email||'admin';
+      upd.fido_forzato_il=new Date().toISOString();
+    }
+  }
+  const {error:e2}=await sb.from('ordini_vendita').update(upd).eq('id',id);
+  if(e2){ toast('Errore: '+e2.message,'err'); return; }
+  toast(upd.fido_forzato_da?'Lanciato in produzione (fido forzato)':'Lanciato in produzione','ok');
+  renderOrdineDetail(id);
+}
+
+async function segnaPagato(id, pagato){
+  const {error}=await sb.from('ordini_vendita').update({pagato, pagato_il: pagato?new Date().toISOString():null}).eq('id',id);
+  if(error){ toast('Errore: '+error.message,'err'); return; }
+  toast(pagato?'Ordine segnato come pagato — libera il fido':'Pagamento rimosso','ok');
+  renderOrdineDetail(id);
 }
 
 async function cambiaStato(tabella, id, stato, callback){
@@ -5642,7 +5697,7 @@ async function renderOrdineDetail(id){
   const trasportoCardHtml = await renderTrasportoCard('ordine', ord, righe);
 
   const sc1=ord.sconto1||0; const sc2=ord.sconto2||0;
-  const netto=ord.totale_imponibile*(1-sc1/100)*(1-sc2/100);
+  const netto=nettoDoc(ord);
 
   const possoApprovareComm = isRespComm();
   const possoApprovaTec = isRespTec();
@@ -5678,7 +5733,7 @@ async function renderOrdineDetail(id){
     bottoniApprovazione+='<button class="btn btn-red btn-sm" onclick="approvaOrdine(\\''+id+'\\',\\'tec\\')">Approva (tecnico)</button>';
   }
   if((ord.stato==='approvato_comm'&&!ord.richiede_approvazione_tecnica)||(ord.stato==='approvato_tec')){
-    bottoniApprovazione+='<button class="btn btn-red btn-sm" onclick="cambiaStato(\\'ordini_vendita\\',\\''+id+'\\',\\'in_produzione\\',\\'renderOrdineDetail\\')">Lancia in produzione</button>';
+    bottoniApprovazione+='<button class="btn btn-red btn-sm" onclick="lanciaInProduzione(\\''+id+'\\')">Lancia in produzione</button>';
   }
 
   var puoModificare = ord.stato==='in_attesa';
@@ -5712,6 +5767,8 @@ async function renderOrdineDetail(id){
           '<tr><td style="color:var(--mid);padding:3px 0">Sett. approntamento</td><td><input type="text" id="ord-sett-appront" value="'+(ord.settimana_consegna||'')+'" placeholder="es. SETT. 42" onblur="salvaSettimanaAppront(\\''+id+'\\',this.value)" style="width:110px;font-size:12px;padding:2px 6px;border:0.5px solid var(--border);border-radius:4px"></td></tr>'+
           '<tr><td style="color:var(--mid);padding:3px 0">Approvazione</td><td>'+(ord.richiede_approvazione_tecnica?'<span class="badge br">Tecnica richiesta</span>':'<span class="badge bg">Solo commerciale</span>')+'</td></tr>'+
           '<tr><td style="color:var(--mid);padding:3px 0">Stato</td><td>'+badgeStato(ord.stato)+'</td></tr>'+
+          '<tr><td style="color:var(--mid);padding:3px 0">Pagato</td><td><label style="font-size:12px;display:inline-flex;align-items:center;gap:6px"><input type="checkbox" '+(ord.pagato?'checked':'')+' '+((isAdmin()||isRespComm())?'':'disabled')+' onchange="segnaPagato(\\''+id+'\\',this.checked)"> '+(ord.pagato?'Sì'+(ord.pagato_il?' — '+fmtData(ord.pagato_il):''):'No')+'</label></td></tr>'+
+          (ord.fido_forzato_da?'<tr><td style="color:var(--mid);padding:3px 0">Fido</td><td style="font-size:12px"><span class="badge ba">Sforato — sbloccato</span> da '+ord.fido_forzato_da+(ord.fido_forzato_il?' il '+fmtData(ord.fido_forzato_il):'')+'</td></tr>':'')+
           (ord.nome_compilatore?'<tr><td style="color:var(--mid);padding:3px 0">Compilato da</td><td style="font-size:12px">'+ord.nome_compilatore+'</td></tr>':'')+
         '</table>'+
       '</div>'+
