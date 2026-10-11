@@ -216,6 +216,16 @@ tr.data-row:hover td{background:var(--beige);cursor:pointer}
       <input type="password" id="login-password" class="form-input" placeholder="••••••••">
     </div>
     <button class="login-btn" id="login-btn" onclick="doLogin()">Accedi</button>
+    <div style="text-align:center;margin-top:12px"><a href="#" onclick="passwordDimenticata();return false" style="font-size:12px;color:var(--mid)">Password dimenticata?</a></div>
+    <div id="login-info" style="display:none;margin-top:12px;background:var(--beige2);border-radius:var(--radius);padding:9px 12px;font-size:13px"></div>
+    <div id="login-reset" style="display:none;margin-top:16px;border-top:0.5px solid var(--border);padding-top:14px">
+      <div class="login-title" style="margin-bottom:10px">Imposta una nuova password</div>
+      <div class="form-group"><label class="form-label">Nuova password</label>
+        <input type="password" id="reset-pass1" class="form-input" placeholder="almeno 8 caratteri"></div>
+      <div class="form-group"><label class="form-label">Ripeti password</label>
+        <input type="password" id="reset-pass2" class="form-input"></div>
+      <button class="login-btn" id="reset-btn" onclick="salvaNuovaPassword()">Salva e accedi</button>
+    </div>
   </div>
 </div>
 
@@ -822,6 +832,8 @@ tr.data-row:hover td{background:var(--beige);cursor:pointer}
 <script>
 const SUPABASE_URL = 'https://tvfpekldunmegzdjpact.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2ZnBla2xkdW5tZWd6ZGpwYWN0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxOTEzMjcsImV4cCI6MjA5MTc2NzMyN30.278_jYjYF77AO5i_bX8RHhoezdOdjMXBMyNd1n2Xdo4';
+// Link di recupero password: va rilevato prima che il client Supabase consumi il token dall'URL
+const _isRecovery = (location.hash||'').includes('type=recovery');
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let currentSection = 'dashboard';
@@ -902,6 +914,34 @@ async function doLogin() {
 }
 document.getElementById('login-password').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
 
+async function passwordDimenticata(){
+  const email=document.getElementById('login-email').value.trim();
+  const info=document.getElementById('login-info'); const err=document.getElementById('login-error');
+  err.style.display='none';
+  if(!email){ err.textContent='Scrivi prima la tua email nel campo Email'; err.style.display='block'; return; }
+  const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin+'/'});
+  if(error){ err.textContent='Errore: '+error.message; err.style.display='block'; return; }
+  info.textContent='Se l\\'indirizzo è registrato, riceverai un\\'email con il link per impostare una nuova password.';
+  info.style.display='block';
+}
+function mostraResetPassword(){
+  ['login-email','login-password'].forEach(id=>{const el=document.getElementById(id); if(el) el.closest('.form-group').style.display='none';});
+  const b=document.getElementById('login-btn'); if(b) b.style.display='none';
+  document.getElementById('login-reset').style.display='block';
+}
+async function salvaNuovaPassword(){
+  const p1=document.getElementById('reset-pass1').value, p2=document.getElementById('reset-pass2').value;
+  const err=document.getElementById('login-error'); err.style.display='none';
+  if(p1.length<8){ err.textContent='La password deve avere almeno 8 caratteri'; err.style.display='block'; return; }
+  if(p1!==p2){ err.textContent='Le due password non coincidono'; err.style.display='block'; return; }
+  const {data,error}=await sb.auth.updateUser({password:p1});
+  if(error){ err.textContent='Errore: '+error.message; err.style.display='block'; return; }
+  history.replaceState(null,'',location.pathname);
+  currentUser=data.user;
+  await loadRuolo(currentUser.id);
+  entraNellApp(currentUser.email);
+}
+
 function entraNellApp(email){
   try {
     document.getElementById('login-screen').style.display='none';
@@ -925,6 +965,7 @@ async function doLogout(){
 (async ()=>{
   try {
     const {data:{session}} = await sb.auth.getSession();
+    if(_isRecovery){ mostraResetPassword(); return; }
     if(session?.user){
       currentUser=session.user;
       await loadRuolo(currentUser.id);
