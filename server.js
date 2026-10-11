@@ -3949,7 +3949,7 @@ async function _htmlPannelloSopraluce(){
       <span style="font-size:11px;color:var(--mid)">— aggiunge il sopraluce alla commessa (coprifili da 3000 mm)</span>
     </label>\`;
   if(chk){
-    if(!CFG._vetriSop){ const {data}=await sb.from('tipi_vetro').select('codice,nome,sovrapprezzo_a,sovrapprezzo_p,attivo').order('nome'); CFG._vetriSop=(data||[]).filter(v=>v.attivo!==false && v.codice!=='NESSUNO'); }
+    if(!CFG._vetriSop){ const {data}=await sb.from('tipi_vetro').select('codice,nome,sovrapprezzo_a,sovrapprezzo_p,attivo').order('nome'); CFG._vetriSop=(data||[]).filter(v=>v.attivo!==false).sort((a,b)=>(a.codice==='NESSUNO')-(b.codice==='NESSUNO')); }
     const opts='<option value="">— scegli il vetro —</option>'+CFG._vetriSop.map(v=>\`<option value="\${v.codice}" \${v.codice===CFG._sop_vetro?'selected':''}>\${v.nome}</option>\`).join('');
     h+=\`<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:10px;align-items:end">
       <div><label style="font-size:11px;color:var(--mid);display:block;margin-bottom:3px">Altezza foro muro (mm)</label>
