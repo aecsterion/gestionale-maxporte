@@ -6249,8 +6249,20 @@ async function lanciaInProduzione(id){
   if(!(await controlloCompatDoc('ordine', id, 'Lancio in produzione'))) return;
   const {data:ord,error}=await sb.from('ordini_vendita').select('*,anagrafiche(ragione_sociale,fido_commerciale)').eq('id',id).single();
   if(error||!ord){ toast('Ordine non trovato','err'); return; }
+  // Settimane obbligatorie: lette anche dai campi a video (il salvataggio on-blur potrebbe non essere ancora arrivato)
+  const _inLav=document.getElementById('ord-sett-lav'), _inApp=document.getElementById('ord-sett-appront');
+  const settLav=((_inLav&&_inLav.value)||ord.settimana_lavorazione||'').trim();
+  const settApp=((_inApp&&_inApp.value)||ord.settimana_consegna||'').trim();
+  if(!settLav||!settApp){
+    const manca=[!settLav?'settimana di lavorazione':null, !settApp?'settimana di approntamento':null].filter(Boolean).join(' e ');
+    toast('Per lanciare in produzione inserisci prima la '+manca,'err');
+    [[_inLav,settLav],[_inApp,settApp]].forEach(function(c){ if(c[0]&&!c[1]){ c[0].style.borderColor='var(--red)'; c[0].style.boxShadow='0 0 0 2px rgba(208,32,26,0.15)'; } });
+    const primo=(!settLav&&_inLav)||(!settApp&&_inApp); if(primo) primo.focus();
+    return;
+  }
+  ord.settimana_lavorazione=settLav; ord.settimana_consegna=settApp;
   const fido=parseFloat(ord.anagrafiche&&ord.anagrafiche.fido_commerciale)||0;
-  const upd={stato:'in_produzione', data_firma:new Date().toISOString()};
+  const upd={stato:'in_produzione', data_firma:new Date().toISOString(), settimana_lavorazione:settLav, settimana_consegna:settApp};
   if(fido>0){
     const {data:aperti}=await sb.from('ordini_vendita')
       .select('id,numero,totale_imponibile,costo_trasporto,sconto1,sconto2,totale_arrotondato,pagato,stato')
@@ -6719,7 +6731,7 @@ async function renderOrdineDetail(id){
           '<tr><td style="color:var(--mid);padding:3px 0">Data</td><td>'+fmtData(ord.data_ordine||ord.created_at)+'</td></tr>'+
           '<tr><td style="color:var(--mid);padding:3px 0">Listino</td><td><span class="tag">'+(ord.listino||'')+'</span></td></tr>'+
           '<tr><td style="color:var(--mid);padding:3px 0">Trasporto</td><td>'+(ord.trasporto||'—')+'</td></tr>'+
-          '<tr><td style="color:var(--mid);padding:3px 0">Sett. lavorazione</td><td><input type="text" value="'+(ord.settimana_lavorazione||'')+'" placeholder="es. 42" onblur="salvaSettimanaLav(\\''+id+'\\',this.value)" style="width:110px;font-size:12px;padding:2px 6px;border:0.5px solid var(--border);border-radius:4px"></td></tr>'+
+          '<tr><td style="color:var(--mid);padding:3px 0">Sett. lavorazione</td><td><input type="text" id="ord-sett-lav" value="'+(ord.settimana_lavorazione||'')+'" placeholder="es. 42" onblur="salvaSettimanaLav(\\''+id+'\\',this.value)" style="width:110px;font-size:12px;padding:2px 6px;border:0.5px solid var(--border);border-radius:4px"></td></tr>'+
           '<tr><td style="color:var(--mid);padding:3px 0">Sett. approntamento</td><td><input type="text" id="ord-sett-appront" value="'+(ord.settimana_consegna||'')+'" placeholder="es. 42" onblur="salvaSettimanaAppront(\\''+id+'\\',this.value)" style="width:110px;font-size:12px;padding:2px 6px;border:0.5px solid var(--border);border-radius:4px"></td></tr>'+
           '<tr><td style="color:var(--mid);padding:3px 0">Approvazione</td><td>'+(ord.richiede_approvazione_tecnica?'<span class="badge br">Tecnica richiesta</span>':'<span class="badge bg">Solo commerciale</span>')+'</td></tr>'+
           '<tr><td style="color:var(--mid);padding:3px 0">Stato</td><td>'+badgeStato(ord.stato)+'</td></tr>'+
