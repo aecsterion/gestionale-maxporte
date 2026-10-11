@@ -2190,26 +2190,120 @@ async function registraMovimento(){
 
 
 async function renderProduzione(){
-  const {data} = await sb.from('ordini_produzione').select('*,ordini(numero)').order('created_at',{ascending:false});
-  const rows=(data||[]).map(op=>\`
-    <tr class="data-row">
-      <td><strong>\${op.numero_op||'—'}</strong></td>
-      <td>\${op.prodotto||'—'}</td>
-      <td>\${op.quantita||'—'} pz</td>
-      <td>\${op.fase||'—'}</td>
-      <td>\${fmtData(op.data_inizio)}</td>
-      <td>\${fmtData(op.data_fine)}</td>
-      <td><div style="display:flex;align-items:center;gap:6px">\${pbar(op.avanzamento)}<span style="font-size:11px;color:var(--mid)">\${op.avanzamento||0}%</span></div></td>
-      <td>\${badgeStato(op.stato||'pianificato')}</td>
+  const {data} = await sb.from('ordini_vendita')
+    .select('id,numero,stato,settimana_lavorazione,settimana_consegna,riferimento_cliente,materiale_scaricato_il,data_ordine,created_at,anagrafiche(ragione_sociale)')
+    .in('stato',['in_produzione','evaso','spedito']).order('created_at',{ascending:false});
+  const rows=(data||[]).map(o=>\`
+    <tr class="data-row" style="cursor:pointer" onclick="renderOrdineDetail('\${o.id}')">
+      <td><strong>\${o.numero||'—'}</strong></td>
+      <td>\${o.anagrafiche?.ragione_sociale||'—'}</td>
+      <td style="font-size:12px;color:var(--mid)">\${o.riferimento_cliente||''}</td>
+      <td>\${o.settimana_lavorazione||'—'}</td>
+      <td>\${o.settimana_consegna||'—'}</td>
+      <td>\${o.materiale_scaricato_il?'<span class="badge bg">Scaricato</span>':'<span class="badge bgr">—</span>'}</td>
+      <td>\${badgeStato(o.stato)}</td>
+      <td><button class="btn btn-sm" onclick="event.stopPropagation();stampaSchedaProduzione('\${o.id}')">&#128196; Scheda</button></td>
     </tr>\`).join('');
   document.getElementById('main-content').innerHTML=\`
   <div class="card">
-    <div class="card-header"><span class="card-title">Ordini di produzione</span></div>
+    <div class="card-header"><span class="card-title">Commesse in produzione</span></div>
     <table>
-      <thead><tr><th>N° OP</th><th>Prodotto</th><th>Q.tà</th><th>Fase</th><th>Inizio</th><th>Fine prev.</th><th>Avanzamento</th><th>Stato</th></tr></thead>
-      <tbody>\${rows||'<tr><td colspan="8" style="text-align:center;color:var(--mid);padding:24px;font-style:italic">Nessun ordine di produzione ancora</td></tr>'}</tbody>
+      <thead><tr><th>Ordine</th><th>Cliente</th><th>Riferimento</th><th>Sett. lav.</th><th>Sett. appront.</th><th>Coprifili</th><th>Stato</th><th></th></tr></thead>
+      <tbody>\${rows||'<tr><td colspan="8" style="text-align:center;color:var(--mid);padding:24px;font-style:italic">Nessuna commessa in produzione — lancia una conferma d&#39;ordine</td></tr>'}</tbody>
     </table>
   </div>\`;
+}
+
+// ── SCHEDA DI PRODUZIONE + PACKING LIST ───────────────
+function _descrCoprifiliScheda(r){
+  if(r.escludi_coprifili) return 'NO';
+  const c=r.coprifili_config; if(!c||typeof c!=='object') return '';
+  const ls=c.spingere&&c.spingere.larghezza, lt=c.tirare&&c.tirare.larghezza;
+  if(!ls&&!lt) return '';
+  let t=(ls&&lt)?(ls+'/'+lt):String(ls||lt);
+  if(r.con_sopraluce) t+=' · SL';
+  return t;
+}
+async function stampaSchedaProduzione(ordineId){
+  toast('Generazione scheda di produzione…','ok');
+  const [{data:ord},{data:righe}]=await Promise.all([
+    sb.from('ordini_vendita').select('*,anagrafiche(ragione_sociale)').eq('id',ordineId).single(),
+    sb.from('righe_ordine').select('*').eq('ordine_id',ordineId).order('riga_numero'),
+  ]);
+  if(!ord){ toast('Ordine non trovato','err'); return; }
+  let zona='';
+  if(ord.zona_trasporto_id){ const {data:z}=await sb.from('zone_trasporto').select('nome').eq('id',ord.zona_trasporto_id).single(); zona=z?.nome||''; }
+  const R=righe||[];
+  const isPorta=r=>r.codice_serie!=='ACC' && r.codice_serie!=='PAN-BL' && !!r.codice_apertura;
+  const posizioni=R.map(r=>{
+    const porta=isPorta(r);
+    const lav=[]; const c=r.coprifili_config;
+    if(c&&typeof c==='object'){ if(c.spingere&&c.spingere.lavorazione) lav.push('Coprif. spingere: '+c.spingere.lavorazione); if(c.tirare&&c.tirare.lavorazione) lav.push('Coprif. tirare: '+c.tirare.lavorazione); }
+    const note=[r.note_riga, r.stanza?('Stanza: '+r.stanza):'', ...lav].filter(Boolean).join(' — ');
+    return {
+      pos:r.riga_numero, modello:(r.nome_modello||'')+(r.codice_modello?' ('+r.codice_modello+')':''),
+      finitura:r.nome_finitura||r.codice_finitura||'', l:r.larghezza_mm||'', h:r.altezza_mm||'',
+      s:r.spessore_muro_cm||r.spessore_mm||'', senso:(r.senso_apertura&&r.senso_apertura!=='Nessuno')?r.senso_apertura:'',
+      qta:r.quantita, tipo:r.codice_apertura||'', serratura:r.codice_serratura||r.nome_serratura||'',
+      ferramenta:r.codice_ferramenta||'',
+      inserto:[r.nome_colore_alu, r.pannello_bugna, r.nome_colore_pietra].filter(Boolean).join(' / '),
+      telaio: porta ? (r.escludi_telaio?'NO':(r.codice_spalla||'')) : '',
+      finitura_telaio: (porta && !r.escludi_telaio) ? (r.nome_finitura_telaio||r.nome_finitura||'') : '',
+      coprifili: porta ? _descrCoprifiliScheda(r) : '',
+      note
+    };
+  });
+  // Packing list
+  const agg=(m,k,um,q)=>{ if(!k) return; m[k]=m[k]||{articolo:k,um,qta:0}; m[k].qta+=q; };
+  const minut={};
+  R.forEach(r=>{
+    const q=parseFloat(r.quantita)||1;
+    if(r.codice_maniglia && r.codice_maniglia!=='NESSUNA') agg(minut,'Maniglia '+(r.nome_maniglia||r.codice_maniglia)+(r.nome_colore_maniglia?' — '+r.nome_colore_maniglia:''),'pz',q);
+    if(r.codice_cilindro) agg(minut,'Cilindro '+(r.nome_cilindro||r.codice_cilindro),'pz',q);
+    if(r.codice_pomolino) agg(minut,'Pomolino WC '+(r.nome_pomolino||r.codice_pomolino),'pz',q);
+  });
+  const commessa=[];
+  R.forEach(r=>{
+    const q=parseFloat(r.quantita)||1;
+    const mis=(r.larghezza_mm&&r.altezza_mm)?(' '+r.larghezza_mm+'×'+r.altezza_mm):'';
+    if(isPorta(r)){
+      commessa.push({articolo:'Pos.'+r.riga_numero+' Porta '+(r.nome_modello||'')+mis,um:'pz',qta:q});
+      if(!r.escludi_telaio && r.codice_spalla) commessa.push({articolo:'Pos.'+r.riga_numero+' Telaio '+r.codice_spalla+' '+(r.nome_finitura_telaio||r.nome_finitura||''),um:'pz',qta:q});
+    } else {
+      commessa.push({articolo:'Pos.'+r.riga_numero+' '+(r.nome_modello||'')+' '+(r.nome_finitura||'')+mis,um:'pz',qta:q});
+    }
+  });
+  const fab=fabbisognoCoprifili(R);
+  let ubic={};
+  if(fab.length){
+    const {data:arts}=await sb.from('magazzino').select('codice_mp,ubicazione').in('codice_mp',fab.map(f=>f.codice_mp));
+    (arts||[]).forEach(a=>{ ubic[a.codice_mp]=a.ubicazione; });
+  }
+  fab.forEach(f=>commessa.push({articolo:'Coprifilo '+f.codice_mp,um:'aste',qta:f.qta}));
+  const ubicazioni=fab.map(f=>({articolo:f.codice_mp,ubicazione:ubic[f.codice_mp]||'—'}));
+  const numero=ord.numero||'';
+  const payload={
+    testata:{
+      data_stampa:new Date().toLocaleDateString('it-IT'), cliente:ord.anagrafiche?.ragione_sociale||'',
+      riferimento:ord.riferimento_cliente||'', sett_lavorazione:ord.settimana_lavorazione||'',
+      sett_approntamento:ord.settimana_consegna||'', ordine_abbr:(numero.split('-').pop()||numero),
+      ordine_numero:numero, trasporto:ord.trasporto||'', posa:R.some(r=>r.posata_da_noi)?'SÌ':'NO',
+      zona, note:[ord.note, ord.note_produzione].filter(Boolean).join(' — ')
+    },
+    posizioni,
+    packing:{minuteria:Object.values(minut), commessa, ubicazioni}
+  };
+  const resp=await fetch('/genera-scheda',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  if(!resp.ok){ toast('Errore scheda: '+(await resp.text()),'err'); return; }
+  const blob=await resp.blob(); const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download='SCHEDA_'+numero+'.pdf'; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),5000);
+}
+
+async function salvaSettimanaLav(id, val){
+  const { error } = await sb.from('ordini_vendita').update({settimana_lavorazione: val.trim()||null}).eq('id', id);
+  if(error){ toast('Errore salvataggio: '+error.message,'err'); return; }
+  toast('Settimana lavorazione salvata','ok');
 }
 
 // ── DIPENDENTI ────────────────────────────────────────
@@ -2327,7 +2421,7 @@ function resetCFG(){
     _imballo_serie:null, _imballo_serie_posa:null, _imballo_fragile:false,
     _imballo_modello:null, _supp_fragile:0,
     // esclusioni telaio / coprifili per la posizione
-    escludi_telaio:false, escludi_coprifili:false,
+    escludi_telaio:false, escludi_coprifili:false, con_sopraluce:false,
     // coprifili (varianti per apertura, profilo per lato; colore = finitura telaio; lunghezza allo scarico)
     coprifili_variante_id:null,
     cf_larg_spingere:null, cf_aste_spingere:2.5, cf_lav_spingere:'',
@@ -2502,6 +2596,7 @@ async function modificaRiga(tabella, rigaId, docId, mode, listino_in){
   CFG.posata_da_noi=!!r.posata_da_noi;
   CFG.escludi_telaio=!!r.escludi_telaio;
   CFG.escludi_coprifili=!!r.escludi_coprifili;
+  CFG.con_sopraluce=!!r.con_sopraluce;
   const _cc = (r.coprifili_config && typeof r.coprifili_config==='object' && !Array.isArray(r.coprifili_config)) ? r.coprifili_config : null;
   CFG.coprifili_variante_id = _cc && _cc.variante_id!=null ? _cc.variante_id : null;
   CFG.cf_larg_spingere = _cc && _cc.spingere ? (_cc.spingere.larghezza||null) : null;
@@ -3820,7 +3915,10 @@ async function cfgCoprifili(){
         <div style="font-size:12px">\${suppAtt>0?'<span style="color:var(--red);font-weight:500">+ € '+suppAtt.toLocaleString('it-IT',{minimumFractionDigits:2})+'</span>':'<span style="color:var(--green-tx)">compreso nel prezzo</span>'}</div>
       </div>
     </div>
-    <div style="font-size:11px;color:var(--mid);margin-bottom:8px">Il codice articolo a magazzino (colore + lunghezza 2250/3000 secondo il sopraluce) viene risolto automaticamente in produzione/scarico.</div>\`;
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:8px;cursor:pointer">
+      <input type="checkbox" \${CFG.con_sopraluce?'checked':''} onchange="CFG.con_sopraluce=this.checked"> Porta con <strong>sopraluce</strong> <span style="font-size:11px;color:var(--mid)">(coprifili da 3000 mm invece di 2250)</span>
+    </label>
+    <div style="font-size:11px;color:var(--mid);margin-bottom:8px">Il codice articolo a magazzino (larghezza + lunghezza + colore) viene risolto automaticamente e scaricato al lancio in produzione.</div>\`;
   }
 
   html+=\`</div>
@@ -4734,6 +4832,7 @@ async function aggiungiRigaAlDocumento(){
     posata_da_noi:!!CFG.posata_da_noi,
     escludi_telaio:!!CFG.escludi_telaio,
     escludi_coprifili:!!CFG.escludi_coprifili,
+    con_sopraluce:!!CFG.con_sopraluce,
     // coprifili (snapshot: variante + profilo per lato; colore=finitura telaio; lunghezza allo scarico)
     coprifili_config: CFG.escludi_coprifili ? null : {
       variante_id: CFG.coprifili_variante_id||null,
@@ -5232,7 +5331,7 @@ async function salvaNuovoDoc(){
     };
 
     let docId, docNumero;
-    const RIGHE_FIELDS = ['codice_serie','nome_serie','codice_modello','nome_modello','codice_finitura','nome_finitura','pannello_bugna','codice_colore_alu','nome_colore_alu','codice_colore_pietra','nome_colore_pietra','codice_tipo_vetro','nome_tipo_vetro','codice_apertura','nome_apertura','senso_apertura','larghezza_mm','altezza_mm','misura_custom','spessore_muro_cm','spessore_muro_mm','codice_spalla','tipo_accessorio_telaio','codice_ferramenta','nome_ferramenta','codice_maniglia','nome_maniglia','codice_colore_maniglia','nome_colore_maniglia','prezzo_base','prezzo_vetro','prezzo_finitura','prezzo_bugna','prezzo_inserto','prezzo_apertura','prezzo_telaio','prezzo_accessorio_telaio','prezzo_ferramenta','prezzo_maniglia','prezzo_extra_incisioni','prezzo_unitario','quantita','sconto_riga','prezzo_totale_riga','note_riga','stanza','escludi_telaio','escludi_coprifili','coprifili_config','codice_imballo','prezzo_imballo_unitario','prezzo_imballo_totale','posata_da_noi'];
+    const RIGHE_FIELDS = ['codice_serie','nome_serie','codice_modello','nome_modello','codice_finitura','nome_finitura','pannello_bugna','codice_colore_alu','nome_colore_alu','codice_colore_pietra','nome_colore_pietra','codice_tipo_vetro','nome_tipo_vetro','codice_apertura','nome_apertura','senso_apertura','larghezza_mm','altezza_mm','misura_custom','spessore_muro_cm','codice_spalla','tipo_accessorio_telaio','codice_ferramenta','nome_ferramenta','codice_maniglia','nome_maniglia','codice_colore_maniglia','nome_colore_maniglia','prezzo_base','prezzo_vetro','prezzo_finitura','prezzo_bugna','prezzo_inserto','prezzo_apertura','prezzo_telaio','prezzo_accessorio_telaio','prezzo_ferramenta','prezzo_maniglia','prezzo_extra_incisioni','prezzo_unitario','quantita','sconto_riga','prezzo_totale_riga','note_riga','stanza','escludi_telaio','escludi_coprifili','coprifili_config','codice_imballo','prezzo_imballo_unitario','prezzo_imballo_totale','posata_da_noi','prezzo_coprifili','con_sopraluce','spessore_mm','codice_finitura_telaio','nome_finitura_telaio','codice_serratura','nome_serratura','prezzo_serratura','codice_cilindro','nome_cilindro','prezzo_cilindro','codice_pomolino','nome_pomolino','prezzo_pomolino'];
 
     if(editId){
       // MODIFICA — update del documento esistente (senza toccare numero/creato_da)
@@ -5432,10 +5531,71 @@ async function lanciaInProduzione(id){
       upd.fido_forzato_il=new Date().toISOString();
     }
   }
+  // Scarico coprifili dal magazzino (una sola volta per ordine)
+  let scarico=null;
+  if(!ord.materiale_scaricato_il){
+    scarico = await preparaScaricoCoprifili(id);
+    if(scarico && scarico.righe.length){
+      const L=scarico.righe.map(x=>'• '+x.codice_mp+'  ×'+x.qta+(x.art?'  (giacenza '+x.art.giacenza+' → '+(parseFloat(x.art.giacenza||0)-x.qta)+')':'  — NON TROVATO a magazzino, non scaricato'));
+      const msg='Scarico coprifili dal magazzino:\\n\\n'+L.join('\\n')+(scarico.mancanti?'\\n\\nAttenzione: '+scarico.mancanti+' articolo/i sotto giacenza o non trovati.':'')+'\\n\\nProcedere con il lancio in produzione e lo scarico?';
+      if(!confirm(msg)) return;
+    }
+  }
   const {error:e2}=await sb.from('ordini_vendita').update(upd).eq('id',id);
   if(e2){ toast('Errore: '+e2.message,'err'); return; }
+  if(scarico && scarico.righe.length){
+    const n = await eseguiScaricoCoprifili(id, ord.numero, scarico);
+    toast('Scaricati '+n+' articoli coprifili','ok');
+  }
   toast(upd.fido_forzato_da?'Lanciato in produzione (fido forzato)':'Lanciato in produzione','ok');
   renderOrdineDetail(id);
+}
+
+// ── Scarico coprifili ─────────────────────────────────
+// Articolo = COP-{larghezza}-{2250|3000}-10-{colore}; 3000 se la porta ha il sopraluce.
+// Quantità = aste per lato × quantità riga, sommate per articolo e arrotondate all'asta intera.
+function codiceCoprifilo(larghezza, sopraluce, colore){
+  return 'COP-'+larghezza+'-'+(sopraluce?3000:2250)+'-10-'+colore;
+}
+function fabbisognoCoprifili(righe){
+  const acc={};
+  (righe||[]).forEach(r=>{
+    const cfg=r.coprifili_config;
+    if(r.escludi_coprifili || !cfg || typeof cfg!=='object') return;
+    const col=cfg.colore_codice||r.codice_finitura_telaio||r.codice_finitura;
+    const q=parseFloat(r.quantita)||1;
+    ['spingere','tirare'].forEach(lato=>{
+      const l=cfg[lato]; if(!l||!l.larghezza||!col) return;
+      const cod=codiceCoprifilo(l.larghezza, !!r.con_sopraluce, col);
+      acc[cod]=(acc[cod]||0)+(parseFloat(l.aste)||0)*q;
+    });
+  });
+  return Object.entries(acc).map(([codice_mp,q])=>({codice_mp, qta:Math.ceil(q-1e-9)})).filter(x=>x.qta>0);
+}
+async function preparaScaricoCoprifili(ordineId){
+  const {data:righe}=await sb.from('righe_ordine').select('*').eq('ordine_id',ordineId);
+  const fab=fabbisognoCoprifili(righe);
+  if(!fab.length) return {righe:[],mancanti:0};
+  const {data:arts}=await sb.from('magazzino').select('id,codice_mp,giacenza,ubicazione').in('codice_mp',fab.map(f=>f.codice_mp));
+  let mancanti=0;
+  fab.forEach(f=>{
+    f.art=(arts||[]).find(a=>a.codice_mp===f.codice_mp)||null;
+    if(!f.art || parseFloat(f.art.giacenza||0)<f.qta) mancanti++;
+  });
+  return {righe:fab, mancanti};
+}
+async function eseguiScaricoCoprifili(ordineId, numero, scarico){
+  let n=0;
+  for(const f of scarico.righe){
+    if(!f.art) continue;
+    const {data:a}=await sb.from('magazzino').select('giacenza').eq('id',f.art.id).single();
+    const nuova=(parseFloat(a&&a.giacenza)||0)-f.qta;  // può andare in negativo: segnala materiale da reintegrare
+    await sb.from('magazzino_movimenti').insert([{magazzino_id:f.art.id,tipo:'scarico',quantita:f.qta,causale:'Produzione '+numero+' — coprifili',riferimento:numero,utente_id:currentUser?.id||null}]);
+    await sb.from('magazzino').update({giacenza:nuova,updated_at:new Date().toISOString()}).eq('id',f.art.id);
+    n++;
+  }
+  await sb.from('ordini_vendita').update({materiale_scaricato_il:new Date().toISOString()}).eq('id',ordineId);
+  return n;
 }
 
 async function segnaPagato(id, pagato){
@@ -5751,6 +5911,7 @@ async function renderOrdineDetail(id){
         '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>Elimina</button>'
       :'')+
       bottoniApprovazione+
+      (['in_produzione','evaso','spedito'].includes(ord.stato)?'<button class="btn btn-sm" onclick="stampaSchedaProduzione(\\''+id+'\\')">&#128196; Scheda produzione</button>':'')+
     '</div></div>'+
     '<div class="grid-2" style="margin-bottom:14px">'+
       '<div class="card">'+
@@ -5764,6 +5925,7 @@ async function renderOrdineDetail(id){
           '<tr><td style="color:var(--mid);padding:3px 0">Data</td><td>'+fmtData(ord.data_ordine||ord.created_at)+'</td></tr>'+
           '<tr><td style="color:var(--mid);padding:3px 0">Listino</td><td><span class="tag">'+(ord.listino||'')+'</span></td></tr>'+
           '<tr><td style="color:var(--mid);padding:3px 0">Trasporto</td><td>'+(ord.trasporto||'—')+'</td></tr>'+
+          '<tr><td style="color:var(--mid);padding:3px 0">Sett. lavorazione</td><td><input type="text" value="'+(ord.settimana_lavorazione||'')+'" placeholder="es. 42" onblur="salvaSettimanaLav(\\''+id+'\\',this.value)" style="width:110px;font-size:12px;padding:2px 6px;border:0.5px solid var(--border);border-radius:4px"></td></tr>'+
           '<tr><td style="color:var(--mid);padding:3px 0">Sett. approntamento</td><td><input type="text" id="ord-sett-appront" value="'+(ord.settimana_consegna||'')+'" placeholder="es. SETT. 42" onblur="salvaSettimanaAppront(\\''+id+'\\',this.value)" style="width:110px;font-size:12px;padding:2px 6px;border:0.5px solid var(--border);border-radius:4px"></td></tr>'+
           '<tr><td style="color:var(--mid);padding:3px 0">Approvazione</td><td>'+(ord.richiede_approvazione_tecnica?'<span class="badge br">Tecnica richiesta</span>':'<span class="badge bg">Solo commerciale</span>')+'</td></tr>'+
           '<tr><td style="color:var(--mid);padding:3px 0">Stato</td><td>'+badgeStato(ord.stato)+'</td></tr>'+
@@ -8412,12 +8574,12 @@ async function eseguiEsportaPDF() {
   </div>
 </div>
 `;
-function generaPDF(payload, callback) {
+function generaPDF(payload, callback, script) {
   const tmpJson = path.join(os.tmpdir(), 'prev_' + Date.now() + '.json');
   const tmpPdf = path.join(os.tmpdir(), 'prev_' + Date.now() + '.pdf');
   try { fs.writeFileSync(tmpJson, JSON.stringify(payload)); } catch(e) { return callback(new Error('Scrittura JSON: ' + e.message)); }
-  const scriptPath = path.join(__dirname, 'genera_pdf.py');
-  if (!fs.existsSync(scriptPath)) { return callback(new Error('genera_pdf.py non trovato')); }
+  const scriptPath = path.join(__dirname, script || 'genera_pdf.py');
+  if (!fs.existsSync(scriptPath)) { return callback(new Error(path.basename(scriptPath)+' non trovato')); }
   const proc = spawn('python3', [scriptPath, tmpJson, tmpPdf]);
   let stderr = '';
   proc.stderr.on('data', function(d) { stderr += d.toString(); });
@@ -8496,6 +8658,24 @@ const server = http.createServer(function(req, res) {
             res.end(pdfData);
           }
         });
+      } catch(e) { res.writeHead(400,{'Content-Type':'text/plain'}); res.end('JSON: '+e.message); }
+    });
+    return;
+  }
+  if (req.method === 'POST' && req.url === '/genera-scheda') {
+    let body = '';
+    req.on('data', function(chunk) { body += chunk.toString(); });
+    req.on('end', function() {
+      try {
+        const payload = JSON.parse(body);
+        generaPDF(payload, function(err, pdfData) {
+          if (err) { console.error('generaScheda error:', err.message); res.writeHead(500, {'Content-Type':'text/plain'}); res.end(err.message); }
+          else {
+            const numero = (payload.testata && payload.testata.ordine_numero) || 'scheda';
+            res.writeHead(200, {'Content-Type':'application/pdf','Content-Disposition':'attachment; filename="SCHEDA_'+numero+'.pdf"','Content-Length':pdfData.length});
+            res.end(pdfData);
+          }
+        }, 'genera_scheda.py');
       } catch(e) { res.writeHead(400,{'Content-Type':'text/plain'}); res.end('JSON: '+e.message); }
     });
     return;
