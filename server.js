@@ -416,8 +416,8 @@ tr.data-row:hover td{background:var(--beige);cursor:pointer}
         <div class="form-grid-2">
           <div class="form-field">
             <label>Codice cliente / fornitore</label>
-            <input type="text" id="ana-codice" placeholder="Generato automaticamente" style="text-transform:uppercase">
-            <small id="ana-codice-hint" style="color:var(--mid);font-size:11px;margin-top:2px">Il codice viene assegnato automaticamente al salvataggio. Puoi modificarlo manualmente.</small>
+            <input type="text" id="ana-codice" placeholder="Generato automaticamente" readonly tabindex="-1" style="text-transform:uppercase;background:var(--bg,#f5f5f5);color:var(--mid);cursor:not-allowed">
+            <small id="ana-codice-hint" style="color:var(--mid);font-size:11px;margin-top:2px">Assegnato automaticamente al primo salvataggio, poi non è più modificabile.</small>
           </div>
         </div>
       </div>
@@ -574,15 +574,7 @@ tr.data-row:hover td{background:var(--beige);cursor:pointer}
         <div class="form-grid">
           <div class="form-field">
             <label>Condizioni pagamento</label>
-            <select id="ana-pagamento">
-              <option value="">—</option>
-              <option value="30gg RIBA">30gg RIBA</option>
-              <option value="60gg RIBA">60gg RIBA</option>
-              <option value="30gg bonifico">30gg bonifico</option>
-              <option value="60gg bonifico">60gg bonifico</option>
-              <option value="Anticipato">Anticipato</option>
-              <option value="Contanti">Contanti</option>
-            </select>
+            <select id="ana-pagamento"><option value="">—</option></select>
           </div>
           <div class="form-field">
             <label>Fido commerciale (€)</label>
@@ -1167,6 +1159,8 @@ async function openFormAnagrafica(data){
     'ana-cat-forn':data?.categoria_fornitura||'','ana-leadtime':data?.lead_time_giorni||'','ana-valutazione':data?.valutazione||'',
     'ana-note':data?.note||''
   };
+  await popolaSelectPagamento('ana-pagamento', data?.condizioni_pagamento||'');
+  delete fields['ana-pagamento'];
   Object.entries(fields).forEach(([id,val])=>{const el=document.getElementById(id);if(el)el.value=val;});
   if(document.getElementById('ana-ritenuta')) document.getElementById('ana-ritenuta').checked=data?.ritenuta_acconto||false;
   if(document.getElementById('ana-split')) document.getElementById('ana-split').checked=data?.split_payment||false;
@@ -1192,6 +1186,16 @@ function aggiornaCampiPerTipo(tipo){
   if(sezFornitore){
     sezFornitore.style.display = (tipo==='fornitore'||tipo==='entrambi') ? '' : 'none';
   }
+}
+
+// Modalità di pagamento (archivio admin) → riempie un <select>; mantiene un valore storico non più in archivio
+async function popolaSelectPagamento(selId, valore){
+  const el=document.getElementById(selId); if(!el) return;
+  const {data}=await sb.from('modalita_pagamento').select('codice,descrizione,attivo').order('ordine').order('descrizione');
+  const attive=(data||[]).filter(m=>m.attivo!==false);
+  let opts='<option value="">—</option>'+attive.map(m=>\`<option value="\${m.descrizione}">\${m.descrizione}</option>\`).join('');
+  if(valore && !attive.some(m=>m.descrizione===valore)) opts+=\`<option value="\${valore}">\${valore} (non più in archivio)</option>\`;
+  el.innerHTML=opts; el.value=valore||'';
 }
 
 async function generaCodiceAnagrafica(tipo){
@@ -1234,16 +1238,6 @@ async function saveAnagrafica(){
     iban:v('ana-iban')||null,bic_swift:v('ana-bic')||null,banca:v('ana-banca')||null,intestatario_conto:v('ana-intestatario')||null,
     cin:v('ana-cin')||null,abi:v('ana-abi')||null,cab:v('ana-cab')||null,
     email_principale:v('ana-email-principale')||null,telefono_principale:v('ana-telefono-principale')||null,cellulare_principale:v('ana-cellulare-principale')||null,
-    codice: await (async()=>{
-      const manuale = v('ana-codice');
-      if(manuale) return manuale;
-      const tipo = v('ana-tipo');
-      if(!tipo) return null;
-      // Solo per nuovi inserimenti (non update)
-      const id = document.getElementById('ana-id').value;
-      if(id) return null; // in update non sovrascrivere
-      return await generaCodiceAnagrafica(tipo);
-    })(),
     referente:v('ana-referente')||null,email:v('ana-email')||null,email_ordini:v('ana-email-ordini')||null,telefono:v('ana-telefono')||null,
     cellulare_referente:v('ana-cellulare-referente')||null,
     condizioni_pagamento:v('ana-pagamento')||null,fido_commerciale:v('ana-fido')||null,agente_id:v('ana-agente-id')||null,
@@ -1251,6 +1245,8 @@ async function saveAnagrafica(){
     valutazione:v('ana-valutazione')||null,note:v('ana-note')||null,stato:'attivo'
   };
   const id=document.getElementById('ana-id').value;
+  // Codice cliente: assegnato solo alla creazione, mai modificato dopo
+  if(!id) payload.codice = await generaCodiceAnagrafica(payload.tipo);
   let error;
   if(id){const r=await sb.from('anagrafiche').update(payload).eq('id',id);error=r.error;}
   else{const r=await sb.from('anagrafiche').insert([payload]);error=r.error;}
@@ -5045,6 +5041,7 @@ async function apriModificaPreventivo(id){
   var s2=document.getElementById('ndoc-sconto2');if(s2)s2.value=prev.sconto2||0;
   var tr=document.getElementById('ndoc-trasporto');if(tr)tr.value=prev.trasporto||'Max Porte';
   var re=document.getElementById('ndoc-resa');if(re)re.value=prev.resa||'Franco fabbrica';
+  await popolaSelectPagamento('ndoc-pagamento', prev.condizioni_pagamento||((clienti||[]).find(c=>c.id===prev.anagrafica_id)||{}).condizioni_pagamento||'');
   var rif=document.getElementById('ndoc-rif-cliente');if(rif)rif.value=prev.riferimento_cliente||'';
   document.getElementById('ndoc-ind').value=prev.indirizzo_destinazione||'';
   document.getElementById('ndoc-cap').value=prev.cap_destinazione||'';
@@ -5073,6 +5070,7 @@ async function nuovoPreventivo(){
     document.getElementById('ndoc-agenti').innerHTML='<option value="">Nessun agente</option>'+(agenti||[]).map(a=>\`<option value="\${a.id}">\${a.cognome} \${a.nome}</option>\`).join('');
     document.getElementById('ndoc-righe-list').innerHTML='<div style="text-align:center;padding:20px;color:var(--mid);font-size:13px;font-style:italic">Nessuna porta aggiunta ancora — clicca "+ Aggiungi porta"</div>';
     setProvinciaDest('');
+    await popolaSelectPagamento('ndoc-pagamento','');
     document.getElementById('ndoc-totale').textContent='€ 0,00';
     modal.classList.add('open');
   } catch(e) {
@@ -5094,6 +5092,9 @@ async function ndocClienteChange(sel){
   document.getElementById('ndoc-listino').value = listino;
   const sconto = listino==='A' ? (cliente.sconto_dedicato_A||0) : (cliente.sconto_dedicato_P||0);
   document.getElementById('ndoc-sconto1').value = sconto;
+
+  // Modalità di pagamento proposta dall'anagrafica
+  await popolaSelectPagamento('ndoc-pagamento', cliente.condizioni_pagamento||'');
 
   // Indirizzo destinazione
   document.getElementById('ndoc-ind').value = cliente.indirizzo||'';
@@ -5220,6 +5221,7 @@ async function salvaNuovoDoc(){
       trasporto,
       trasporto_mezzo:trasportoMezzo,
       resa: document.getElementById('ndoc-resa')?.value || 'Franco fabbrica',
+      condizioni_pagamento: document.getElementById('ndoc-pagamento')?.value || null,
       riferimento_cliente: document.getElementById('ndoc-rif-cliente')?.value?.trim() || null,
       note,
       totale_imponibile:imponibile, totale_netto:netto,
@@ -5455,6 +5457,7 @@ async function firmaPreventivo(prevId){
     citta_destinazione:prev.citta_destinazione,
     provincia_destinazione:prev.provincia_destinazione,
     trasporto:prev.trasporto, note:prev.note,
+    condizioni_pagamento:prev.condizioni_pagamento||null,
     zona_trasporto_id:prev.zona_trasporto_id||null,
     trasporto_mezzo:prev.trasporto_mezzo||'proprio',
     costo_trasporto:prev.costo_trasporto||0,
@@ -5584,6 +5587,7 @@ async function apriModificaOrdine(id){
   var s2=document.getElementById('ndoc-sconto2');if(s2)s2.value=ord.sconto2||0;
   var tr=document.getElementById('ndoc-trasporto');if(tr)tr.value=ord.trasporto||'Max Porte';
   var re=document.getElementById('ndoc-resa');if(re)re.value=ord.resa||'Franco fabbrica';
+  await popolaSelectPagamento('ndoc-pagamento', ord.condizioni_pagamento||((clienti||[]).find(c=>c.id===ord.anagrafica_id)||{}).condizioni_pagamento||'');
   var rif=document.getElementById('ndoc-rif-cliente');if(rif)rif.value=ord.riferimento_cliente||'';
   document.getElementById('ndoc-ind').value=ord.indirizzo_destinazione||'';
   document.getElementById('ndoc-cap').value=ord.cap_destinazione||'';
@@ -5618,6 +5622,7 @@ async function nuovoOrdineDiretto(){
     }).join('');
     document.getElementById('ndoc-righe-list').innerHTML='<div style="text-align:center;padding:20px;color:var(--mid);font-size:13px;font-style:italic">Nessuna porta aggiunta ancora \xe2\x80\x94 clicca \"+ Aggiungi porta\"</div>';
     setProvinciaDest('');
+    await popolaSelectPagamento('ndoc-pagamento','');
     document.getElementById('ndoc-totale').textContent='€ 0,00';
     modal.classList.add('open');
   } catch(e) {
@@ -6478,7 +6483,7 @@ async function eliminaRigaAdmin(tabella, id, callback){
 // PREZZI E LISTINI
 // ══════════════════════════════════════════════════════
 function adminPrezzi(){
-  const tabs=[{id:'listini',label:'Listini A e P'},{id:'colori_extra',label:'Vetro e inserti'},{id:'scontistiche',label:'Scontistiche'}];
+  const tabs=[{id:'listini',label:'Listini A e P'},{id:'colori_extra',label:'Vetro e inserti'},{id:'scontistiche',label:'Scontistiche'},{id:'pagamenti',label:'Modalità pagamento'}];
   document.getElementById('admin-main').innerHTML=adminSubTabs(tabs,'listini','switchAdminPrezzi')+'<div id="admin-sub"></div>';
   switchAdminPrezzi('listini');
 }
@@ -6492,6 +6497,7 @@ function switchAdminPrezzi(sub){
   if(sub==='listini') adminListini();
   else if(sub==='colori_extra') adminColoriExtra();
   else if(sub==='scontistiche') adminScontistiche();
+  else if(sub==='pagamenti') adminPagamenti();
 }
 
 async function adminListini(){
@@ -6559,6 +6565,23 @@ async function adminColoriExtra(){
   <div class="card">
     <div class="card-header"><span class="card-title">Colori pietra</span><button class="btn btn-red btn-sm" onclick="nuovaRiga('colori_pietra',{codice:'PIE'+Date.now().toString().slice(-4),nome:'Nuovo colore',sovrapprezzo_a:0,sovrapprezzo_p:0},'adminColoriExtra')">+</button></div>
     <table><thead><tr><th>Codice</th><th>Nome</th><th>Sovr.A</th><th>Sovr.P</th></tr></thead><tbody>\${rowsP||'<tr><td colspan="4" style="text-align:center;color:var(--mid);padding:12px">Nessun colore pietra — aggiungilo qui</td></tr>'}</tbody></table>
+  </div>\`;
+}
+
+async function adminPagamenti(){
+  const {data} = await sb.from('modalita_pagamento').select('*').order('ordine').order('descrizione');
+  const rows=(data||[]).map(m=>\`<tr>
+    <td>\${inlineInput(m.codice,\`adminSalva('modalita_pagamento','\${m.id}','codice',this.value)\`,'80px','text')}</td>
+    <td>\${inlineInput(m.descrizione,\`adminSalva('modalita_pagamento','\${m.id}','descrizione',this.value)\`,'260px','text')}</td>
+    <td>\${inlineInput(m.ordine??0,\`adminSalva('modalita_pagamento','\${m.id}','ordine',this.value)\`,'50px','number')}</td>
+    <td>\${adminToggle(m.attivo!==false,\`toggleCampo('modalita_pagamento','\${m.id}','attivo',\${m.attivo!==false})\`)}</td>
+    <td><button onclick="eliminaRigaAdmin('modalita_pagamento','\${m.id}','adminPagamenti')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
+  </tr>\`).join('');
+  document.getElementById('admin-sub').innerHTML=\`<div class="card">
+    <div class="card-header"><span class="card-title">Modalità di pagamento</span><button class="btn btn-red btn-sm" onclick="nuovaRiga('modalita_pagamento',{codice:'PAG'+Date.now().toString().slice(-4),descrizione:'Nuova modalità',ordine:99,attivo:true},'adminPagamenti')">+</button></div>
+    <div style="font-size:12px;color:var(--mid);margin-bottom:8px">La descrizione è il testo che compare nei dropdown e sul PDF. Disattiva invece di cancellare se è già usata da clienti o documenti.</div>
+    <table><thead><tr><th>Codice</th><th>Descrizione</th><th>Ord.</th><th>Stato</th><th></th></tr></thead>
+    <tbody>\${rows||'<tr><td colspan="5" style="text-align:center;color:var(--mid);padding:12px">Nessuna modalità</td></tr>'}</tbody></table>
   </div>\`;
 }
 
@@ -8064,7 +8087,7 @@ async function eseguiEsportaPDF() {
         trasporto: doc.trasporto || '',
         resa: doc.resa || 'Franco fabbrica',
         imballo: an.tipo_imballo || 'Sì',
-        condizioni_pagamento: an.condizioni_pagamento || '',
+        condizioni_pagamento: doc.condizioni_pagamento || an.condizioni_pagamento || '',
         validita_offerta: doc.validita_offerta || '30',
         settimana_consegna: doc.settimana_consegna || '',
         riferimento_cliente: doc.riferimento_cliente || '',
@@ -8239,6 +8262,11 @@ async function eseguiEsportaPDF() {
             <option value="Cliente">A cura del cliente</option>
             <option value="Vettore">A cura del vettore</option>
           </select>
+        </div>
+        <div class="form-field">
+          <label>Modalità di pagamento</label>
+          <select id="ndoc-pagamento"><option value="">—</option></select>
+          <small style="color:var(--mid);font-size:10px">Proposta dall'anagrafica cliente, modificabile per questo documento</small>
         </div>
         <div class="form-field">
           <label>Resa</label>
