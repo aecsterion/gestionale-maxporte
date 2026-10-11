@@ -2239,7 +2239,8 @@ async function stampaSchedaProduzione(ordineId){
     const porta=isPorta(r);
     const lav=[]; const c=r.coprifili_config;
     if(c&&typeof c==='object'){ if(c.spingere&&c.spingere.lavorazione) lav.push('Coprif. spingere: '+c.spingere.lavorazione); if(c.tirare&&c.tirare.lavorazione) lav.push('Coprif. tirare: '+c.tirare.lavorazione); }
-    const note=[r.note_riga, r.stanza?('Stanza: '+r.stanza):'', ...lav].filter(Boolean).join(' — ');
+    const sop = r.codice_modello==='SOP';
+    const note=[r.note_riga, sop&&r.nome_tipo_vetro?('Vetro: '+r.nome_tipo_vetro):'', r.stanza?('Stanza: '+r.stanza):'', ...lav].filter(Boolean).join(' — ');
     return {
       pos:r.riga_numero, modello:(r.nome_modello||'')+(r.codice_modello?' ('+r.codice_modello+')':''),
       finitura:r.nome_finitura||r.codice_finitura||'', l:r.larghezza_mm||'', h:r.altezza_mm||'',
@@ -2247,8 +2248,8 @@ async function stampaSchedaProduzione(ordineId){
       qta:r.quantita, tipo:r.codice_apertura||'', serratura:r.codice_serratura||r.nome_serratura||'',
       ferramenta:r.codice_ferramenta||'',
       inserto:[r.nome_colore_alu, r.pannello_bugna, r.nome_colore_pietra].filter(Boolean).join(' / '),
-      telaio: porta ? (r.escludi_telaio?'NO':(r.codice_spalla||'')) : '',
-      finitura_telaio: (porta && !r.escludi_telaio) ? (r.nome_finitura_telaio||r.nome_finitura||'') : '',
+      telaio: porta ? (r.escludi_telaio?'NO':(r.codice_spalla||'')) : (sop?(r.codice_spalla||''):''),
+      finitura_telaio: ((porta||sop) && !r.escludi_telaio && (porta||r.codice_spalla)) ? (r.nome_finitura_telaio||r.nome_finitura||'') : '',
       coprifili: porta ? _descrCoprifiliScheda(r) : '',
       note
     };
@@ -2422,6 +2423,7 @@ function resetCFG(){
     _imballo_modello:null, _supp_fragile:0,
     // esclusioni telaio / coprifili per la posizione
     escludi_telaio:false, escludi_coprifili:false, con_sopraluce:false,
+    _sop_foro:null, _sop_vetro:null, _sop_nome_vetro:'', _collegamento_id:null,
     // coprifili (varianti per apertura, profilo per lato; colore = finitura telaio; lunghezza allo scarico)
     coprifili_variante_id:null,
     cf_larg_spingere:null, cf_aste_spingere:2.5, cf_lav_spingere:'',
@@ -2597,6 +2599,15 @@ async function modificaRiga(tabella, rigaId, docId, mode, listino_in){
   CFG.escludi_telaio=!!r.escludi_telaio;
   CFG.escludi_coprifili=!!r.escludi_coprifili;
   CFG.con_sopraluce=!!r.con_sopraluce;
+  CFG._collegamento_id=r.collegamento_id||null;
+  CFG._sop_foro=null; CFG._sop_vetro=null; CFG._sop_nome_vetro='';
+  if(r.con_sopraluce && r.collegamento_id){
+    const {data:sopR}=await sb.from(tabella).select('altezza_mm,codice_tipo_vetro,nome_tipo_vetro').eq('collegamento_id',r.collegamento_id).eq('auto_sopraluce',true).maybeSingle();
+    if(sopR){
+      CFG._sop_foro=(parseInt(sopR.altezza_mm)||0)+(parseInt(r.altezza_mm)||0)+120;
+      CFG._sop_vetro=sopR.codice_tipo_vetro||null; CFG._sop_nome_vetro=sopR.nome_tipo_vetro||'';
+    }
+  }
   const _cc = (r.coprifili_config && typeof r.coprifili_config==='object' && !Array.isArray(r.coprifili_config)) ? r.coprifili_config : null;
   CFG.coprifili_variante_id = _cc && _cc.variante_id!=null ? _cc.variante_id : null;
   CFG.cf_larg_spingere = _cc && _cc.spingere ? (_cc.spingere.larghezza||null) : null;
@@ -3915,17 +3926,107 @@ async function cfgCoprifili(){
         <div style="font-size:12px">\${suppAtt>0?'<span style="color:var(--red);font-weight:500">+ € '+suppAtt.toLocaleString('it-IT',{minimumFractionDigits:2})+'</span>':'<span style="color:var(--green-tx)">compreso nel prezzo</span>'}</div>
       </div>
     </div>
-    <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:8px;cursor:pointer">
-      <input type="checkbox" \${CFG.con_sopraluce?'checked':''} onchange="CFG.con_sopraluce=this.checked"> Porta con <strong>sopraluce</strong> <span style="font-size:11px;color:var(--mid)">(coprifili da 3000 mm invece di 2250)</span>
-    </label>
     <div style="font-size:11px;color:var(--mid);margin-bottom:8px">Il codice articolo a magazzino (larghezza + lunghezza + colore) viene risolto automaticamente e scaricato al lancio in produzione.</div>\`;
   }
 
-  html+=\`</div>
-  <div style="display:flex;justify-content:flex-end;margin-top:8px">
-    <button class="btn btn-red btn-sm" onclick="renderCfgStep('ferramenta')">Avanti →</button>
+  html+=\`</div>\`;
+  html+=await _htmlPannelloSopraluce();
+  html+=\`<div style="display:flex;justify-content:flex-end;margin-top:8px">
+    <button class="btn btn-red btn-sm" onclick="avanzaDaCoprifili()">Avanti →</button>
   </div>\`;
   document.getElementById('cfg-body').innerHTML=html;
+  if(CFG.con_sopraluce) calcSopraluceAuto();
+}
+
+// ── SOPRALUCE AUTOMATICO (dalla porta) ─────────────────
+// Spunta "porta con sopraluce" → misure foro + vetro → al salvataggio la riga SOP viene
+// aggiunta/aggiornata/tolta in automatico e resta collegata alla porta (collegamento_id).
+async function _htmlPannelloSopraluce(){
+  const chk=!!CFG.con_sopraluce;
+  let h=\`<div style="margin-top:4px;padding:10px 12px;border:0.5px solid var(--border);border-radius:var(--radius);background:var(--white)">
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+      <input type="checkbox" \${chk?'checked':''} onchange="toggleSopraluce(this.checked)"> Porta con <strong>sopraluce</strong>
+      <span style="font-size:11px;color:var(--mid)">— aggiunge il sopraluce alla commessa (coprifili da 3000 mm)</span>
+    </label>\`;
+  if(chk){
+    if(!CFG._vetriSop){ const {data}=await sb.from('tipi_vetro').select('codice,nome,sovrapprezzo_a,sovrapprezzo_p,attivo').order('nome'); CFG._vetriSop=(data||[]).filter(v=>v.attivo!==false && v.codice!=='NESSUNO'); }
+    const opts='<option value="">— scegli il vetro —</option>'+CFG._vetriSop.map(v=>\`<option value="\${v.codice}" \${v.codice===CFG._sop_vetro?'selected':''}>\${v.nome}</option>\`).join('');
+    h+=\`<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:10px;align-items:end">
+      <div><label style="font-size:11px;color:var(--mid);display:block;margin-bottom:3px">Altezza foro muro (mm)</label>
+        <input type="number" id="sop-auto-foro" value="\${CFG._sop_foro||''}" placeholder="es. 2400" oninput="CFG._sop_foro=parseInt(this.value)||null;calcSopraluceAuto()" style="width:100%;padding:7px 8px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px"></div>
+      <div><label style="font-size:11px;color:var(--mid);display:block;margin-bottom:3px">Vetro sopraluce</label>
+        <select id="sop-auto-vetro" onchange="selVetroSopraluce(this.value)" style="width:100%;padding:7px 8px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px">\${opts}</select></div>
+      <div><label style="font-size:11px;color:var(--mid);display:block;margin-bottom:3px">Sopraluce calcolato</label>
+        <div id="sop-auto-res" style="padding:7px 8px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;font-weight:600;background:var(--beige2)">—</div></div>
+    </div>
+    <div style="font-size:11px;color:var(--mid);margin-top:6px">Larghezza = porta (\${CFG.larghezza||'?'} mm) · altezza = foro − porta (\${CFG.altezza||'?'} mm) − 120 · colore, telaio e spessore come la porta</div>\`;
+  }
+  return h+'</div>';
+}
+async function toggleSopraluce(on){
+  CFG.con_sopraluce=!!on;
+  if(on && !CFG._collegamento_id) CFG._collegamento_id=(crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random());
+  await renderCfgStep('coprifili');
+}
+function selVetroSopraluce(cod){
+  const v=(CFG._vetriSop||[]).find(x=>x.codice===cod);
+  CFG._sop_vetro=cod||null; CFG._sop_nome_vetro=v?v.nome:'';
+  calcSopraluceAuto();
+}
+function _altezzaSopraluce(){
+  const foro=parseInt(CFG._sop_foro)||0, porta=parseInt(CFG.altezza)||0;
+  return (foro && porta && foro>porta+120) ? foro-porta-120 : null;
+}
+function calcSopraluceAuto(){
+  const el=document.getElementById('sop-auto-res'); if(!el) return;
+  const h=_altezzaSopraluce();
+  el.textContent = h ? ((CFG.larghezza||'?')+' × '+h+' mm') : (CFG._sop_foro?'foro troppo basso':'—');
+  el.style.color = h ? 'var(--red)' : 'var(--mid)';
+}
+function avanzaDaCoprifili(){
+  if(CFG.con_sopraluce){
+    if(!_altezzaSopraluce()){ toast('Sopraluce: inserisci un\\'altezza foro muro di almeno '+((parseInt(CFG.altezza)||0)+121)+' mm','err'); return; }
+    if(!CFG._sop_vetro){ toast('Sopraluce: scegli il vetro','err'); return; }
+  }
+  renderCfgStep('ferramenta');
+}
+// Costruisce la riga SOP dalla porta (riga = oggetto riga porta appena composto)
+async function costruisciRigaSopraluce(riga){
+  const lst=listino().toUpperCase();
+  const [{data:mod},{data:pr},{data:vet}] = await Promise.all([
+    sb.from('modelli').select('nome').eq('codice','SOP').eq('codice_serie','ACC').maybeSingle(),
+    sb.from('prezzi_modello').select('prezzo_base').eq('codice_modello','SOP').eq('listino',lst).maybeSingle(),
+    sb.from('tipi_vetro').select('nome,sovrapprezzo_a,sovrapprezzo_p').eq('codice',CFG._sop_vetro).maybeSingle(),
+  ]);
+  const pBase=parseFloat(pr&&pr.prezzo_base)||0;
+  const pVetro=parseFloat(vet&&(lst==='P'?vet.sovrapprezzo_p:vet.sovrapprezzo_a))||0;
+  let spalla=null, pTelaio=0;
+  if(!riga.escludi_telaio && riga.codice_spalla && riga.codice_spalla!=='FM-ALU'){
+    spalla=riga.codice_spalla;
+    const {data:sp}=await sb.from('telai_spalle').select('prezzo_a,prezzo_p').eq('codice',spalla).limit(1).maybeSingle();
+    pTelaio=parseFloat(sp&&(lst==='P'?sp.prezzo_p:sp.prezzo_a))||0;
+  }
+  const unit=Math.round((pBase+pVetro+pTelaio)*100)/100;
+  const q=parseFloat(riga.quantita)||1;
+  const h=_altezzaSopraluce();
+  return {
+    codice_serie:'ACC', nome_serie:'Accessori', codice_modello:'SOP', nome_modello:(mod&&mod.nome)||'Sopraluce',
+    codice_finitura:riga.codice_finitura, nome_finitura:riga.nome_finitura,
+    codice_finitura_telaio:riga.codice_finitura_telaio||null, nome_finitura_telaio:riga.nome_finitura_telaio||null,
+    larghezza_mm:riga.larghezza_mm, altezza_mm:h, spessore_muro_cm:riga.spessore_muro_cm||null,
+    codice_spalla:spalla, escludi_telaio:!spalla, escludi_coprifili:true,
+    codice_tipo_vetro:CFG._sop_vetro, nome_tipo_vetro:CFG._sop_nome_vetro||(vet&&vet.nome)||'',
+    prezzo_base:pBase, prezzo_vetro:pVetro, prezzo_telaio:pTelaio,
+    prezzo_unitario:unit, quantita:q, prezzo_totale_riga:Math.round(unit*q*100)/100,
+    note_riga:'Sopraluce automatico — foro H '+CFG._sop_foro+' mm',
+    stanza:riga.stanza||null,
+    collegamento_id:riga.collegamento_id, auto_sopraluce:true
+  };
+}
+// Rinumera le righe del documento in sequenza
+async function _rinumeraRighe(tabella, fk, docId){
+  const {data:rr}=await sb.from(tabella).select('id,riga_numero').eq(fk,docId).order('riga_numero',{ascending:true});
+  for(let i=0;i<(rr||[]).length;i++) if(rr[i].riga_numero!==i+1) await sb.from(tabella).update({riga_numero:i+1}).eq('id',rr[i].id);
 }
 
 function selVarianteCoprifilo(id){
@@ -4833,6 +4934,7 @@ async function aggiungiRigaAlDocumento(){
     escludi_telaio:!!CFG.escludi_telaio,
     escludi_coprifili:!!CFG.escludi_coprifili,
     con_sopraluce:!!CFG.con_sopraluce,
+    collegamento_id:CFG._collegamento_id||null,
     // coprifili (snapshot: variante + profilo per lato; colore=finitura telaio; lunghezza allo scarico)
     coprifili_config: CFG.escludi_coprifili ? null : {
       variante_id: CFG.coprifili_variante_id||null,
@@ -4851,6 +4953,27 @@ async function aggiungiRigaAlDocumento(){
     const tabella = CFG_MODE==='preventivo'?'righe_preventivo':'righe_ordine';
     const {error:errUp} = await sb.from(tabella).update(riga).eq('id',CFG_EDIT_RIGA_ID);
     if(errUp){ toast('Errore aggiornamento: '+errUp.message,'err'); return; }
+    // Sopraluce automatico collegato: crea / aggiorna / rimuovi
+    {
+      const fkE = CFG_MODE==='preventivo'?'preventivo_id':'ordine_id';
+      let figlio=null;
+      if(riga.collegamento_id){ const {data:f}=await sb.from(tabella).select('id').eq(fkE,CFG_TARGET_ID).eq('collegamento_id',riga.collegamento_id).eq('auto_sopraluce',true).maybeSingle(); figlio=f; }
+      if(riga.con_sopraluce){
+        const sop=await costruisciRigaSopraluce(riga);
+        if(figlio) await sb.from(tabella).update(sop).eq('id',figlio.id);
+        else {
+          const {data:pd}=await sb.from(tabella).select('riga_numero').eq('id',CFG_EDIT_RIGA_ID).single();
+          const n=(pd&&pd.riga_numero)||0;
+          // fa spazio subito dopo la porta
+          const {data:dopo}=await sb.from(tabella).select('id,riga_numero').eq(fkE,CFG_TARGET_ID).gt('riga_numero',n).order('riga_numero',{ascending:false});
+          for(const d of (dopo||[])) await sb.from(tabella).update({riga_numero:d.riga_numero+1}).eq('id',d.id);
+          await sb.from(tabella).insert([{...sop,[fkE]:CFG_TARGET_ID,riga_numero:n+1}]);
+        }
+      } else if(figlio){
+        await sb.from(tabella).delete().eq('id',figlio.id);
+        await _rinumeraRighe(tabella, fkE, CFG_TARGET_ID);
+      }
+    }
     await ricalcolaTotale(CFG_TARGET_ID, CFG_MODE);
     toast('Riga aggiornata','ok');
     CFG_EDIT_RIGA_ID=null; CFG_EDIT_RIGA_NUM=null;
@@ -4868,6 +4991,12 @@ async function aggiungiRigaAlDocumento(){
     const {data:esistenti} = await sb.from(tabella).select('riga_numero').eq(fk,CFG_TARGET_ID).order('riga_numero',{ascending:false}).limit(1);
     const nextNum = (esistenti?.[0]?.riga_numero||0)+1;
     await sb.from(tabella).insert([{...riga,[fk]:CFG_TARGET_ID,riga_numero:nextNum}]);
+    let extraNum = nextNum;
+    if(riga.con_sopraluce){
+      const sop=await costruisciRigaSopraluce(riga);
+      extraNum++;
+      await sb.from(tabella).insert([{...sop,[fk]:CFG_TARGET_ID,riga_numero:extraNum}]);
+    }
     // Aggiungi righe ZOC automatiche se pannello con zoccoli
     if((CFG._zoccoliAuto||0)>0){
       const {data:zocMod} = await sb.from('modelli').select('*').eq('codice','ZOC').eq('codice_serie','ACC').maybeSingle();
@@ -4876,7 +5005,7 @@ async function aggiungiRigaAlDocumento(){
       const pZoc = zocPrezzo?.prezzo_base||0;
       const zocAcc = zocMod;
       await sb.from(tabella).insert([{
-        [fk]:CFG_TARGET_ID, riga_numero:nextNum+1,
+        [fk]:CFG_TARGET_ID, riga_numero:extraNum+1,
         codice_serie:CFG.serie, nome_serie:CFG.nome_serie,
         codice_serie:'ACC', codice_modello:'ZOC', nome_modello:zocMod?.nome||'Zoccolo Altezza 80mm',
         codice_finitura:CFG.finitura, nome_finitura:CFG.nome_finitura,
@@ -4895,10 +5024,11 @@ async function aggiungiRigaAlDocumento(){
   } else {
     // Accumulo locale (documento non ancora salvato)
     CFG_RIGHE.push(riga);
+    if(riga.con_sopraluce) CFG_RIGHE.push(await costruisciRigaSopraluce(riga));
     if((CFG._zoccoliAuto||0)>0){
       CFG_RIGHE.push({
         codice_serie:CFG.serie, nome_serie:CFG.nome_serie,
-        codice_serie:'ACC', codice_modello:'ZOC', nome_modello:zocMod?.nome||'Zoccolo Altezza 80mm',
+        codice_serie:'ACC', codice_modello:'ZOC', nome_modello:'Zoccolo Altezza 80mm',
         codice_finitura:CFG.finitura, nome_finitura:CFG.nome_finitura,
         quantita:CFG._zoccoliAuto,
         prezzo_base:0, prezzo_unitario:0, prezzo_totale_riga:0,
@@ -5260,7 +5390,12 @@ function aggiornaTotaleNdoc(){
     </div>\`).join('');
 }
 
-function rimuoviRigaNdoc(i){ CFG_RIGHE.splice(i,1); aggiornaTotaleNdoc(); }
+function rimuoviRigaNdoc(i){
+  const r=CFG_RIGHE[i];
+  CFG_RIGHE.splice(i,1);
+  if(r && r.collegamento_id && !r.auto_sopraluce) CFG_RIGHE=CFG_RIGHE.filter(x=>!(x.auto_sopraluce && x.collegamento_id===r.collegamento_id));
+  aggiornaTotaleNdoc();
+}
 
 function ndocAggiungiPorta(){
   const listino = document.getElementById('ndoc-listino')?.value||'A';
@@ -5331,7 +5466,7 @@ async function salvaNuovoDoc(){
     };
 
     let docId, docNumero;
-    const RIGHE_FIELDS = ['codice_serie','nome_serie','codice_modello','nome_modello','codice_finitura','nome_finitura','pannello_bugna','codice_colore_alu','nome_colore_alu','codice_colore_pietra','nome_colore_pietra','codice_tipo_vetro','nome_tipo_vetro','codice_apertura','nome_apertura','senso_apertura','larghezza_mm','altezza_mm','misura_custom','spessore_muro_cm','codice_spalla','tipo_accessorio_telaio','codice_ferramenta','nome_ferramenta','codice_maniglia','nome_maniglia','codice_colore_maniglia','nome_colore_maniglia','prezzo_base','prezzo_vetro','prezzo_finitura','prezzo_bugna','prezzo_inserto','prezzo_apertura','prezzo_telaio','prezzo_accessorio_telaio','prezzo_ferramenta','prezzo_maniglia','prezzo_extra_incisioni','prezzo_unitario','quantita','sconto_riga','prezzo_totale_riga','note_riga','stanza','escludi_telaio','escludi_coprifili','coprifili_config','codice_imballo','prezzo_imballo_unitario','prezzo_imballo_totale','posata_da_noi','prezzo_coprifili','con_sopraluce','spessore_mm','codice_finitura_telaio','nome_finitura_telaio','codice_serratura','nome_serratura','prezzo_serratura','codice_cilindro','nome_cilindro','prezzo_cilindro','codice_pomolino','nome_pomolino','prezzo_pomolino'];
+    const RIGHE_FIELDS = ['codice_serie','nome_serie','codice_modello','nome_modello','codice_finitura','nome_finitura','pannello_bugna','codice_colore_alu','nome_colore_alu','codice_colore_pietra','nome_colore_pietra','codice_tipo_vetro','nome_tipo_vetro','codice_apertura','nome_apertura','senso_apertura','larghezza_mm','altezza_mm','misura_custom','spessore_muro_cm','codice_spalla','tipo_accessorio_telaio','codice_ferramenta','nome_ferramenta','codice_maniglia','nome_maniglia','codice_colore_maniglia','nome_colore_maniglia','prezzo_base','prezzo_vetro','prezzo_finitura','prezzo_bugna','prezzo_inserto','prezzo_apertura','prezzo_telaio','prezzo_accessorio_telaio','prezzo_ferramenta','prezzo_maniglia','prezzo_extra_incisioni','prezzo_unitario','quantita','sconto_riga','prezzo_totale_riga','note_riga','stanza','escludi_telaio','escludi_coprifili','coprifili_config','codice_imballo','prezzo_imballo_unitario','prezzo_imballo_totale','posata_da_noi','prezzo_coprifili','con_sopraluce','collegamento_id','auto_sopraluce','spessore_mm','codice_finitura_telaio','nome_finitura_telaio','codice_serratura','nome_serratura','prezzo_serratura','codice_cilindro','nome_cilindro','prezzo_cilindro','codice_pomolino','nome_pomolino','prezzo_pomolino'];
 
     if(editId){
       // MODIFICA — update del documento esistente (senza toccare numero/creato_da)
@@ -5472,7 +5607,12 @@ async function renderPreventivoDetail(id){
 
 async function eliminaRiga(tabella, rigaId, docId, mode){
   if(!confirm('Eliminare questa riga?')) return;
+  const {data:rDel}=await sb.from(tabella).select('collegamento_id,auto_sopraluce').eq('id',rigaId).maybeSingle();
   await sb.from(tabella).delete().eq('id',rigaId);
+  if(rDel && rDel.collegamento_id && !rDel.auto_sopraluce){
+    await sb.from(tabella).delete().eq('collegamento_id',rDel.collegamento_id).eq('auto_sopraluce',true);
+    toast('Rimosso anche il sopraluce collegato','ok');
+  }
   // Rinumera le righe rimanenti in sequenza
   const fk = mode==='preventivo' ? 'preventivo_id' : 'ordine_id';
   const {data:rimanenti} = await sb.from(tabella).select('id,riga_numero').eq(fk,docId).order('riga_numero',{ascending:true});
