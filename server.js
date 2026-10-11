@@ -669,6 +669,7 @@ tr.data-row:hover td{background:var(--beige);cursor:pointer}
       <div class="form-field"><label>Testo <span class="req">*</span></label>
         <textarea id="invia-testo" rows="10" style="font-size:13px;line-height:1.5"></textarea></div>
       <div id="invia-nota" style="font-size:12px;color:var(--mid);margin-top:4px">Il PDF sara allegato automaticamente</div>
+      <div style="font-size:11px;color:var(--mid);margin-top:2px">Le parti tra *asterischi* escono in grassetto rosso nell'email.</div>
     </div>
     <div class="form-modal-foot">
       <button class="btn" onclick="closeForm('modal-invia-preventivo')">Annulla</button>
@@ -6184,23 +6185,26 @@ async function apriComunicazioneOrdine(ordineId, tipo, extra){
   const o=r.data; if(!o) return;
   const an=o.anagrafiche||{};
   const to=emailDocumentiCliente(an);
-  const rif=o.riferimento_cliente?(" (vostro riferimento: "+o.riferimento_cliente+")"):"";
   const nl=String.fromCharCode(10);
-  const saluti=nl+nl+"Restiamo a disposizione per qualsiasi chiarimento."+nl+nl+"Cordiali saluti,"+nl+FIRMA_EMAIL_UFFICIO;
-  let oggetto="", testo="Gentile "+(an.ragione_sociale||"cliente")+","+nl+nl;
+  const rifOrd="*n. "+o.numero+"* del "+fmtData(o.data_ordine||o.created_at)+(o.riferimento_cliente?(" - riferimento *"+o.riferimento_cliente+"*"):"");
+  const rifOgg="n. "+o.numero+" del "+fmtData(o.data_ordine||o.created_at)+(o.riferimento_cliente?(" rif. "+o.riferimento_cliente):"");
+  const chiusura=nl+nl+"Per qualsiasi informazione può contattarci rispondendo a questa email o scrivendo a ufficio@maxporte.it."+nl+nl+"La ringraziamo per aver scelto i nostri prodotti."+nl+nl+"Cordiali saluti,"+nl+FIRMA_EMAIL_UFFICIO;
+  let oggetto="", testo="Gentile "+(an.ragione_sociale||"Cliente")+","+nl+nl;
   if(tipo==="lancio"){
-    oggetto="Ordine n. "+o.numero+" in produzione - Max Porte";
-    testo+="le confermiamo che il suo ordine n. "+o.numero+rif+" è stato messo in produzione."+
-      (o.settimana_consegna?nl+"La merce sarà pronta presso la nostra sede nella settimana "+o.settimana_consegna+".":"");
+    oggetto="Max Porte - Ordine in produzione: "+rifOgg;
+    testo+="siamo lieti di informarla che il suo ordine"+nl+rifOrd+nl+"è stato *messo in produzione*."+
+      (o.settimana_consegna?nl+nl+"La merce sarà pronta presso la nostra sede nella *settimana "+o.settimana_consegna+"*. Le daremo conferma appena l'ordine sarà pronto.":"")+
+      nl+nl+"Da questo momento l'ordine non può più essere modificato.";
   } else if(tipo==="pronto"){
-    oggetto="Ordine n. "+o.numero+" pronto - Max Porte";
-    testo+="la informiamo che il suo ordine n. "+o.numero+rif+" è pronto."+nl+
-      (o.trasporto_mezzo==="ritiro" ? "La merce è disponibile per il ritiro presso la nostra sede di Bruino (TO)." : "La contatteremo a breve per concordare la consegna.");
+    oggetto="Max Porte - Ordine pronto: "+rifOgg;
+    testo+="siamo lieti di informarla che il suo ordine"+nl+rifOrd+nl+"è *pronto"+(o.trasporto_mezzo==="ritiro"?" per il ritiro":" per la spedizione")+"*."+nl+nl+
+      (o.trasporto_mezzo==="ritiro" ? "La merce è disponibile presso la nostra sede di Bruino (TO): la preghiamo di contattarci per concordare il giorno del ritiro." : "Nelle prossime ore verrà contattato dal nostro ufficio per concordare la consegna.")+
+      (o.pagato?"":nl+nl+"Qualora le condizioni di pagamento prevedano il saldo a merce pronta, può velocizzare le procedure di consegna provvedendo al versamento dello stesso.");
   } else if(tipo==="slittamento"){
-    oggetto="Ordine n. "+o.numero+" - aggiornamento data di approntamento - Max Porte";
-    testo+="la informiamo che l'approntamento del suo ordine n. "+o.numero+rif+" passa dalla settimana "+(extra&&extra.da||"—")+" alla settimana "+(extra&&extra.a||"—")+"."+nl+"Ci scusiamo per l'eventuale disagio.";
+    oggetto="Max Porte - Aggiornamento data di approntamento: "+rifOgg;
+    testo+="la informiamo che l'approntamento del suo ordine"+nl+rifOrd+nl+"passa dalla settimana "+(extra&&extra.da||"-")+" alla *settimana "+(extra&&extra.a||"-")+"*."+nl+nl+"Ci scusiamo per l'eventuale disagio.";
   }
-  testo+=saluti;
+  testo+=chiusura;
   _comunicazione={ordineId:ordineId, numero:o.numero, tipo:tipo};
   _invioDocId=ordineId; _invioNumero=o.numero; _invioPayload={}; _invioMode="comunicazione";
   document.getElementById("invia-email-to").value=to;
@@ -9089,9 +9093,10 @@ async function apriModalInvioConferma(docId, diretto){
   document.getElementById('invia-email-cc').value=pend.cc||'';
   document.getElementById('invia-oggetto').value=pend.oggetto||('Conferma d\\'ordine n. '+numero+' - Max Porte');
   document.getElementById('invia-testo').value=pend.testo||('Gentile '+(an.ragione_sociale||'')+','+nl+nl+
-    'in allegato trova la nostra conferma d\\'ordine n. '+numero+'.'+nl+
-    'La preghiamo di verificarla e di restituircela firmata per accettazione.'+nl+nl+
-    'Restiamo a Sua disposizione per qualsiasi chiarimento.'+nl+nl+
+    'in allegato trova la nostra *conferma d\\'ordine n. '+numero+'*'+(doc.riferimento_cliente?' - riferimento '+doc.riferimento_cliente:'')+'.'+nl+nl+
+    'La preghiamo di verificare attentamente *quantità, misure, descrizioni e prezzi* degli articoli, oltre alle condizioni di vendita, e di restituircela *firmata per accettazione*: la produzione partirà solo dopo aver ricevuto la conferma firmata.'+nl+nl+
+    '*NB:* eventuali modifiche vanno comunicate per email in modo chiaro ed evidente. Non saranno ritenute valide modifiche apportate direttamente sul file PDF.'+nl+nl+
+    'La ringraziamo per aver scelto i nostri prodotti e restiamo a Sua disposizione per qualsiasi chiarimento.'+nl+nl+
     'Cordiali saluti,'+nl+FIRMA_EMAIL_UFFICIO);
   _invioDocId=docId; _invioNumero=numero; _invioPayload={}; _invioMode = diretto?'conferma_diretta':'conferma';
   document.getElementById('invia-titolo').textContent = diretto?'Invia conferma d\\'ordine al cliente':'Invia conferma d\\'ordine';
@@ -9506,17 +9511,44 @@ const MAIL_FROM = '"Max Porte" <commerciale@maxporte.it>';
 // Mittenti ammessi: preventivi da commerciale@, documenti e comunicazioni d'ordine da ufficio@
 const MITTENTI = { commerciale: MAIL_FROM, ufficio: '"Max Porte" <ufficio@maxporte.it>' };
 
+// Email in HTML con logo e grafica Max Porte. Il testo resta scritto a mano nel gestionale:
+// righe vuote = paragrafi, *testo* = grassetto rosso. La versione testo semplice parte comunque.
+const LOGO_EMAIL_PATH = path.join(__dirname, 'logo-email.png');
+const LOGO_EMAIL_B64 = fs.existsSync(LOGO_EMAIL_PATH) ? fs.readFileSync(LOGO_EMAIL_PATH).toString('base64') : null;
+function escHtml(t){ return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function testoEmailInHtml(text){
+  const evid = function(r){ return escHtml(r).replace(/\*([^*\n]+)\*/g,'<strong style="color:#d0201a">$1</strong>')
+    .replace(/([\w.+-]+@[\w-]+(?:\.[\w-]+)+)/g,'<a href="mailto:$1" style="color:#d0201a">$1</a>'); };
+  const blocchi = String(text).replace(/\r/g,'').split(/\n\s*\n/);
+  const corpo = blocchi.map(function(b, i){
+    const righe = b.split('\n').map(evid);
+    if (i === blocchi.length-1 && righe.length > 1 && /^Cordiali saluti/i.test(b)) {
+      return '<p style="margin:0 0 16px">'+righe[0]+'</p><p style="margin:0;font-weight:bold;color:#1a1a1a">'+righe.slice(1).join('<br>')+'</p>';
+    }
+    return '<p style="margin:0 0 16px">'+righe.join('<br>')+'</p>';
+  }).join('');
+  return '<!doctype html><html><body style="margin:0;padding:0;background:#f2f2f0">'+
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f2f2f0;padding:24px 0"><tr><td align="center">'+
+    '<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-top:4px solid #d0201a">'+
+    '<tr><td style="padding:22px 32px 18px;border-bottom:1px solid #e6e6e6">'+
+      (LOGO_EMAIL_B64?'<img src="cid:logo-maxporte" alt="Max Porte" width="44" height="47" style="vertical-align:middle;border:0">':'')+
+      '<span style="vertical-align:middle;margin-left:12px;font:bold 20px Arial,Helvetica,sans-serif;letter-spacing:2px;color:#1a1a1a">MAX PORTE</span></td></tr>'+
+    '<tr><td style="padding:28px 32px 12px;font:15px/1.55 Arial,Helvetica,sans-serif;color:#333333">'+corpo+'</td></tr>'+
+    '<tr><td style="padding:14px 32px;background:#1a1a1a;font:12px/1.5 Arial,Helvetica,sans-serif;color:#bbbbbb">Max Porte &middot; Bruino (TO) &middot; Tel. 011 9084622 &middot; <a href="https://www.maxporte.it" style="color:#ffffff;text-decoration:none">www.maxporte.it</a></td></tr>'+
+    '</table></td></tr></table></body></html>';
+}
 function inviaConResend({to, cc, subject, text, attachmentName, attachmentData, from}, callback) {
+  const allegati = [];
+  if (attachmentData) allegati.push({ filename: attachmentName, content: attachmentData.toString('base64') });
+  if (LOGO_EMAIL_B64) allegati.push({ filename: 'logo-maxporte.png', content: LOGO_EMAIL_B64, content_id: 'logo-maxporte' });
   const body = JSON.stringify({
     from: from || MAIL_FROM,
     to: Array.isArray(to) ? to : [to],
     ...(cc ? {cc: Array.isArray(cc) ? cc : [cc]} : {}),
     subject,
-    text,
-    ...(attachmentData ? {attachments: [{
-      filename: attachmentName,
-      content: attachmentData.toString('base64'),
-    }]} : {})
+    text: String(text).replace(/\*([^*\n]+)\*/g,'$1'),
+    html: testoEmailInHtml(text),
+    ...(allegati.length ? {attachments: allegati} : {})
   });
 
   const options = {
