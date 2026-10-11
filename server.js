@@ -1455,6 +1455,8 @@ async function apriModalInvioPreventivo(docId){
     '*NB:* per eventuali variazioni La preghiamo di scriverci per email indicandole chiaramente: correzioni a mano o fatte direttamente sul PDF non possono essere prese in considerazione.'+nl+nl+
     'Grazie per la fiducia: il nostro ufficio commerciale resta a disposizione per ogni necessità.'+nl+nl+
     'Cordiali saluti,'+nl+FIRMA_EMAIL;
+  document.getElementById('invia-email-to').value=email;
+  if(!email) toast('Il cliente non ha un indirizzo email in anagrafica','err');
   document.getElementById('invia-email-cc').value='';
   document.getElementById('invia-oggetto').value='Max Porte - Offerta n. '+numero+(doc.riferimento_cliente?' rif. '+doc.riferimento_cliente:'');
   document.getElementById('invia-testo').value=testo;
