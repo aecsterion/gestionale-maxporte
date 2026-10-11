@@ -125,10 +125,20 @@ def add_images(ws, numero):
     png = make_barcode_png(numero) if numero else None
     if png:
         from PIL import Image as PILImage
+        from openpyxl.drawing.spreadsheet_drawing import OneCellAnchor, AnchorMarker
+        from openpyxl.drawing.xdr import XDRPositiveSize2D
+        from openpyxl.utils.units import pixels_to_EMU
         im = PILImage.open(png); w, hh = im.size; png.seek(0)
         img = XLImage(png)
-        img.height = 46; img.width = min(int(46 * w / hh), 170)
-        ws.add_image(img, 'AJ4')
+        # area AI4:AR6 = righe 4-6 (~45px): il barcode resta DENTRO i bordi con margine sopra/sotto
+        # le larghezze colonna lette da openpyxl non sono affidabili: misura fissa, ancorata a sinistra dell'area AI..AR
+        h_px = 30; w_px = 140
+        img.height = h_px; img.width = w_px
+        col = column_index_from_string('AI') - 1
+        col_off = 10
+        marker = AnchorMarker(col=col, colOff=pixels_to_EMU(col_off), row=3, rowOff=pixels_to_EMU(7))
+        img.anchor = OneCellAnchor(_from=marker, ext=XDRPositiveSize2D(pixels_to_EMU(w_px), pixels_to_EMU(h_px)))
+        ws.add_image(img)
 
 
 def est_lines(text, chars):
@@ -157,13 +167,17 @@ def build_scheda(ws, t, posizioni):
                 al.shrink_to_fit = True
             else:
                 al.wrap_text = True
+                if key in ('modello', 'finitura', 'finitura_telaio'):
+                    if al.horizontal in (None, 'general'):
+                        al.horizontal = 'left'
+                    al.indent = 1
             al.vertical = 'center'
             c.alignment = al
         # altezza: la nota e i campi lunghi vanno a capo
-        lines = max(est_lines(p.get('note'), 28), est_lines(p.get('modello'), 22),
+        lines = max(est_lines(p.get('note'), 24), est_lines(p.get('modello'), 22),
                     est_lines(p.get('finitura'), 22), est_lines(p.get('finitura_telaio'), 22),
-                    est_lines(p.get('coprifili'), 10), est_lines(p.get('inserto'), 9))
-        ws.row_dimensions[r].height = max(POS_ROW_H, 13.5 * lines + 7)
+                    est_lines(p.get('coprifili'), 10), est_lines(p.get('inserto'), 8))
+        ws.row_dimensions[r].height = max(POS_ROW_H + 3, 14 * lines + 10)
     last = POS_ROW + n - 1
     ws.print_area = f'A1:BI{last}'
     ws.print_title_rows = '1:8'
