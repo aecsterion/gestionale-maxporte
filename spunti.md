@@ -92,28 +92,28 @@ Formato: `## data — titolo`, **Area**, **Spunto**, **Stato** (`da valutare` / 
 ## 2026-10-11 — Codice cliente non modificabile
 **Area:** Anagrafica clienti
 **Spunto:** Una volta assegnato, il codice cliente è in sola lettura.
-**Stato:** `da valutare`
+**Stato:** `fatto` — 11/10
 
 ---
 
 ## 2026-10-11 — Archivio modalità di pagamento in admin
 **Area:** Admin / Anagrafica
 **Spunto:** Archivio admin dei codici pagamento, usati nel dropdown di preventivi e ordini.
-**Stato:** `da valutare`
+**Stato:** `fatto` — 11/10 (Admin › Prezzi › Modalità pagamento)
 
 ---
 
 ## 2026-10-11 — Modalità di pagamento sul singolo documento
 **Area:** Preventivi / Ordini
 **Spunto:** Modalità di pagamento impostabile sul singolo preventivo/conferma, indipendente da quella in anagrafica.
-**Stato:** `da valutare`
+**Stato:** `fatto` — 11/10
 
 ---
 
 ## 2026-10-11 — Fido cliente con blocco produzione
 **Area:** Anagrafica / Ordini / Produzione
 **Spunto:** Con fido impostato, impedire la messa in produzione di ordini che lo sforano. Da decidere: blocco duro o alert con conferma admin.
-**Stato:** `da valutare`
+**Stato:** `fatto` — 11/10: esposizione = conferme lanciate non pagate + questa, su imponibile netto; blocco, forzabile da admin; flag Pagato sulla conferma
 
 ---
 
