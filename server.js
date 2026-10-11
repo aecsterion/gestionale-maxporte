@@ -5152,7 +5152,7 @@ async function aggiungiRigaAlDocumento(){
 // mezzo proprio/corriere, costo calcolato dallo scaglione (n° porte), modificabile.
 async function renderTrasportoCard(mode, doc, righe){
   const {data:zone} = await sb.from('zone_trasporto').select('*').order('ordine');
-  const nPorte = (righe||[]).filter(r=>r.codice_serie!=='ACC'&&r.codice_serie!=='PAN-BL').reduce((s,r)=>s+(parseFloat(r.quantita)||0),0);
+  const cntT = contaPezziTrasporto(righe, await _serieBlindate());
   // Provincia per l'auto-zona: sede operativa se compilata, altrimenti sede legale
   const ana = doc.anagrafiche||{};
   const provConsegna = (ana.sede_op_provincia||'').toUpperCase().trim();
@@ -5182,7 +5182,7 @@ async function renderTrasportoCard(mode, doc, righe){
       <tr><td style="color:var(--mid);padding:4px 0">Zona</td>
         <td><select id="trasp-zona" \${dis?'disabled':''} onchange="aggiornaTrasporto('\${mode}','\${doc.id}')" style="width:100%;font-size:12px;padding:3px 6px;border:0.5px solid var(--border);border-radius:4px">\${zoneOpts}</select>
         \${autoProposta?'<div style="font-size:10px;color:var(--mid);margin-top:2px">Proposta dalla provincia '+prov+' — conferma o cambia</div>':''}</td></tr>
-      <tr><td style="color:var(--mid);padding:4px 0">N° porte</td><td style="font-size:12px">\${nPorte}</td></tr>
+      <tr><td style="color:var(--mid);padding:4px 0">Conteggio</td><td style="font-size:12px">\${cntT.porte} porte interne\${cntT.blindate?' · '+cntT.blindate+' blindate':''} · \${cntT.accessori} righe accessori/pannelli</td></tr>
       <tr><td style="color:var(--mid);padding:4px 0">Costo trasporto</td>
         <td><div style="display:flex;align-items:center;gap:6px">
           <input type="number" id="trasp-costo" step="0.01" value="\${costo||''}" placeholder="0.00" \${dis?'disabled':''} style="width:100px;font-size:13px;padding:3px 6px;border:0.5px solid var(--border);border-radius:4px" onchange="salvaCostoTrasporto('\${mode}','\${doc.id}',this.value)">
@@ -5190,7 +5190,7 @@ async function renderTrasportoCard(mode, doc, righe){
           \${dis?'':'<button class="btn btn-sm" onclick="ricalcolaTrasporto(\\''+mode+'\\',\\''+doc.id+'\\')">Ricalcola da listino</button>'}
         </div></td></tr>\`}
     </table>
-    \${ritiro?'':'<div style="font-size:10px;color:var(--mid);margin-top:6px">Il costo è proposto dal listino (zona + n° porte + mezzo) ma puoi modificarlo a mano.</div>'}
+    \${ritiro?'':'<div style="font-size:10px;color:var(--mid);margin-top:6px">Il costo è proposto dalle tariffe della zona (porte, blindate, accessori, con minimo tassabile) ma puoi modificarlo a mano.</div>'}
   </div>\`;
 }
 
@@ -5210,8 +5210,8 @@ async function aggiornaTrasporto(mode, docId){
     return;
   }
   const zonaId = document.getElementById('trasp-zona')?.value || null;
-  const nPorte = await contaPorteDoc(docId, mode);
-  const costo = await calcolaCostoTrasporto(zonaId, mezzo, nPorte);
+  const cnt = await contaPezziDoc(docId, mode);
+  const costo = await calcolaCostoTrasporto(zonaId, mezzo, cnt);
   await sb.from(tabDoc).update({zona_trasporto_id:zonaId||null, trasporto_mezzo:mezzo, trasporto:trasportoLabel, costo_trasporto:costo}).eq('id',docId);
   await ricalcolaTotale(docId, mode);
   toast('Trasporto aggiornato','ok');
@@ -5255,24 +5255,39 @@ async function ricalcolaTotale(docId, mode){
 
 // Conta le "porte" del documento per lo scaglione trasporto:
 // somma delle quantità delle righe-porta (accessori serie ACC e pannelli PAN-BL esclusi).
-async function contaPorteDoc(docId, mode){
+// Conteggio per il trasporto: porte interne e blindate a pezzo (quantità),
+// accessori (serie ACC) e pannelli (PAN-BL) a RIGA del documento.
+async function _serieBlindate(){
+  const {data}=await sb.from('serie').select('codice').eq('blindata',true);
+  return new Set((data||[]).map(x=>x.codice));
+}
+function contaPezziTrasporto(righe, blindate){
+  const c={porte:0, blindate:0, accessori:0};
+  (righe||[]).forEach(r=>{
+    if(r.codice_serie==='ACC' || r.codice_serie==='PAN-BL'){ c.accessori+=1; return; }
+    const q=parseFloat(r.quantita)||0;
+    if(blindate && blindate.has(r.codice_serie)) c.blindate+=q; else c.porte+=q;
+  });
+  return c;
+}
+async function contaPezziDoc(docId, mode){
   const tabRighe = mode==='preventivo'?'righe_preventivo':'righe_ordine';
   const fk = mode==='preventivo'?'preventivo_id':'ordine_id';
-  const {data:righe} = await sb.from(tabRighe).select('codice_serie,quantita').eq(fk,docId);
-  return (righe||[]).filter(r=>r.codice_serie!=='ACC' && r.codice_serie!=='PAN-BL')
-    .reduce((s,r)=>s+(parseFloat(r.quantita)||0),0);
+  const [{data:righe}, bl] = await Promise.all([sb.from(tabRighe).select('codice_serie,quantita').eq(fk,docId), _serieBlindate()]);
+  return contaPezziTrasporto(righe, bl);
 }
 
-// Calcola il costo trasporto per zona + mezzo + numero porte (scaglione)
-async function calcolaCostoTrasporto(zonaId, mezzo, nPorte){
-  if(!zonaId) return 0;
-  const {data:scal} = await sb.from('listino_trasporti').select('*').eq('zona_id',zonaId).order('min_porte');
-  if(!scal || !scal.length) return 0;
-  // Trova lo scaglione che contiene nPorte (max_porte null = illimitato)
-  const s = scal.find(t => nPorte >= (t.min_porte||0) && (t.max_porte==null || nPorte <= t.max_porte))
-         || scal[scal.length-1];
-  const prezzo = mezzo==='corriere' ? (s.prezzo_corriere||0) : (s.prezzo_proprio||0);
-  return Math.round((parseFloat(prezzo)||0)*100)/100;
+// Costo trasporto: tariffe della zona per il mezzo scelto
+// = porte × prezzo porta + blindate × prezzo blindata + righe accessorio × prezzo accessorio, mai sotto il minimo tassabile
+async function calcolaCostoTrasporto(zonaId, mezzo, cnt){
+  if(!zonaId || !cnt) return 0;
+  const {data:z} = await sb.from('zone_trasporto').select('*').eq('id',zonaId).maybeSingle();
+  if(!z) return 0;
+  const pre = mezzo==='corriere' ? 'corriere_' : 'proprio_';
+  const n=x=>parseFloat(x)||0;
+  if(!(cnt.porte||cnt.blindate||cnt.accessori)) return 0;
+  const tot = cnt.porte*n(z[pre+'porta']) + cnt.blindate*n(z[pre+'blindata']) + cnt.accessori*n(z[pre+'accessorio']);
+  return Math.round(Math.max(tot, n(z[pre+'minimo']))*100)/100;
 }
 
 // ══════════════════════════════════════════════════════
@@ -6405,6 +6420,7 @@ async function adminSerie(){
     <td><select onchange="adminSalva('serie','\${s.id}','codice_imballo',this.value)" style="padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:11px">\${imbOpts(s.codice_imballo)}</select></td>
     <td><select onchange="adminSalva('serie','\${s.id}','codice_imballo_posa',this.value)" style="padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:11px">\${imbOpts(s.codice_imballo_posa)}</select></td>
     <td style="text-align:center"><input type="checkbox" \${s.imballo_fragile?'checked':''} onchange="toggleCampo('serie','\${s.id}','imballo_fragile',\${!!s.imballo_fragile})" title="Prodotti fragili/vetro: applica supplemento"></td>
+    <td style="text-align:center"><input type="checkbox" \${s.blindata?'checked':''} onchange="toggleCampo('serie','\${s.id}','blindata',\${!!s.blindata})" title="Porte blindate: nel trasporto contano a prezzo blindata"></td>
     <td>
       \${s.immagine_url?\`<img src="\${s.immagine_url}" style="width:36px;height:36px;object-fit:cover;border-radius:4px;margin-right:6px">\`:'<span style="font-size:11px;color:var(--mid)">—</span>'}
       <label style="cursor:pointer"><input type="file" accept="image/*" style="display:none" onchange="uploadImmagine('serie','\${s.id}',this)"><span class="btn btn-sm" style="font-size:11px">📷</span></label>
@@ -6413,9 +6429,9 @@ async function adminSerie(){
     <td><button onclick="eliminaRigaAdmin('serie','\${s.id}','adminSerie')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px" title="Elimina">×</button></td>
   </tr>\`).join('');
   document.getElementById('admin-sub').innerHTML=adminCard('Serie',\`
-    <table><thead><tr><th>Codice</th><th>Nome</th><th>Descrizione</th><th>Imballo</th><th>Imballo se posata</th><th style="text-align:center" title="Fragile / vetro">Fragile</th><th>Immagine</th><th>Stato</th><th></th></tr></thead>
+    <table><thead><tr><th>Codice</th><th>Nome</th><th>Descrizione</th><th>Imballo</th><th>Imballo se posata</th><th style="text-align:center" title="Fragile / vetro">Fragile</th><th style="text-align:center" title="Porte blindate (trasporto)">Blindata</th><th>Immagine</th><th>Stato</th><th></th></tr></thead>
     <tbody>\${rows}</tbody></table>
-    <div style="font-size:11px;color:var(--mid);margin-top:8px">"Imballo" = imballo di default della serie. "Imballo se posata" = imballo alternativo per le porte posate da noi. "Fragile" = aggiunge il supplemento fragili/vetro.</div>\`,
+    <div style="font-size:11px;color:var(--mid);margin-top:8px">"Imballo" = imballo di default della serie. "Imballo se posata" = imballo alternativo per le porte posate da noi. "Fragile" = aggiunge il supplemento fragili/vetro. "Blindata" = nel trasporto le porte della serie contano a prezzo porta blindata.</div>\`,
     \`<button class="btn btn-red btn-sm" onclick="nuovaRiga('serie',{codice:'NUOVA',nome:'Nuova serie',attiva:true},'adminSerie')">+ Aggiungi serie</button>\`);
 }
 
@@ -8125,17 +8141,8 @@ async function adminSpedizioni(){
   } else {
     // TRASPORTI
     const {data:zone} = await sb.from('zone_trasporto').select('*').order('ordine');
-    const {data:tar} = await sb.from('listino_trasporti').select('*').order('zona_id').order('min_porte');
-    const tarByZona={}; (tar||[]).forEach(t=>{ (tarByZona[t.zona_id]=tarByZona[t.zona_id]||[]).push(t); });
-    const zoneCards=(zone||[]).map(z=>{
-      const scal=(tarByZona[z.id]||[]).map(t=>\`<tr>
-        <td>\${inlineInput(t.min_porte,\`adminSalva('listino_trasporti','\${t.id}','min_porte',this.value)\`,'60px','number')}</td>
-        <td>\${inlineInput(t.max_porte,\`adminSalva('listino_trasporti','\${t.id}','max_porte',this.value)\`,'60px','number','∞')}</td>
-        <td>\${inlineInput(t.prezzo_proprio,\`adminSalva('listino_trasporti','\${t.id}','prezzo_proprio',this.value)\`,'80px','number')} €</td>
-        <td>\${inlineInput(t.prezzo_corriere,\`adminSalva('listino_trasporti','\${t.id}','prezzo_corriere',this.value)\`,'80px','number')} €</td>
-        <td><button onclick="eliminaTariffa('\${t.id}')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:15px">×</button></td>
-      </tr>\`).join('');
-      return adminCard('',\`
+    const tIn=(z,campo)=>inlineInput(z[campo]??0,\`adminSalva('zone_trasporto','\${z.id}','\${campo}',this.value)\`,'80px','number');
+    const zoneCards=(zone||[]).map(z=>adminCard('',\`
         <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
           <div style="flex:1;min-width:180px">
             <div style="font-size:11px;color:var(--mid);margin-bottom:2px">Zona</div>
@@ -8147,11 +8154,12 @@ async function adminSpedizioni(){
           </div>
           <button onclick="eliminaZona('\${z.id}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:12px;align-self:flex-end;padding-bottom:4px">Elimina zona</button>
         </div>
-        <table style="font-size:12px"><thead><tr><th>Da (porte)</th><th>A</th><th>Mezzo proprio</th><th>Corriere</th><th></th></tr></thead>
-        <tbody>\${scal||'<tr><td colspan="5" style="color:var(--mid);font-style:italic;padding:8px">Nessuno scaglione</td></tr>'}</tbody></table>
-        <button class="btn btn-sm" style="margin-top:8px" onclick="aggiungiTariffa('\${z.id}')">+ Aggiungi scaglione</button>
-      \`);
-    }).join('');
+        <table style="font-size:12px"><thead><tr><th>Mezzo</th><th>€ / porta interna</th><th>€ / porta blindata</th><th>€ / riga accessorio</th><th>Minimo tassabile €</th></tr></thead>
+        <tbody>
+          <tr><td>Mezzo Max Porte</td><td>\${tIn(z,'proprio_porta')}</td><td>\${tIn(z,'proprio_blindata')}</td><td>\${tIn(z,'proprio_accessorio')}</td><td>\${tIn(z,'proprio_minimo')}</td></tr>
+          <tr><td>Corriere</td><td>\${tIn(z,'corriere_porta')}</td><td>\${tIn(z,'corriere_blindata')}</td><td>\${tIn(z,'corriere_accessorio')}</td><td>\${tIn(z,'corriere_minimo')}</td></tr>
+        </tbody></table>
+      \`)).join('');
     body=\`
     \${adminCard('Zone di trasporto',\`
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -8159,7 +8167,7 @@ async function adminSpedizioni(){
         <input type="text" id="zona-prov" placeholder="Province: TO,CN,AT" style="padding:6px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;flex:1;min-width:180px;text-transform:uppercase">
         <button class="btn btn-red btn-sm" onclick="aggiungiZona()">+ Aggiungi zona</button>
       </div>
-      <div style="font-size:11px;color:var(--mid);margin-top:8px">La zona viene proposta automaticamente sul documento in base alla provincia del cliente. Gli scaglioni sono per numero di porte.</div>
+      <div style="font-size:11px;color:var(--mid);margin-top:8px">La zona viene proposta automaticamente sul documento in base alla provincia del cliente. Costo = porte interne × prezzo porta + porte blindate × prezzo blindata + righe di accessori/pannelli × prezzo accessorio; se il risultato è sotto il minimo tassabile si applica il minimo. Le porte blindate sono quelle delle serie con la spunta \\"Blindata\\" in Archivio › Serie.</div>
     \`)}
     \${zoneCards||'<div style="color:var(--mid);font-style:italic;padding:12px">Nessuna zona configurata.</div>'}\`;
   }
@@ -8202,7 +8210,7 @@ async function aggiungiZona(){
   toast('Zona aggiunta','ok'); adminSpedizioni();
 }
 async function eliminaZona(id){
-  if(!confirm('Eliminare la zona e i suoi scaglioni?'))return;
+  if(!confirm('Eliminare la zona e le sue tariffe?'))return;
   const {error}=await sb.from('zone_trasporto').delete().eq('id',id);
   if(error){toast('Errore: '+error.message,'err');return;}
   toast('Zona eliminata','ok'); adminSpedizioni();
@@ -8356,7 +8364,8 @@ async function adminSalva(tabella, id, campo, valore){
     'prezzo_access_A','prezzo_access_P','spalla_cassone_cm','quantita',
     'percentuale_provvigione','sconto_base_pct','sconto_max_pct',
     'prezzo','min_porte','max_porte','prezzo_proprio','prezzo_corriere',
-    'supplemento','ordine','larghezza_spingere','larghezza_tirare','aste_spingere','aste_tirare'];
+    'supplemento','ordine','larghezza_spingere','larghezza_tirare','aste_spingere','aste_tirare',
+    'proprio_porta','proprio_blindata','proprio_accessorio','proprio_minimo','corriere_porta','corriere_blindata','corriere_accessorio','corriere_minimo'];
   if(campo==='max_porte' && (valore===''||valore===null||valore===undefined)){
     val = null;  // max vuoto = scaglione illimitato
   } else if(numericFields.includes(campo)){
