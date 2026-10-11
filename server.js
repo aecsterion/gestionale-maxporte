@@ -1060,7 +1060,7 @@ function toast(msg,type='ok'){
 function badgeStato(s){
   const map={attivo:'bg',dormiente:'ba',prospect:'bb',nuovo:'bb',
     bozza:'ba',inviato:'bb',firmato:'bg',rifiutato:'bgr',non_concluso:'bgr',
-    confermato:'bb',in_produzione:'ba',spedito:'bg',ritardo:'br',annullato:'bgr',
+    confermato:'bb',in_produzione:'ba',spedito:'bg',ritardo:'br',annullato:'bgr',pronto:'bg',
     in_attesa:'ba',approvato_comm:'bg',approvato_tec:'bg',evaso:'bg',bloccato:'br',
     emessa:'bb',pagata:'bg',scaduta:'br','in_scadenza':'ba',
     presente:'bg',ferie:'ba',malattia:'br',
@@ -1068,7 +1068,7 @@ function badgeStato(s){
   const labels={attivo:'Attivo',dormiente:'Dormiente',prospect:'Prospect',nuovo:'Nuovo',
     bozza:'Bozza',inviato:'Inviato',firmato:'Firmato',rifiutato:'Rifiutato',non_concluso:'Non concluso',
     confermato:'Confermato',in_produzione:'In produzione',spedito:'Spedito',ritardo:'In ritardo',annullato:'Annullato',
-    in_attesa:'In approvazione',approvato_comm:'Approvato (comm.)',approvato_tec:'Approvato (tecn.)',evaso:'Evaso',bloccato:'Bloccato',
+    in_attesa:'In approvazione',pronto:'Pronta',approvato_comm:'Approvato (comm.)',approvato_tec:'Approvato (tecn.)',evaso:'Evaso',bloccato:'Bloccato',
     emessa:'Emessa',pagata:'Pagata',scaduta:'Scaduta',in_scadenza:'In scadenza',
     presente:'Presente',ferie:'Ferie',malattia:'Malattia',
     pianificato:'Pianificato',in_corso:'In corso',completato:'Completato'};
@@ -1428,8 +1428,10 @@ function descrCoprifiliPDF(r){
 var _invioMode='preventivo';
 // Email a cui mandare preventivi/conferme: campo dedicato, poi email principale/generica
 function emailDocumentiCliente(an){ an=an||{}; return an.email_documenti||an.email_principale||an.email||''; }
-// Firma delle email ai clienti: l'indirizzo è lo stesso del mittente (MAIL_FROM sul server)
+// Firma delle email ai clienti: l'indirizzo è lo stesso del mittente
+// (preventivi da commerciale@, conferme e comunicazioni d'ordine da ufficio@)
 const FIRMA_EMAIL = 'Max Porte\\nTel. 011 9084622\\ncommerciale@maxporte.it';
+const FIRMA_EMAIL_UFFICIO = 'Max Porte\\nTel. 011 9084622\\nufficio@maxporte.it';
 async function apriModalInvioPreventivo(docId){
   var r=await sb.from('preventivi').select('*,anagrafiche(*)').eq('id',docId).single();
   var doc=r.data;if(!doc){toast('Preventivo non trovato','err');return;}
@@ -2279,7 +2281,7 @@ async function registraMovimento(){
 async function renderProduzione(){
   const {data} = await sb.from('ordini_vendita')
     .select('id,numero,stato,settimana_lavorazione,settimana_consegna,riferimento_cliente,materiale_scaricato_il,data_ordine,created_at,anagrafiche(ragione_sociale)')
-    .in('stato',['in_produzione','evaso','spedito']).order('created_at',{ascending:false});
+    .in('stato',['in_produzione','pronto','evaso','spedito']).order('created_at',{ascending:false});
   const rows=(data||[]).map(o=>\`
     <tr class="data-row" style="cursor:pointer" onclick="renderOrdineDetail('\${o.id}')">
       <td><strong>\${o.numero||'—'}</strong></td>
@@ -5764,7 +5766,7 @@ function nettoDoc(d){
 }
 // Importo che pesa sul fido: imponibile netto (o arrotondato se impostato)
 function importoFido(d){ return d && d.totale_arrotondato!=null ? parseFloat(d.totale_arrotondato) : nettoDoc(d); }
-const STATI_ESPOSIZIONE = ['in_produzione','evaso','spedito','consegnato'];
+const STATI_ESPOSIZIONE = ['in_produzione','pronto','evaso','spedito','consegnato'];
 
 // Lancio in produzione con controllo fido:
 // esposizione = ordini del cliente già lanciati e NON pagati + questo ordine (imponibile netto)
@@ -5835,7 +5837,8 @@ function fabbisognoCoprifili(righe){
       acc[cod]=(acc[cod]||0)+(parseFloat(l.aste)||0)*q;
     });
   });
-  return Object.entries(acc).map(([codice_mp,q])=>({codice_mp, qta:Math.ceil(q-1e-9)})).filter(x=>x.qta>0);
+  // quantità esatta delle aste previste (anche mezze), nessun arrotondamento
+  return Object.entries(acc).map(([codice_mp,q])=>({codice_mp, qta:Math.round(q*100)/100})).filter(x=>x.qta>0);
 }
 async function preparaScaricoCoprifili(ordineId){
   const {data:righe}=await sb.from('righe_ordine').select('*').eq('ordine_id',ordineId);
@@ -5861,6 +5864,30 @@ async function eseguiScaricoCoprifili(ordineId, numero, scarico){
   }
   await sb.from('ordini_vendita').update({materiale_scaricato_il:new Date().toISOString()}).eq('id',ordineId);
   return n;
+}
+
+// Materiale della commessa ancora mancante: articoli scaricati per l'ordine con giacenza negativa
+async function materialeMancante(ordineId){
+  const {data:righe}=await sb.from('righe_ordine').select('*').eq('ordine_id',ordineId);
+  const fab=fabbisognoCoprifili(righe);
+  if(!fab.length) return [];
+  const {data:arts}=await sb.from('magazzino').select('codice_mp,giacenza').in('codice_mp',fab.map(f=>f.codice_mp));
+  return (arts||[]).filter(a=>parseFloat(a.giacenza||0)<0).map(a=>({codice_mp:a.codice_mp, mancano:Math.abs(parseFloat(a.giacenza))}));
+}
+// La commessa può diventare "pronta" solo quando a magazzino c'è tutto il materiale
+async function segnaCommessaPronta(id){
+  const manc=await materialeMancante(id);
+  if(manc.length){
+    alert('Materiale ancora mancante, la commessa non può essere segnata pronta:\\n\\n'+
+      manc.map(m=>'• '+m.codice_mp+' — mancano '+m.mancano).join('\\n')+
+      '\\n\\nRegistra il carico a magazzino e riprova.');
+    return;
+  }
+  if(!confirm('Segnare la commessa come pronta?')) return;
+  const {error}=await sb.from('ordini_vendita').update({stato:'pronto'}).eq('id',id);
+  if(error){ toast('Errore: '+error.message,'err'); return; }
+  toast('Commessa pronta','ok');
+  renderOrdineDetail(id);
 }
 
 async function segnaPagato(id, pagato){
@@ -6173,6 +6200,9 @@ async function renderOrdineDetail(id){
   if(ord.stato==='inviato'){
     bottoniApprovazione+='<button class="btn btn-red btn-sm" onclick="lanciaInProduzione(\\''+id+'\\')">Firma e lancia in produzione</button>';
   }
+  if(ord.stato==='in_produzione'){
+    bottoniApprovazione+='<button class="btn btn-red btn-sm" onclick="segnaCommessaPronta(\\''+id+'\\')">Commessa pronta</button>';
+  }
 
   var puoModificare = !ordBloccato(ord);
 
@@ -6183,7 +6213,7 @@ async function renderOrdineDetail(id){
       (puoModificare?'<button class="btn btn-sm" onclick="openConfiguratore(\\'ordine\\',\\''+id+'\\',\\''+ord.listino+'\\')">+ Aggiungi porta</button>':'')+
       '<button class="btn btn-sm" onclick="esportaPDF(\\'ordine\\',\\''+id+'\\')">&#128196; Esporta PDF</button>'+
       bottoniApprovazione+
-      (['in_produzione','evaso','spedito'].includes(ord.stato)?'<button class="btn btn-sm" onclick="stampaSchedaProduzione(\\''+id+'\\')">&#128196; Scheda produzione</button>':'')+
+      (['in_produzione','pronto','evaso','spedito'].includes(ord.stato)?'<button class="btn btn-sm" onclick="stampaSchedaProduzione(\\''+id+'\\')">&#128196; Scheda produzione</button>':'')+
       (puoModificare?
         '<button class="btn btn-sm" onclick="apriModificaOrdine(\\''+id+'\\')" style="display:inline-flex;align-items:center;gap:5px">'+
         '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Modifica</button>'+
@@ -8500,7 +8530,7 @@ function ensureModalInBody(id) {
 // ── ESPORTA PDF ───────────────────────────────────────
 // ── FLUSSO CONFERME D'ORDINE ──────────────────────────
 // bozza → [Invia] → in_attesa (approvazioni) → inviata al cliente in automatico → [Firma e lancia] → in_produzione
-const STATI_ORD_BLOCCATI = ['in_produzione','evaso','spedito','consegnato'];
+const STATI_ORD_BLOCCATI = ['in_produzione','pronto','evaso','spedito','consegnato'];
 function ordBloccato(o){ return !!o && STATI_ORD_BLOCCATI.includes(o.stato); }
 function prevBloccato(p){ return !!p && ['firmato','confermato'].includes(p.stato); }
 
@@ -8545,7 +8575,7 @@ async function apriModalInvioConferma(docId, diretto){
     'in allegato trova la nostra conferma d\\'ordine n. '+numero+'.'+nl+
     'La preghiamo di verificarla e di restituircela firmata per accettazione.'+nl+nl+
     'Restiamo a Sua disposizione per qualsiasi chiarimento.'+nl+nl+
-    'Cordiali saluti,'+nl+FIRMA_EMAIL);
+    'Cordiali saluti,'+nl+FIRMA_EMAIL_UFFICIO);
   _invioDocId=docId; _invioNumero=numero; _invioPayload={}; _invioMode = diretto?'conferma_diretta':'conferma';
   document.getElementById('invia-titolo').textContent = diretto?'Invia conferma d\\'ordine al cliente':'Invia conferma d\\'ordine';
   document.getElementById('invia-nota').textContent = diretto
@@ -8564,7 +8594,7 @@ async function inviaConfermaAlCliente(id){
     const payload=await costruisciPayloadPDF('ordine', id, false);
     if(!payload) return false;
     const resp=await fetch('/invia-preventivo',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({payload,email_to:m.to,email_cc:m.cc||'',oggetto:m.oggetto,testo:m.testo,numero_preventivo:ord.numero})});
+      body:JSON.stringify({payload,email_to:m.to,email_cc:m.cc||'',oggetto:m.oggetto,testo:m.testo,numero_preventivo:ord.numero,mittente:'ufficio'})});
     const res=await resp.json();
     if(!res.ok){ toast('Invio non riuscito: '+res.error,'err'); return false; }
     await sb.from('ordini_vendita').update({stato:'inviato',data_invio:new Date().toISOString(),invio_pendente:null}).eq('id',id);
@@ -8955,10 +8985,12 @@ function generaPDF(payload, callback, script) {
 // RESEND
 const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
 const MAIL_FROM = '"Max Porte" <commerciale@maxporte.it>';
+// Mittenti ammessi: preventivi da commerciale@, documenti e comunicazioni d'ordine da ufficio@
+const MITTENTI = { commerciale: MAIL_FROM, ufficio: '"Max Porte" <ufficio@maxporte.it>' };
 
-function inviaConResend({to, cc, subject, text, attachmentName, attachmentData}, callback) {
+function inviaConResend({to, cc, subject, text, attachmentName, attachmentData, from}, callback) {
   const body = JSON.stringify({
-    from: MAIL_FROM,
+    from: from || MAIL_FROM,
     to: Array.isArray(to) ? to : [to],
     ...(cc ? {cc: Array.isArray(cc) ? cc : [cc]} : {}),
     subject,
@@ -9050,7 +9082,8 @@ const server = http.createServer(function(req, res) {
           inviaConResend({
             to:d.email_to, cc:d.email_cc||'',
             subject:d.oggetto, text:d.testo,
-            attachmentName:d.numero_preventivo+'.pdf', attachmentData:pdf
+            attachmentName:d.numero_preventivo+'.pdf', attachmentData:pdf,
+            from: MITTENTI[d.mittente] || MAIL_FROM
           },function(e2){
             if(e2){res.writeHead(500,{'Content-Type':'application/json'});res.end(JSON.stringify({ok:false,error:e2.message}));}
             else{res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({ok:true}));}

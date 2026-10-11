@@ -142,3 +142,10 @@ Formato: `## data — titolo`, **Area**, **Spunto**, **Stato** (`da valutare` / 
 **Area:** Configuratore / Produzione / Ufficio tecnico
 **Spunto:** Non tutte le combinazioni sono configurate. Proposta: regole di compatibilità a tabella (vietato / da verificare / consentito); le combinazioni non coperte da nessuna regola = "non verificate" → l'ordine richiede approvazione tecnica; il resp. tecnico approva o vieta con "ricorda" → nasce la regola (la configurazione cresce dai casi reali). Doppio controllo: nel configuratore e al lancio in produzione (blocco se ci sono righe vietate o non verificate).
 **Stato:** `da valutare`
+
+---
+
+## 2026-10-11 — Comunicazioni automatiche al cliente sull'ordine
+**Area:** Conferme / Produzione / Logistica
+**Spunto:** Email automatiche al cliente per: lancio in produzione, slittamento della data di consegna/approntamento, commessa pronta (approntata). Tutte dal mittente ufficio@maxporte.it (come le conferme d'ordine); commerciale@maxporte.it resta solo per i preventivi.
+**Stato:** `approvato` — mittente ufficio@ già attivo per le conferme (11 ott); le altre email da costruire
