@@ -1450,10 +1450,10 @@ async function apriModalInvioPreventivo(docId){
   var email=emailDocumentiCliente(an);
   var nl='\\n';
   var testo='Gentile '+nome+','+nl+nl+
-    'in allegato trova la nostra *offerta n. '+numero+'*'+(doc.riferimento_cliente?' - riferimento *'+doc.riferimento_cliente+'*':'')+' relativa alla Sua richiesta.'+nl+nl+
-    'La preghiamo di verificare attentamente *quantità, misure, descrizioni e prezzi* degli articoli, oltre alle condizioni di vendita. Per confermare l\\'ordine può restituirci l\\'offerta *firmata per accettazione*.'+nl+nl+
-    '*NB:* eventuali modifiche vanno comunicate per email in modo chiaro ed evidente. Non saranno ritenute valide modifiche apportate direttamente sul file PDF.'+nl+nl+
-    'Congratulandoci per la Sua scelta, Le ricordiamo che i nostri servizi commerciali sono a Sua completa disposizione.'+nl+nl+
+    'in allegato Le inviamo la nostra *offerta n. '+numero+'*'+(doc.riferimento_cliente?' - riferimento *'+doc.riferimento_cliente+'*':'')+', preparata sulla base della Sua richiesta.'+nl+nl+
+    'Le chiediamo di controllare con cura *quantità, misure, descrizioni e prezzi* e le condizioni di vendita indicate. Se tutto è corretto, per procedere con l\\'ordine basta rispedirci l\\'offerta *firmata per accettazione*.'+nl+nl+
+    '*NB:* per eventuali variazioni La preghiamo di scriverci per email indicandole chiaramente: correzioni a mano o fatte direttamente sul PDF non possono essere prese in considerazione.'+nl+nl+
+    'Grazie per la fiducia accordata a Max Porte: il nostro ufficio commerciale resta a disposizione per ogni necessità.'+nl+nl+
     'Cordiali saluti,'+nl+FIRMA_EMAIL;
   document.getElementById('invia-email-cc').value='';
   document.getElementById('invia-oggetto').value='Max Porte - Offerta n. '+numero+(doc.riferimento_cliente?' rif. '+doc.riferimento_cliente:'');
@@ -6190,18 +6190,18 @@ async function apriComunicazioneOrdine(ordineId, tipo, extra){
   const nl=String.fromCharCode(10);
   const rifOrd="*n. "+o.numero+"* del "+fmtData(o.data_ordine||o.created_at)+(o.riferimento_cliente?(" - riferimento *"+o.riferimento_cliente+"*"):"");
   const rifOgg="n. "+o.numero+" del "+fmtData(o.data_ordine||o.created_at)+(o.riferimento_cliente?(" rif. "+o.riferimento_cliente):"");
-  const chiusura=nl+nl+"Per qualsiasi informazione può contattarci rispondendo a questa email o scrivendo a ufficio@maxporte.it."+nl+nl+"La ringraziamo per aver scelto i nostri prodotti."+nl+nl+"Cordiali saluti,"+nl+FIRMA_EMAIL_UFFICIO;
+  const chiusura=nl+nl+"Per qualsiasi informazione può contattarci rispondendo a questa email o scrivendo a ufficio@maxporte.it."+nl+nl+"Grazie per aver scelto Max Porte."+nl+nl+"Cordiali saluti,"+nl+FIRMA_EMAIL_UFFICIO;
   let oggetto="", testo="Gentile "+(an.ragione_sociale||"Cliente")+","+nl+nl;
   if(tipo==="lancio"){
     oggetto="Max Porte - Ordine in produzione: "+rifOgg;
-    testo+="siamo lieti di informarla che il suo ordine"+nl+rifOrd+nl+"è stato *messo in produzione*."+
+    testo+="le comunichiamo che il suo ordine"+nl+rifOrd+nl+"è *entrato in produzione*."+
       (o.settimana_consegna?nl+nl+"La merce sarà pronta presso la nostra sede nella *settimana "+o.settimana_consegna+"*. Le daremo conferma appena l'ordine sarà pronto.":"")+
       nl+nl+"Da questo momento l'ordine non può più essere modificato.";
   } else if(tipo==="pronto"){
     oggetto="Max Porte - Ordine pronto: "+rifOgg;
-    testo+="siamo lieti di informarla che il suo ordine"+nl+rifOrd+nl+"è *pronto"+(o.trasporto_mezzo==="ritiro"?" per il ritiro":" per la spedizione")+"*."+nl+nl+
-      (o.trasporto_mezzo==="ritiro" ? "La merce è disponibile presso la nostra sede di Bruino (TO): la preghiamo di contattarci per concordare il giorno del ritiro." : "Nelle prossime ore verrà contattato dal nostro ufficio per concordare la consegna.")+
-      (o.pagato?"":nl+nl+"Qualora le condizioni di pagamento prevedano il saldo a merce pronta, può velocizzare le procedure di consegna provvedendo al versamento dello stesso.");
+    testo+="le comunichiamo con piacere che il suo ordine"+nl+rifOrd+nl+"è *pronto"+(o.trasporto_mezzo==="ritiro"?" per il ritiro":" per la spedizione")+"*."+nl+nl+
+      (o.trasporto_mezzo==="ritiro" ? "La merce è disponibile presso la nostra sede di Bruino (TO): la preghiamo di contattarci per concordare il giorno del ritiro." : "Il nostro ufficio la contatterà a breve per fissare insieme la data di consegna.")+
+      (o.pagato?"":nl+nl+"Se le condizioni di pagamento prevedono il saldo a merce pronta, effettuare il versamento in anticipo ci permetterà di organizzare la consegna più rapidamente.");
   } else if(tipo==="slittamento"){
     oggetto="Max Porte - Aggiornamento data di approntamento: "+rifOgg;
     testo+="la informiamo che l'approntamento del suo ordine"+nl+rifOrd+nl+"passa dalla settimana "+(extra&&extra.da||"-")+" alla *settimana "+(extra&&extra.a||"-")+"*."+nl+nl+"Ci scusiamo per l'eventuale disagio.";
@@ -9095,10 +9095,10 @@ async function apriModalInvioConferma(docId, diretto){
   document.getElementById('invia-email-cc').value=pend.cc||'';
   document.getElementById('invia-oggetto').value=pend.oggetto||('Max Porte - Conferma d\\'ordine n. '+numero+(doc.riferimento_cliente?' rif. '+doc.riferimento_cliente:''));
   document.getElementById('invia-testo').value=pend.testo||('Gentile '+(an.ragione_sociale||'')+','+nl+nl+
-    'in allegato trova la nostra *conferma d\\'ordine n. '+numero+'*'+(doc.riferimento_cliente?' - riferimento *'+doc.riferimento_cliente+'*':'')+'.'+nl+nl+
-    'La preghiamo di verificare attentamente *quantità, misure, descrizioni e prezzi* degli articoli, oltre alle condizioni di vendita, e di restituircela *firmata per accettazione*: la produzione partirà solo dopo aver ricevuto la conferma firmata.'+nl+nl+
-    '*NB:* eventuali modifiche vanno comunicate per email in modo chiaro ed evidente. Non saranno ritenute valide modifiche apportate direttamente sul file PDF.'+nl+nl+
-    'Congratulandoci per la Sua scelta, Le ricordiamo che i nostri servizi commerciali sono a Sua completa disposizione.'+nl+nl+
+    'in allegato Le inviamo la *conferma d\\'ordine n. '+numero+'*'+(doc.riferimento_cliente?' - riferimento *'+doc.riferimento_cliente+'*':'')+'.'+nl+nl+
+    'Prima di restituircela *firmata per accettazione*, Le chiediamo di ricontrollare *quantità, misure, descrizioni e prezzi* e le condizioni di vendita: l\\'ordine entrerà in produzione solo dopo aver ricevuto la conferma firmata.'+nl+nl+
+    '*NB:* per eventuali variazioni La preghiamo di scriverci per email indicandole chiaramente: correzioni a mano o fatte direttamente sul PDF non possono essere prese in considerazione.'+nl+nl+
+    'Grazie per aver scelto Max Porte: il nostro ufficio resta a disposizione per ogni necessità.'+nl+nl+
     'Cordiali saluti,'+nl+FIRMA_EMAIL_UFFICIO);
   _invioDocId=docId; _invioNumero=numero; _invioPayload={}; _invioMode = diretto?'conferma_diretta':'conferma';
   document.getElementById('invia-titolo').textContent = diretto?'Invia conferma d\\'ordine al cliente':'Invia conferma d\\'ordine';
