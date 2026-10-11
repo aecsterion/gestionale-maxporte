@@ -148,4 +148,4 @@ Formato: `## data — titolo`, **Area**, **Spunto**, **Stato** (`da valutare` / 
 ## 2026-10-11 — Comunicazioni automatiche al cliente sull'ordine
 **Area:** Conferme / Produzione / Logistica
 **Spunto:** Email automatiche al cliente per: lancio in produzione, slittamento della data di consegna/approntamento, commessa pronta (approntata). Tutte dal mittente ufficio@maxporte.it (come le conferme d'ordine); commerciale@maxporte.it resta solo per i preventivi.
-**Stato:** `approvato` — mittente ufficio@ già attivo per le conferme (11 ott); le altre email da costruire
+**Stato:** `fatto` — 11 ott: email (da ufficio@) proposte già compilate dopo lancio, commessa pronta e cambio settimana di approntamento
