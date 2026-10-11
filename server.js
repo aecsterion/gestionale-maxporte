@@ -1453,7 +1453,7 @@ async function apriModalInvioPreventivo(docId){
     'in allegato Le inviamo la nostra *offerta n. '+numero+'*'+(doc.riferimento_cliente?' - riferimento *'+doc.riferimento_cliente+'*':'')+', preparata sulla base della Sua richiesta.'+nl+nl+
     'Le chiediamo di controllare con cura *quantità, misure, descrizioni e prezzi* e le condizioni di vendita indicate. Se tutto è corretto, per procedere con l\\'ordine basta rispedirci l\\'offerta *firmata per accettazione*.'+nl+nl+
     '*NB:* per eventuali variazioni La preghiamo di scriverci per email indicandole chiaramente: correzioni a mano o fatte direttamente sul PDF non possono essere prese in considerazione.'+nl+nl+
-    'Grazie per la fiducia accordata a Max Porte: il nostro ufficio commerciale resta a disposizione per ogni necessità.'+nl+nl+
+    'Grazie per la fiducia: il nostro ufficio commerciale resta a disposizione per ogni necessità.'+nl+nl+
     'Cordiali saluti,'+nl+FIRMA_EMAIL;
   document.getElementById('invia-email-cc').value='';
   document.getElementById('invia-oggetto').value='Max Porte - Offerta n. '+numero+(doc.riferimento_cliente?' rif. '+doc.riferimento_cliente:'');
@@ -6195,13 +6195,12 @@ async function apriComunicazioneOrdine(ordineId, tipo, extra){
   if(tipo==="lancio"){
     oggetto="Max Porte - Ordine in produzione: "+rifOgg;
     testo+="le comunichiamo che il suo ordine"+nl+rifOrd+nl+"è *entrato in produzione*."+
-      (o.settimana_consegna?nl+nl+"La merce sarà pronta presso la nostra sede nella *settimana "+o.settimana_consegna+"*. Le daremo conferma appena l'ordine sarà pronto.":"")+
-      nl+nl+"Da questo momento l'ordine non può più essere modificato.";
+      (o.settimana_consegna?" L'approntamento presso la nostra sede è previsto per la *settimana "+o.settimana_consegna+"*.":"");
   } else if(tipo==="pronto"){
     oggetto="Max Porte - Ordine pronto: "+rifOgg;
     testo+="le comunichiamo con piacere che il suo ordine"+nl+rifOrd+nl+"è *pronto"+(o.trasporto_mezzo==="ritiro"?" per il ritiro":" per la spedizione")+"*."+nl+nl+
       (o.trasporto_mezzo==="ritiro" ? "La merce è disponibile presso la nostra sede di Bruino (TO): la preghiamo di contattarci per concordare il giorno del ritiro." : "Il nostro ufficio la contatterà a breve per fissare insieme la data di consegna.")+
-      (o.pagato?"":nl+nl+"Se le condizioni di pagamento prevedono il saldo a merce pronta, effettuare il versamento in anticipo ci permetterà di organizzare la consegna più rapidamente.");
+      (nl+nl+"Se le condizioni di pagamento prevedono il saldo a merce pronta, effettuare il versamento in anticipo ci permetterà di organizzare la consegna più rapidamente.");
   } else if(tipo==="slittamento"){
     oggetto="Max Porte - Aggiornamento data di approntamento: "+rifOgg;
     testo+="la informiamo che l'approntamento del suo ordine"+nl+rifOrd+nl+"passa dalla settimana "+(extra&&extra.da||"-")+" alla *settimana "+(extra&&extra.a||"-")+"*."+nl+nl+"Ci scusiamo per l'eventuale disagio.";
