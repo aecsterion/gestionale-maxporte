@@ -136,7 +136,7 @@ def add_images(ws, numero):
         h_px = 36
         w_px = min(int(h_px * w / hh * 1.35), int(area_w - 16))
         img.height = h_px; img.width = w_px
-        col_off_tot = (area_w - w_px) / 2
+        col_off_tot = max(0, (area_w - w_px) / 2 - 8)   # -8: correzione misurata sul PDF reale
         col = column_index_from_string('AI') - 1 + int(col_off_tot // COL_PX)
         col_off = int(col_off_tot % COL_PX)
         row_off = int((area_h - h_px) / 2)
@@ -199,8 +199,7 @@ def build_packing(ws, t, pk):
     n = max(1, max(lens.values()))
     for i in range(n):
         r = PK_ROW + i
-        if r != PK_ROW:
-            ws.row_dimensions[r].height = ws.row_dimensions[PK_ROW].height or 13.5
+        row_lines = 1
         for key, (c1, c2, cols) in PK_BLOCKS.items():
             items = pk.get(key) or []
             if i < len(items):
@@ -208,8 +207,9 @@ def build_packing(ws, t, pk):
                 for col, field in cols:
                     c = ws[f'{col}{r}']
                     c.value = s(items[i].get(field))
-                    al = copy.copy(c.alignment); al.shrink_to_fit = True; al.wrap_text = False
-                    c.alignment = al
+                    # allineamento/a capo decisi dal template; altezza riga in base alle celle a capo
+                    if c.alignment.wrap_text:
+                        row_lines = max(row_lines, est_lines(c.value, _chars_per_line(ws, PK_ROW, col, c)))
             else:
                 # blocco senza voci su questa riga: niente testo né casella, resta solo la riga divisoria
                 for col, field in cols:
@@ -222,6 +222,8 @@ def build_packing(ws, t, pk):
                             cell.border = openpyxl.styles.Border()
                     if key != 'minuteria':
                         pass
+        base_h = ws.row_dimensions[PK_ROW].height or 13.5
+        ws.row_dimensions[r].height = max(base_h, 12 * row_lines + 4)
         # mantiene la linea verticale di separazione tra i blocchi
         for col in ('T', 'AO'):
             src = ws[f'{col}{PK_ROW}']

@@ -576,6 +576,10 @@ tr.data-row:hover td{background:var(--beige);cursor:pointer}
             <input type="tel" id="ana-cellulare-referente" placeholder="+39 333 1234567">
           </div>
         </div>
+        <div class="form-field" style="margin-bottom:10px">
+          <label>Email invio preventivi / conferme d'ordine</label>
+          <input type="email" id="ana-email-documenti" placeholder="ufficio@cliente.it — usata in automatico per l'invio dei documenti">
+        </div>
         <div class="form-field" style="margin-bottom:10px" id="field-email-ordini">
           <label>Email ordini</label>
           <input type="email" id="ana-email-ordini" placeholder="ordini@azienda.it (per fornitori)">
@@ -990,6 +994,19 @@ const pageInfo = {
   utenti:{title:'Utenti e ruoli',bc:'Gestione accessi',action:true,label:'+ Nuovo utente'},
 };
 
+// Evidenzia sezione nel menu + titolo in alto, senza ricaricare la sezione
+function evidenziaSezione(section){
+  currentSection=section;
+  document.querySelectorAll('.sb-item').forEach(i=>{
+    const oc=i.getAttribute('onclick')||'';
+    i.classList.toggle('active', oc.includes("nav('"+section+"'"));
+  });
+  const info=pageInfo[section]||{title:section,bc:''};
+  const t=document.getElementById('topbar-title'); if(t) t.textContent=info.title;
+  const bc=document.getElementById('topbar-bc'); if(bc) bc.textContent=' · '+info.bc;
+  const btn=document.getElementById('topbar-action');
+  if(btn){ if(info.action){btn.style.display='block';btn.textContent=info.label||'+ Nuovo';} else btn.style.display='none'; }
+}
 function nav(section, el){
   currentSection=section;
   document.querySelectorAll('.sb-item').forEach(i=>i.classList.remove('active'));
@@ -1196,7 +1213,7 @@ async function openFormAnagrafica(data){
     'ana-cin':data?.cin||'','ana-abi':data?.abi||'','ana-cab':data?.cab||'',
     'ana-email-principale':data?.email_principale||'','ana-telefono-principale':data?.telefono_principale||'','ana-cellulare-principale':data?.cellulare_principale||'',
     'ana-codice':data?.codice||'',
-    'ana-referente':data?.referente||'','ana-email':data?.email||'','ana-email-ordini':data?.email_ordini||'','ana-telefono':data?.telefono||'',
+    'ana-referente':data?.referente||'','ana-email':data?.email||'','ana-email-ordini':data?.email_ordini||'','ana-email-documenti':data?.email_documenti||'','ana-telefono':data?.telefono||'',
     'ana-cellulare-referente':data?.cellulare_referente||'',
     'ana-pagamento':data?.condizioni_pagamento||'','ana-fido':data?.fido_commerciale||'',
     'ana-cat-forn':data?.categoria_fornitura||'','ana-leadtime':data?.lead_time_giorni||'','ana-valutazione':data?.valutazione||'',
@@ -1281,7 +1298,7 @@ async function saveAnagrafica(){
     iban:v('ana-iban')||null,bic_swift:v('ana-bic')||null,banca:v('ana-banca')||null,intestatario_conto:v('ana-intestatario')||null,
     cin:v('ana-cin')||null,abi:v('ana-abi')||null,cab:v('ana-cab')||null,
     email_principale:v('ana-email-principale')||null,telefono_principale:v('ana-telefono-principale')||null,cellulare_principale:v('ana-cellulare-principale')||null,
-    referente:v('ana-referente')||null,email:v('ana-email')||null,email_ordini:v('ana-email-ordini')||null,telefono:v('ana-telefono')||null,
+    referente:v('ana-referente')||null,email:v('ana-email')||null,email_ordini:v('ana-email-ordini')||null,email_documenti:v('ana-email-documenti')||null,telefono:v('ana-telefono')||null,
     cellulare_referente:v('ana-cellulare-referente')||null,
     condizioni_pagamento:v('ana-pagamento')||null,fido_commerciale:v('ana-fido')||null,agente_id:v('ana-agente-id')||null,
     categoria_fornitura:v('ana-cat-forn')||null,lead_time_giorni:v('ana-leadtime')||null,
@@ -1367,7 +1384,7 @@ async function buildPreventivoPayload(id){
       cilindro:r.nome_cilindro||'',pomolino:r.nome_pomolino||'',
       maniglia:r.nome_maniglia||'',versione_maniglia:'',
       colore_maniglia:r.nome_colore_maniglia||'',vetro:r.nome_tipo_vetro||'',
-      bugna:r.pannello_bugna||'',colore_inserto:r.nome_colore_alu||r.nome_colore_pietra||'',
+      bugna:maiuscola(r.pannello_bugna),colore_inserto:r.nome_colore_alu||r.nome_colore_pietra||'',
       stanza:r.stanza||'',note_riga:r.note_riga||'',
       lavorazioni_extra:r.lavorazioni_extra||'',
       prezzo_cilindro:r.prezzo_cilindro||0,prezzo_pomolino:r.prezzo_pomolino||0,
@@ -1390,7 +1407,9 @@ async function buildPreventivoPayload(id){
 }
 
 // Descrizione coprifili per il PDF, dal coprifili_config salvato sulla riga
+function maiuscola(t){ t=(t||'')+''; return t ? t.charAt(0).toUpperCase()+t.slice(1) : ''; }
 function descrCoprifiliPDF(r){
+  if(!r.codice_apertura || r.codice_serie==='ACC' || r.codice_serie==='PAN-BL') return '';
   if(r.escludi_coprifili) return 'Esclusi';
   const cc = (r.coprifili_config && typeof r.coprifili_config==='object' && !Array.isArray(r.coprifili_config)) ? r.coprifili_config : null;
   if(!cc) return '';
@@ -1407,21 +1426,22 @@ function descrCoprifiliPDF(r){
   return txt;
 }
 var _invioMode='preventivo';
+// Email a cui mandare preventivi/conferme: campo dedicato, poi email principale/generica
+function emailDocumentiCliente(an){ an=an||{}; return an.email_documenti||an.email_principale||an.email||''; }
+// Firma delle email ai clienti: l'indirizzo è lo stesso del mittente (MAIL_FROM sul server)
+const FIRMA_EMAIL = 'Max Porte\\nTel. 011 9084622\\ncommerciale@maxporte.it';
 async function apriModalInvioPreventivo(docId){
   var r=await sb.from('preventivi').select('*,anagrafiche(*)').eq('id',docId).single();
   var doc=r.data;if(!doc){toast('Preventivo non trovato','err');return;}
   var an=doc.anagrafiche||{};
   var numero=doc.numero||'preventivo';
   var nome=an.ragione_sociale||'';
-  var email=an.email_principale||an.email||'';
+  var email=emailDocumentiCliente(an);
   var nl='\\n';
   var testo='Gentile '+nome+','+nl+nl+
     'in allegato trova il nostro preventivo n. '+numero+'.'+nl+nl+
     'Restiamo a Sua disposizione per qualsiasi chiarimento.'+nl+nl+
-    'Cordiali saluti,'+nl+
-    'Max Porte di Rimasti Massimilian'+nl+
-    'Tel. 011 9084622'+nl+
-    'info@maxporte.it';
+    'Cordiali saluti,'+nl+FIRMA_EMAIL;
   document.getElementById('invia-email-cc').value='';
   document.getElementById('invia-oggetto').value='Preventivo n. '+numero+' - Max Porte';
   document.getElementById('invia-testo').value=testo;
@@ -2314,7 +2334,7 @@ async function stampaSchedaProduzione(ordineId){
       s:r.spessore_muro_cm||r.spessore_mm||'', senso:(r.senso_apertura&&r.senso_apertura!=='Nessuno')?r.senso_apertura:'',
       qta:r.quantita, tipo:r.codice_apertura||'', serratura:r.codice_serratura||r.nome_serratura||'',
       ferramenta:r.codice_ferramenta||'',
-      inserto:[r.nome_colore_alu, r.pannello_bugna, r.nome_colore_pietra].filter(Boolean).join(' / '),
+      inserto:[r.nome_colore_alu, maiuscola(r.pannello_bugna), r.nome_colore_pietra].filter(Boolean).join(' / '),
       telaio: porta ? (r.escludi_telaio?'NO':(r.codice_spalla||'')) : (sop?(r.codice_spalla||''):''),
       finitura_telaio: ((porta||sop) && !r.escludi_telaio && (porta||r.codice_spalla)) ? (r.nome_finitura_telaio||r.nome_finitura||'') : '',
       coprifili: porta ? _descrCoprifiliScheda(r) : '',
@@ -4063,7 +4083,7 @@ function avanzaDaCoprifili(){
 async function costruisciRigaSopraluce(riga){
   const lst=listino().toUpperCase();
   const [{data:mod},{data:pr},{data:vet}] = await Promise.all([
-    sb.from('modelli').select('nome').eq('codice','SOP').eq('codice_serie','ACC').maybeSingle(),
+    sb.from('modelli').select('nome,codice_imballo').eq('codice','SOP').eq('codice_serie','ACC').maybeSingle(),
     sb.from('prezzi_modello').select('prezzo_base').eq('codice_modello','SOP').eq('listino',lst).maybeSingle(),
     sb.from('tipi_vetro').select('nome,sovrapprezzo_a,sovrapprezzo_p').eq('codice',CFG._sop_vetro).maybeSingle(),
   ]);
@@ -4078,6 +4098,19 @@ async function costruisciRigaSopraluce(riga){
   const unit=Math.round((pBase+pVetro+pTelaio)*100)/100;
   const q=parseFloat(riga.quantita)||1;
   const h=_altezzaSopraluce();
+  // Imballo del sopraluce: modello SOP → serie ACC → imballo di default (stessa logica delle porte)
+  let imbCod=(mod&&mod.codice_imballo)||null, imbUnit=0, imbTot=0;
+  if(!imbCod){ const {data:se}=await sb.from('serie').select('codice_imballo').eq('codice','ACC').maybeSingle(); imbCod=(se&&se.codice_imballo)||null; }
+  if(!imbCod){ const {data:def}=await sb.from('impostazioni').select('valore').eq('chiave','imballo_default').maybeSingle(); imbCod=(def&&def.valore)||null; }
+  if(imbCod){
+    const {data:imb}=await sb.from('listino_imballi').select('*').eq('codice',imbCod).maybeSingle();
+    if(imb && imb.attivo!==false){
+      imbUnit=parseFloat(imb.prezzo)||0;
+      const met=imb.metodo||'per_pezzo';
+      imbTot = met==='a_scatola' ? Math.ceil(q/Math.max(1,parseInt(imb.capienza)||1))*imbUnit : (met==='a_posizione' ? imbUnit : imbUnit*q);
+      imbTot=Math.round(imbTot*100)/100;
+    } else imbCod=null;
+  }
   return {
     codice_serie:'ACC', nome_serie:'Accessori', codice_modello:'SOP', nome_modello:(mod&&mod.nome)||'Sopraluce',
     codice_finitura:riga.codice_finitura, nome_finitura:riga.nome_finitura,
@@ -4086,7 +4119,8 @@ async function costruisciRigaSopraluce(riga){
     codice_spalla:spalla, escludi_telaio:!spalla, escludi_coprifili:true,
     codice_tipo_vetro:CFG._sop_vetro, nome_tipo_vetro:CFG._sop_nome_vetro||(vet&&vet.nome)||'',
     prezzo_base:pBase, prezzo_vetro:pVetro, prezzo_telaio:pTelaio,
-    prezzo_unitario:unit, quantita:q, prezzo_totale_riga:Math.round(unit*q*100)/100,
+    prezzo_unitario:unit, quantita:q, prezzo_totale_riga:Math.round((unit*q+imbTot)*100)/100,
+    codice_imballo:imbCod, prezzo_imballo_unitario:imbUnit, prezzo_imballo_totale:imbTot, posata_da_noi:!!riga.posata_da_noi,
     note_riga:'Sopraluce automatico — foro H '+CFG._sop_foro+' mm',
     stanza:riga.stanza||null,
     collegamento_id:riga.collegamento_id, auto_sopraluce:true
@@ -5005,7 +5039,7 @@ async function aggiungiRigaAlDocumento(){
     con_sopraluce:!!CFG.con_sopraluce,
     collegamento_id:CFG._collegamento_id||null,
     // coprifili (snapshot: variante + profilo per lato; colore=finitura telaio; lunghezza allo scarico)
-    coprifili_config: CFG.escludi_coprifili ? null : {
+    coprifili_config: (CFG.escludi_coprifili || !CFG.apertura || !(CFG.cf_larg_spingere||CFG.cf_larg_tirare)) ? null : {
       variante_id: CFG.coprifili_variante_id||null,
       spingere: { larghezza: CFG.cf_larg_spingere||null, aste: CFG.cf_aste_spingere!=null?CFG.cf_aste_spingere:2.5, lavorazione: CFG.cf_lav_spingere||null },
       tirare:   { larghezza: CFG.cf_larg_tirare||null,   aste: CFG.cf_aste_tirare!=null?CFG.cf_aste_tirare:2.5, lavorazione: CFG.cf_lav_tirare||null },
@@ -5075,7 +5109,7 @@ async function aggiungiRigaAlDocumento(){
       const zocAcc = zocMod;
       await sb.from(tabella).insert([{
         [fk]:CFG_TARGET_ID, riga_numero:extraNum+1,
-        codice_serie:CFG.serie, nome_serie:CFG.nome_serie,
+        nome_serie:'Accessori',
         codice_serie:'ACC', codice_modello:'ZOC', nome_modello:zocMod?.nome||'Zoccolo Altezza 80mm',
         codice_finitura:CFG.finitura, nome_finitura:CFG.nome_finitura,
         quantita:CFG._zoccoliAuto,
@@ -5095,12 +5129,14 @@ async function aggiungiRigaAlDocumento(){
     CFG_RIGHE.push(riga);
     if(riga.con_sopraluce) CFG_RIGHE.push(await costruisciRigaSopraluce(riga));
     if((CFG._zoccoliAuto||0)>0){
+      const {data:zp} = await sb.from('prezzi_modello').select('prezzo_base').eq('codice_modello','ZOC').eq('listino',listino().toUpperCase()).maybeSingle();
+      const pZ = parseFloat(zp&&zp.prezzo_base)||0;
       CFG_RIGHE.push({
-        codice_serie:CFG.serie, nome_serie:CFG.nome_serie,
+        nome_serie:'Accessori',
         codice_serie:'ACC', codice_modello:'ZOC', nome_modello:'Zoccolo Altezza 80mm',
         codice_finitura:CFG.finitura, nome_finitura:CFG.nome_finitura,
         quantita:CFG._zoccoliAuto,
-        prezzo_base:0, prezzo_unitario:0, prezzo_totale_riga:0,
+        prezzo_base:pZ, prezzo_unitario:pZ, prezzo_totale_riga:Math.round(pZ*CFG._zoccoliAuto*100)/100,
         note_riga:'Zoccolo automatico (pannello H '+CFG._hMagPannello+' mm, H finita '+CFG.altezza+' mm)'
       });
     }
@@ -5593,6 +5629,7 @@ async function salvaNuovoDoc(){
 }
 
 async function renderPreventivoDetail(id){
+  evidenziaSezione('preventivi');
   const [{data:prev},{data:righe}] = await Promise.all([
     sb.from('preventivi').select('*,anagrafiche(ragione_sociale,partita_iva,provincia,sede_op_provincia),agenti(nome,cognome)').eq('id',id).single(),
     sb.from('righe_preventivo').select('*').eq('preventivo_id',id).order('riga_numero'),
@@ -5888,6 +5925,7 @@ async function firmaPreventivo(prevId){
     provincia_destinazione:prev.provincia_destinazione,
     trasporto:prev.trasporto, note:prev.note,
     condizioni_pagamento:prev.condizioni_pagamento||null,
+    riferimento_cliente:prev.riferimento_cliente||null, resa:prev.resa||null,
     zona_trasporto_id:prev.zona_trasporto_id||null,
     trasporto_mezzo:prev.trasporto_mezzo||'proprio',
     costo_trasporto:prev.costo_trasporto||0,
@@ -6063,6 +6101,7 @@ async function nuovoOrdineDiretto(){
 }
 
 async function renderOrdineDetail(id){
+  evidenziaSezione('ordini_vendita');
   const [{data:ord},{data:righe}] = await Promise.all([
     sb.from('ordini_vendita').select('*,anagrafiche(ragione_sociale,partita_iva,provincia,sede_op_provincia),agenti(nome,cognome),preventivi(numero)').eq('id',id).single(),
     sb.from('righe_ordine').select('*').eq('ordine_id',id).order('riga_numero'),
@@ -6110,11 +6149,11 @@ async function renderOrdineDetail(id){
   }
   var approvataFinale = (ord.stato==='approvato_comm'&&!ord.richiede_approvazione_tecnica)||(ord.stato==='approvato_tec');
   if(ord.stato==='bozza'){
-    bottoniApprovazione+='<button class="btn btn-red btn-sm" onclick="apriModalInvioConferma(\\''+id+'\\',false)">Invia</button>';
+    bottoniApprovazione+='<button class="btn btn-sm" onclick="apriModalInvioConferma(\\''+id+'\\',false)" style="display:inline-flex;align-items:center;gap:5px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>Invia</button>';
   }
   if(approvataFinale){
     // approvata ma email non partita (dati mancanti o invio fallito): invio manuale
-    bottoniApprovazione+='<button class="btn btn-red btn-sm" onclick="apriModalInvioConferma(\\''+id+'\\',true)">Invia al cliente</button>';
+    bottoniApprovazione+='<button class="btn btn-sm" onclick="apriModalInvioConferma(\\''+id+'\\',true)" style="display:inline-flex;align-items:center;gap:5px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>Invia al cliente</button>';
   }
   if(ord.stato==='inviato'){
     bottoniApprovazione+='<button class="btn btn-red btn-sm" onclick="lanciaInProduzione(\\''+id+'\\')">Firma e lancia in produzione</button>';
@@ -6126,16 +6165,16 @@ async function renderOrdineDetail(id){
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'+
     '<div><button class="btn btn-sm" onclick="renderOrdiniDiretti()">← Tutte le conferme d&#39;ordine</button></div>'+
     '<div style="display:flex;gap:8px">'+
+      (puoModificare?'<button class="btn btn-sm" onclick="openConfiguratore(\\'ordine\\',\\''+id+'\\',\\''+ord.listino+'\\')">+ Aggiungi porta</button>':'')+
+      '<button class="btn btn-sm" onclick="esportaPDF(\\'ordine\\',\\''+id+'\\')">&#128196; Esporta PDF</button>'+
+      bottoniApprovazione+
+      (['in_produzione','evaso','spedito'].includes(ord.stato)?'<button class="btn btn-sm" onclick="stampaSchedaProduzione(\\''+id+'\\')">&#128196; Scheda produzione</button>':'')+
       (puoModificare?
-        '<button class="btn btn-sm" onclick="openConfiguratore(\\'ordine\\',\\''+id+'\\',\\''+ord.listino+'\\')">+ Aggiungi porta</button>'+
-        '<button class="btn btn-sm" onclick="esportaPDF(\\'ordine\\',\\''+id+'\\')">&#128196; Esporta PDF</button>'+
         '<button class="btn btn-sm" onclick="apriModificaOrdine(\\''+id+'\\')" style="display:inline-flex;align-items:center;gap:5px">'+
         '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Modifica</button>'+
         '<button class="btn btn-sm" style="color:var(--red);display:inline-flex;align-items:center;gap:5px" onclick="eliminaOrdineDiretto(\\''+id+'\\')">'+
         '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>Elimina</button>'
       :'')+
-      bottoniApprovazione+
-      (['in_produzione','evaso','spedito'].includes(ord.stato)?'<button class="btn btn-sm" onclick="stampaSchedaProduzione(\\''+id+'\\')">&#128196; Scheda produzione</button>':'')+
     '</div></div>'+
     '<div class="grid-2" style="margin-bottom:14px">'+
       '<div class="card">'+
@@ -8490,14 +8529,14 @@ async function apriModalInvioConferma(docId, diretto){
   const an=doc.anagrafiche||{}; const nl='\\n';
   const numero=doc.numero||'conferma';
   const pend=doc.invio_pendente||{};
-  document.getElementById('invia-email-to').value=pend.to||an.email_principale||an.email||'';
+  document.getElementById('invia-email-to').value=pend.to||emailDocumentiCliente(an);
   document.getElementById('invia-email-cc').value=pend.cc||'';
   document.getElementById('invia-oggetto').value=pend.oggetto||('Conferma d\\'ordine n. '+numero+' - Max Porte');
   document.getElementById('invia-testo').value=pend.testo||('Gentile '+(an.ragione_sociale||'')+','+nl+nl+
     'in allegato trova la nostra conferma d\\'ordine n. '+numero+'.'+nl+
     'La preghiamo di verificarla e di restituircela firmata per accettazione.'+nl+nl+
     'Restiamo a Sua disposizione per qualsiasi chiarimento.'+nl+nl+
-    'Cordiali saluti,'+nl+'Max Porte di Rimasti Massimilian'+nl+'Tel. 011 9084622'+nl+'info@maxporte.it');
+    'Cordiali saluti,'+nl+FIRMA_EMAIL);
   _invioDocId=docId; _invioNumero=numero; _invioPayload={}; _invioMode = diretto?'conferma_diretta':'conferma';
   document.getElementById('invia-titolo').textContent = diretto?'Invia conferma d\\'ordine al cliente':'Invia conferma d\\'ordine';
   document.getElementById('invia-nota').textContent = diretto
@@ -8643,7 +8682,7 @@ async function costruisciPayloadPDF(tipo, id, soloNetti) {
         versione_maniglia: '',
         colore_maniglia: r.nome_colore_maniglia || '',
         vetro: r.nome_tipo_vetro || '',
-        bugna: r.pannello_bugna || '',
+        bugna: maiuscola(r.pannello_bugna),
         colore_inserto: r.nome_colore_alu || r.nome_colore_pietra || '',
         note_riga: r.note_riga || '',
         // Coprifili + colore telaio (solo se diverso dalla porta)
