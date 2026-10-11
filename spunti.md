@@ -134,7 +134,7 @@ Formato: `## data — titolo`, **Area**, **Spunto**, **Stato** (`da valutare` / 
 ## 2026-10-11 — Notifiche interne al gestionale
 **Area:** Trasversale
 **Spunto:** Campanella con notifiche per utente/ruolo: cosa c'è da fare, cosa manca, problemi, ordini pronti. Proposta: tabella notifiche + aggiornamento in tempo reale (Supabase Realtime); due tipi: eventi (es. ordine da approvare, fido forzato, giacenza negativa dopo scarico, ordine pronto) e liste "da fare" calcolate (es. approntamento vicino e commessa non pronta). In futuro anche email/push.
-**Stato:** `da valutare`
+**Stato:** `fatto` (v1, 11 ott) — campanella in tempo reale, eventi: approvazioni, verifica tecnica, conferma inviata, fido forzato, materiale in negativo, commessa pronta. Restano promemoria calcolati ed email/push
 
 ---
 

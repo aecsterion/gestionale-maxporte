@@ -307,6 +307,10 @@ tr.data-row:hover td{background:var(--beige);cursor:pointer}
       <div style="display:flex;gap:8px;align-items:center">
         <input type="text" id="scan-campo" placeholder="Cerca / codice…" onkeydown="cercaDaCampo(event)" title="Numero ordine o preventivo, codice articolo, nome cliente — Invio per aprire. Lo scanner funziona anche senza cliccare qui." style="padding:5px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:12px;width:170px;font-family:inherit">
         <button class="btn btn-sm" onclick="apriScannerCamera()" title="Scansiona con la fotocamera">📷</button>
+        <div style="position:relative">
+          <button class="btn btn-sm" onclick="toggleNotifiche(event)" title="Notifiche" style="position:relative">🔔<span id="notif-badge" style="display:none;position:absolute;top:-6px;right:-6px;background:var(--red);color:#fff;border-radius:10px;font-size:10px;font-weight:600;padding:1px 5px;min-width:16px;text-align:center">0</span></button>
+          <div id="notif-pannello" onclick="event.stopPropagation()" style="display:none;position:absolute;right:0;top:34px;width:340px;max-height:420px;overflow-y:auto;background:var(--white);border:0.5px solid var(--border);border-radius:var(--radius);box-shadow:0 6px 24px rgba(0,0,0,0.12);z-index:9000"></div>
+        </div>
         <span style="font-size:12px;color:var(--mid)" id="topbar-date"></span>
         <button class="btn btn-red btn-sm" id="topbar-action" onclick="openForm()" style="display:none">+ Nuovo</button>
       </div>
@@ -955,6 +959,7 @@ function entraNellApp(email){
     const emailEl=document.getElementById('sb-user-email');
     if(emailEl) emailEl.textContent=email||'';
     loadSection('dashboard');
+    caricaNotifiche(); avviaNotificheRealtime();
   } catch(e){
     console.error('Errore entraNellApp:',e);
   }
@@ -1469,6 +1474,7 @@ async function confermaInvioPreventivo(){
       approvato_da_comm:null,approvato_da_tec:null,data_approvazione_comm:null,data_approvazione_tec:null}).eq('id',_invioDocId);
     if(error){toast('Errore: '+error.message,'err');return;}
     await sb.from('log_approvazioni').insert([{ordine_id:_invioDocId,user_id:currentUser?.id,azione:'inviata_in_approvazione'}]);
+    notifica({tipo:'approvazione', titolo:'Conferma da approvare: '+(_invioNumero||''), testo:'Inviata in approvazione da '+(currentNomeUtente||currentUser?.email||''), link_tipo:'ordine', link_id:_invioDocId, ruoli:['resp_commerciale','back_office','super_admin']});
     closeForm('modal-invia-preventivo');
     toast('Conferma in approvazione: partirà verso il cliente appena approvata','ok');
     renderOrdineDetail(_invioDocId);
@@ -5920,6 +5926,8 @@ async function renderCompatBox(mode, id, righe){
 async function richiediVerificaTecnica(mode, id){
   const tabDoc = mode==="preventivo" ? "preventivi" : "ordini_vendita";
   await sb.from(tabDoc).update({verifica_tecnica_richiesta:true}).eq("id",id);
+  const dn=await sb.from(tabDoc).select("numero").eq("id",id).maybeSingle();
+  notifica({tipo:"verifica", titolo:"Verifica tecnica richiesta: "+((dn.data&&dn.data.numero)||""), testo:"Richiesta da "+(currentNomeUtente||(currentUser&&currentUser.email)||""), link_tipo:mode==="preventivo"?"preventivo":"ordine", link_id:id, ruoli:["resp_tecnico","super_admin"]});
   toast("Verifica tecnica richiesta","ok");
   if(mode==="preventivo") renderPreventivoDetail(id); else renderOrdineDetail(id);
 }
@@ -6051,6 +6059,118 @@ function chiudiScanner(){
   if(ov) ov.style.display="none";
 }
 
+// ══ NOTIFICHE INTERNE ══════════════════════════════════════
+// Una notifica va a una persona (destinatario_user) e/o a dei ruoli (destinatario_ruoli).
+// Chi compie l'azione non notifica sé stesso. Lettura per utente in notifiche_lette.
+// La campanella si aggiorna in tempo reale (Supabase Realtime sulla tabella notifiche).
+let _notif = {lista:[], lette:new Set(), canale:null, aperto:false};
+
+async function notifica(opz){
+  try{
+    await sb.from("notifiche").insert([{
+      tipo:opz.tipo||null, titolo:opz.titolo, testo:opz.testo||null,
+      link_tipo:opz.link_tipo||null, link_id:opz.link_id!=null?String(opz.link_id):null,
+      destinatario_user:opz.utente||null, destinatario_ruoli:opz.ruoli||null,
+      autore_id:(currentUser&&currentUser.id)||null
+    }]);
+  }catch(e){ console.warn("notifica non inviata", e); }
+}
+
+function _notifPerMe(n){
+  if(!currentUser) return false;
+  if(n.autore_id && n.autore_id===currentUser.id) return false;
+  if(n.destinatario_user && n.destinatario_user===currentUser.id) return true;
+  const r=n.destinatario_ruoli||[];
+  return r.some(function(x){ return currentRuoli.indexOf(x)>=0; });
+}
+
+async function caricaNotifiche(){
+  if(!currentUser) return;
+  const res=await Promise.all([
+    sb.from("notifiche").select("*").order("created_at",{ascending:false}).limit(80),
+    sb.from("notifiche_lette").select("notifica_id").eq("user_id",currentUser.id)
+  ]);
+  _notif.lista=(res[0].data||[]).filter(_notifPerMe).slice(0,40);
+  _notif.lette=new Set((res[1].data||[]).map(function(x){ return x.notifica_id; }));
+  disegnaCampanella();
+}
+
+function avviaNotificheRealtime(){
+  if(_notif.canale || !currentUser) return;
+  _notif.canale=sb.channel("notifiche-live")
+    .on("postgres_changes",{event:"INSERT",schema:"public",table:"notifiche"},function(payload){
+      const n=payload.new; if(!_notifPerMe(n)) return;
+      _notif.lista.unshift(n); _notif.lista=_notif.lista.slice(0,40);
+      disegnaCampanella();
+      toast("🔔 "+n.titolo,"ok");
+    }).subscribe();
+}
+
+function _notifQuando(ts){
+  const d=new Date(ts), m=Math.round((Date.now()-d.getTime())/60000);
+  if(m<1) return "ora"; if(m<60) return m+" min fa";
+  const h=Math.round(m/60); if(h<24) return h+" h fa";
+  return d.toLocaleDateString("it-IT");
+}
+
+function disegnaCampanella(){
+  const b=document.getElementById("notif-badge"); if(!b) return;
+  const nonLette=_notif.lista.filter(function(n){ return !_notif.lette.has(n.id); }).length;
+  b.textContent=nonLette>9?"9+":String(nonLette);
+  b.style.display=nonLette?"inline-block":"none";
+  if(_notif.aperto) disegnaPannelloNotifiche();
+}
+
+function toggleNotifiche(ev){
+  if(ev) ev.stopPropagation();
+  _notif.aperto=!_notif.aperto;
+  const p=document.getElementById("notif-pannello");
+  if(p) p.style.display=_notif.aperto?"block":"none";
+  if(_notif.aperto) disegnaPannelloNotifiche();
+}
+document.addEventListener("click", function(e){
+  if(!_notif.aperto) return;
+  const p=document.getElementById("notif-pannello");
+  if(p && !p.contains(e.target)){ _notif.aperto=false; p.style.display="none"; }
+});
+
+function disegnaPannelloNotifiche(){
+  const p=document.getElementById("notif-pannello"); if(!p) return;
+  const righe=_notif.lista.map(function(n){
+    const letta=_notif.lette.has(n.id);
+    return '<div onclick="apriNotifica('+n.id+')" style="padding:9px 12px;border-bottom:0.5px solid var(--border);cursor:pointer;background:'+(letta?'transparent':'var(--red-bg)')+'">'+
+      '<div style="display:flex;justify-content:space-between;gap:8px"><span style="font-size:13px;font-weight:'+(letta?'400':'600')+'">'+n.titolo+'</span>'+
+      '<span style="font-size:11px;color:var(--mid);white-space:nowrap">'+_notifQuando(n.created_at)+'</span></div>'+
+      (n.testo?'<div style="font-size:12px;color:var(--mid);margin-top:2px">'+n.testo+'</div>':'')+'</div>';
+  }).join("");
+  p.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;border-bottom:0.5px solid var(--border)">'+
+    '<strong style="font-size:13px">Notifiche</strong>'+
+    '<button class="btn btn-sm" onclick="segnaTutteLette(event)">Segna tutte lette</button></div>'+
+    (righe||'<div style="padding:18px;text-align:center;color:var(--mid);font-size:12px">Nessuna notifica</div>');
+}
+
+async function _segnaLetta(id){
+  if(_notif.lette.has(id)) return;
+  _notif.lette.add(id);
+  await sb.from("notifiche_lette").upsert([{notifica_id:id,user_id:currentUser.id}],{onConflict:"notifica_id,user_id"});
+}
+async function apriNotifica(id){
+  const n=_notif.lista.find(function(x){ return x.id===id; }); if(!n) return;
+  await _segnaLetta(id);
+  _notif.aperto=false; const p=document.getElementById("notif-pannello"); if(p) p.style.display="none";
+  disegnaCampanella();
+  if(n.link_tipo==="ordine" && n.link_id) renderOrdineDetail(n.link_id);
+  else if(n.link_tipo==="preventivo" && n.link_id) renderPreventivoDetail(n.link_id);
+  else if(n.link_tipo==="magazzino"){ evidenziaSezione("magazzino"); renderMagazzino(); }
+}
+async function segnaTutteLette(ev){
+  if(ev) ev.stopPropagation();
+  const da=_notif.lista.filter(function(n){ return !_notif.lette.has(n.id); });
+  da.forEach(function(n){ _notif.lette.add(n.id); });
+  if(da.length) await sb.from("notifiche_lette").upsert(da.map(function(n){ return {notifica_id:n.id,user_id:currentUser.id}; }),{onConflict:"notifica_id,user_id"});
+  disegnaCampanella();
+}
+
 // Netto documento: sconti sulle righe, trasporto a prezzo pieno.
 // (nel DB totale_imponibile = somma righe + costo_trasporto)
 function nettoDoc(d){
@@ -6110,6 +6230,7 @@ async function lanciaInProduzione(id){
     const n = await eseguiScaricoCoprifili(id, ord.numero, scarico);
     toast('Scaricati '+n+' articoli coprifili','ok');
   }
+  if(upd.fido_forzato_da) notifica({tipo:'fido', titolo:'Fido forzato: '+(ord.numero||''), testo:(ord.anagrafiche&&ord.anagrafiche.ragione_sociale||'')+' — lanciato in produzione oltre il fido da '+upd.fido_forzato_da, link_tipo:'ordine', link_id:id, ruoli:['admin','super_admin']});
   toast(upd.fido_forzato_da?'Lanciato in produzione (fido forzato)':'Lanciato in produzione','ok');
   renderOrdineDetail(id);
 }
@@ -6149,15 +6270,17 @@ async function preparaScaricoCoprifili(ordineId){
   return {righe:fab, mancanti};
 }
 async function eseguiScaricoCoprifili(ordineId, numero, scarico){
-  let n=0;
+  let n=0; const negativi=[];
   for(const f of scarico.righe){
     if(!f.art) continue;
     const {data:a}=await sb.from('magazzino').select('giacenza').eq('id',f.art.id).single();
     const nuova=(parseFloat(a&&a.giacenza)||0)-f.qta;  // può andare in negativo: segnala materiale da reintegrare
     await sb.from('magazzino_movimenti').insert([{magazzino_id:f.art.id,tipo:'scarico',quantita:f.qta,causale:'Produzione '+numero+' — coprifili',riferimento:numero,utente_id:currentUser?.id||null}]);
     await sb.from('magazzino').update({giacenza:nuova,updated_at:new Date().toISOString()}).eq('id',f.art.id);
+    if(nuova<0) negativi.push(f.codice_mp+' ('+nuova+')');
     n++;
   }
+  if(negativi.length) notifica({tipo:'magazzino', titolo:'Materiale da reintegrare — '+numero, testo:'Giacenza negativa: '+negativi.join(', '), link_tipo:'ordine', link_id:ordineId, ruoli:['magazzino','super_admin']});
   await sb.from('ordini_vendita').update({materiale_scaricato_il:new Date().toISOString()}).eq('id',ordineId);
   return n;
 }
@@ -6182,6 +6305,8 @@ async function segnaCommessaPronta(id){
   if(!confirm('Segnare la commessa come pronta?')) return;
   const {error}=await sb.from('ordini_vendita').update({stato:'pronto'}).eq('id',id);
   if(error){ toast('Errore: '+error.message,'err'); return; }
+  const {data:op}=await sb.from('ordini_vendita').select('numero,creato_da,anagrafiche(ragione_sociale)').eq('id',id).single();
+  notifica({tipo:'pronto', titolo:'Commessa pronta: '+(op&&op.numero||''), testo:(op&&op.anagrafiche&&op.anagrafiche.ragione_sociale)||'', link_tipo:'ordine', link_id:id, utente:op&&op.creato_da, ruoli:['back_office','super_admin']});
   toast('Commessa pronta','ok');
   renderOrdineDetail(id);
 }
@@ -6594,7 +6719,9 @@ async function approvaOrdine(id, tipo){
   await sb.from('ordini_vendita').update({stato,[campoData]:new Date().toISOString(),[campoUser]:currentUser?.id}).eq('id',id);
   await sb.from('log_approvazioni').insert([{ordine_id:id,user_id:currentUser?.id,azione:stato}]);
   toast('Ordine approvato','ok');
-  const {data:o}=await sb.from('ordini_vendita').select('richiede_approvazione_tecnica,invio_pendente').eq('id',id).single();
+  const {data:o}=await sb.from('ordini_vendita').select('numero,richiede_approvazione_tecnica,invio_pendente').eq('id',id).single();
+  if(tipo==='comm' && o && o.richiede_approvazione_tecnica)
+    notifica({tipo:'approvazione', titolo:'Approvazione tecnica richiesta: '+(o.numero||''), testo:'Approvata dal commerciale, manca il tecnico', link_tipo:'ordine', link_id:id, ruoli:['resp_tecnico','super_admin']});
   const finale = tipo==='tec' || (tipo==='comm' && !(o&&o.richiede_approvazione_tecnica));
   if(finale && o && o.invio_pendente) await inviaConfermaAlCliente(id);
   renderOrdineDetail(id);
@@ -8913,7 +9040,7 @@ async function apriModalInvioConferma(docId, diretto){
 
 // Invia al cliente la conferma con il PDF, usando l'email salvata in invio_pendente
 async function inviaConfermaAlCliente(id){
-  const {data:ord}=await sb.from('ordini_vendita').select('numero,invio_pendente').eq('id',id).single();
+  const {data:ord}=await sb.from('ordini_vendita').select('numero,invio_pendente,creato_da').eq('id',id).single();
   const m=ord&&ord.invio_pendente;
   if(!m||!m.to){ toast('Email del cliente mancante: usa "Invia al cliente"','err'); return false; }
   toast('Invio conferma al cliente…','ok');
@@ -8926,6 +9053,7 @@ async function inviaConfermaAlCliente(id){
     if(!res.ok){ toast('Invio non riuscito: '+res.error,'err'); return false; }
     await sb.from('ordini_vendita').update({stato:'inviato',data_invio:new Date().toISOString(),invio_pendente:null}).eq('id',id);
     await sb.from('log_approvazioni').insert([{ordine_id:id,user_id:currentUser?.id,azione:'inviata_al_cliente'}]);
+    if(ord.creato_da) notifica({tipo:'invio', titolo:'Conferma inviata al cliente: '+ord.numero, testo:'Approvata e spedita a '+m.to, link_tipo:'ordine', link_id:id, utente:ord.creato_da});
     toast('Conferma inviata a '+m.to,'ok');
     return true;
   }catch(e){ toast('Invio non riuscito: '+e.message,'err'); return false; }
