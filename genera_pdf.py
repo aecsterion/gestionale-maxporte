@@ -596,6 +596,13 @@ def genera_workbook(data, template_path):
     # Copia tutto il contenuto della pagina finale
     max_row_finale = ws_finale.max_row
     copy_rows(ws_finale, ws_last, 1, max_row_finale, 1, m)
+    # Voce "SPESE" del riepilogo: posa e/o trasferta (etichetta decisa dal gestionale)
+    etichetta_spese = str(doc.get('etichetta_spese') or '').strip()
+    if etichetta_spese:
+        for row in ws_last.iter_rows():
+            for c in row:
+                if isinstance(c.value, str) and c.value.strip() == 'SPESE':
+                    c.value = etichetta_spese
 
     # ── Piè di pagina "Pag. N di T" su ogni foglio (= 1 pagina PDF) ────────
     # Preserva la formattazione (font, dimensione, colore) impostata nel template:

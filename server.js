@@ -353,8 +353,15 @@ tr.data-row:hover td{background:var(--beige);cursor:pointer}
             <span class="err">Campo obbligatorio</span>
           </div>
           <div class="form-field">
+            <label>Tariffa posa</label>
+            <select id="ana-tipo-cliente">
+              <option value="impresa">Impresa</option>
+              <option value="privato">Privato</option>
+            </select>
+          </div>
+          <div class="form-field">
             <label>Canale</label>
-            <select id="ana-canale">
+            <select id="ana-canale" onchange="if(this.value){document.getElementById('ana-tipo-cliente').value=(this.value==='privato'?'privato':'impresa');}">
               <option value="">—</option>
               <option value="rivenditore">Rivenditore</option>
               <option value="architetto">Architetto</option>
@@ -1211,7 +1218,7 @@ async function openFormAnagrafica(data){
   }
 
   const fields={
-    'ana-tipo':data?.tipo||'','ana-canale':data?.canale||'','ana-natura':data?.natura_giuridica||'',
+    'ana-tipo':data?.tipo||'','ana-canale':data?.canale||'','ana-tipo-cliente':data?.tipo_cliente||'impresa','ana-natura':data?.natura_giuridica||'',
     'ana-ragione':data?.ragione_sociale||'','ana-piva':data?.partita_iva||'','ana-cf':data?.codice_fiscale||'',
     'ana-regime':data?.regime_fiscale||'ordinario','ana-rea':data?.codice_rea||'',
     'ana-indirizzo':data?.indirizzo||'','ana-cap':data?.cap||'','ana-citta':data?.citta||'',
@@ -1293,7 +1300,7 @@ async function saveAnagrafica(){
   req.forEach(id=>{const el=document.getElementById(id);const p=el.closest('.form-field');if(!el.value.trim()){p.classList.add('invalid');valid=false;}else p.classList.remove('invalid');});
   if(!valid){toast('Compila i campi obbligatori (contrassegnati con *)','err');anaTab('generale',document.querySelectorAll('.form-tab')[0]);return;}
   const payload={
-    tipo:v('ana-tipo'),canale:v('ana-canale')||null,natura_giuridica:v('ana-natura')||null,
+    tipo:v('ana-tipo'),canale:v('ana-canale')||null,tipo_cliente:v('ana-tipo-cliente')||'impresa',natura_giuridica:v('ana-natura')||null,
     ragione_sociale:v('ana-ragione'),partita_iva:v('ana-piva')||null,codice_fiscale:v('ana-cf')||null,
     regime_fiscale:v('ana-regime')||'ordinario',codice_rea:v('ana-rea')||null,
     ritenuta_acconto:document.getElementById('ana-ritenuta').checked,
@@ -1341,7 +1348,8 @@ async function buildPreventivoPayload(id){
     condizioni_pagamento:doc.condizioni_pagamento||an.condizioni_pagamento||'',
     trasporto:doc.trasporto||'',
     resa:doc.resa||'Franco fabbrica',note:doc.note||'',
-    sconto1:sc1,totale_imponibile:Math.round(((doc.totale_imponibile||0)-(parseFloat(doc.costo_trasporto)||0))*100)/100,totale_netto:doc.totale_netto||0,totale_trasporto:parseFloat(doc.costo_trasporto)||0,
+    sconto1:sc1,totale_imponibile:Math.round(((doc.totale_imponibile||0)-extraTestata(doc))*100)/100,totale_netto:doc.totale_netto||0,totale_trasporto:parseFloat(doc.costo_trasporto)||0,
+    totale_spese:Math.round(((parseFloat(doc.costo_posa)||0)+(parseFloat(doc.costo_trasferta)||0))*100)/100,etichetta_spese:etichettaSpese(doc),
     ragione_sociale:an.ragione_sociale||'',indirizzo:an.indirizzo||'',
     cap:an.cap||'',citta:an.citta||'',provincia:an.provincia||'',paese:an.paese||'Italia',
     partita_iva:an.partita_iva||'',codice_fiscale:an.codice_fiscale||'',
@@ -4914,7 +4922,7 @@ async function cfgRiepilogo(){
   await calcolaImballo();
   const _imbTot = CFG._imballo_totale||0;
   // Porte (non accessori/pannelli): mostra la spunta "posata da noi" se la serie ha un imballo-posa
-  const _mostraPosa = !CFG._isAccessorio && !CFG._isPannelloBlindato && !!CFG._imballo_serie_posa;
+  const _mostraPosa = !CFG._isAccessorio && !CFG._isPannelloBlindato;
   const desc = [
     CFG.nome_serie, CFG.nome_modello, CFG.nome_finitura,
     CFG.pannello_bugna?CFG.pannello_bugna:'',
@@ -4978,7 +4986,7 @@ async function cfgRiepilogo(){
           : '')}
     \${_mostraPosa?\`<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:8px 12px;background:var(--beige);border-radius:var(--radius)">
       <input type="checkbox" id="cfg-posata" \${CFG.posata_da_noi?'checked':''} onchange="CFG.posata_da_noi=this.checked;cfgRiepilogo()">
-      <label for="cfg-posata" style="font-size:12px;color:var(--dark);cursor:pointer">Porta <strong>posata da noi</strong> (cambia l'imballo)</label>
+      <label for="cfg-posata" style="font-size:12px;color:var(--dark);cursor:pointer">Porta <strong>posata da noi</strong> (calcola la posa\${CFG._imballo_serie_posa?' e usa l\\'imballo per posa':''})</label>
     </div>\`:''}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
       <div>
@@ -5257,10 +5265,11 @@ async function ricalcolaTotale(docId, mode){
   const tabDoc = mode==='preventivo'?'preventivi':'ordini_vendita';
   const {data:righe} = await sb.from(tabRighe).select('prezzo_totale_riga').eq(fk,docId);
   const totRighe = (righe||[]).reduce((s,r)=>s+(r.prezzo_totale_riga||0),0);
-  // Costo trasporto (voce di testata) sommato al totale imponibile
-  const {data:docCorr} = await sb.from(tabDoc).select('totale_arrotondato,costo_trasporto').eq('id',docId).single();
-  const costoTrasp = parseFloat(docCorr&&docCorr.costo_trasporto)||0;
-  const totImponibile = Math.round((totRighe + costoTrasp)*100)/100;
+  // Posa (dipende dalle righe): ricalcolata qui salvo importo scritto a mano
+  await aggiornaPosaAuto(mode, docId);
+  // Voci di testata (trasporto, posa, trasferta) sommate al totale imponibile
+  const {data:docCorr} = await sb.from(tabDoc).select('totale_arrotondato,costo_trasporto,costo_posa,costo_trasferta').eq('id',docId).single();
+  const totImponibile = Math.round((totRighe + extraTestata(docCorr))*100)/100;
   // Le righe sono cambiate: se c'era un arrotondamento salvato va azzerato,
   // altrimenti resterebbe calcolato sul vecchio totale (rischio di sottostimare il prezzo).
   const avevaArr = docCorr && docCorr.totale_arrotondato != null;
@@ -5652,6 +5661,8 @@ async function salvaNuovoDoc(){
       if(errRighe){ toast('Errore salvataggio righe: '+errRighe.message,'err'); return; }
     }
 
+    // Totale con le voci di testata (trasporto, posa, trasferta)
+    if(docId) await ricalcolaTotale(docId, mode);
     toast(docNumero+(editId?' aggiornato':' salvato')+' con successo','ok');
     document.getElementById('modal-nuovo-doc').classList.remove('open');
     delete document.getElementById('modal-nuovo-doc').dataset.editId;
@@ -5668,13 +5679,13 @@ async function salvaNuovoDoc(){
 async function renderPreventivoDetail(id){
   evidenziaSezione('preventivi');
   const [{data:prev},{data:righe}] = await Promise.all([
-    sb.from('preventivi').select('*,anagrafiche(ragione_sociale,partita_iva,provincia,sede_op_provincia),agenti(nome,cognome)').eq('id',id).single(),
+    sb.from('preventivi').select('*,anagrafiche(ragione_sociale,partita_iva,provincia,sede_op_provincia,tipo_cliente),agenti(nome,cognome)').eq('id',id).single(),
     sb.from('righe_preventivo').select('*').eq('preventivo_id',id).order('riga_numero'),
   ]);
   if(!prev) return;
   CFG_TARGET_ID=id; CFG_MODE='preventivo';
   window._prevListino=prev.listino;
-  const trasportoCardHtml = await renderTrasportoCard('preventivo', prev, righe);
+  const trasportoCardHtml = (await renderTrasportoCard('preventivo', prev, righe)) + '<div style="margin-top:14px">' + (await renderPosaCard('preventivo', prev)) + '</div>';
 
   const sc1=prev.sconto1||0; const sc2=prev.sconto2||0;
   const netto=nettoDoc(prev);
@@ -5733,8 +5744,8 @@ async function renderPreventivoDetail(id){
     <div class="card">
       <div class="card-title">Riepilogo economico</div>
       <table style="font-size:13px">
-        <tr><td style="color:var(--mid);padding:3px 0;width:130px">Imponibile\${(prev.costo_trasporto>0)?' (incl. trasporto)':''}</td><td style="text-align:right">\${fmtEuro(prev.totale_imponibile)}</td></tr>
-        \${prev.costo_trasporto>0?\`<tr><td style="color:var(--mid);padding:3px 0;font-size:11px">di cui trasporto</td><td style="text-align:right;font-size:11px;color:var(--mid)">\${fmtEuro(prev.costo_trasporto)}</td></tr>\`:''}
+        <tr><td style="color:var(--mid);padding:3px 0;width:130px">Imponibile\${extraTestata(prev)>0?' (incl. voci a prezzo pieno)':''}</td><td style="text-align:right">\${fmtEuro(prev.totale_imponibile)}</td></tr>
+        \${righeDiCui(prev)}
         <tr><td style="color:var(--mid);padding:3px 0">Sconto 1</td><td style="text-align:right">\${sc1}%</td></tr>
         <tr><td style="color:var(--mid);padding:3px 0">Sconto 2</td><td style="text-align:right">\${sc2||0}%</td></tr>
         <tr style="border-top:0.5px solid var(--border)"><td style="padding:6px 0;font-weight:500">Totale netto</td><td style="text-align:right;font-size:18px;font-weight:500;color:var(--mid)">\${fmtEuro(netto)}</td></tr>\${prev.totale_arrotondato?\`<tr><td style="color:var(--mid);padding:3px 0">Arrotondamento</td><td style="text-align:right">\${(prev.arrotondamento_euro>=0?'+':'')+fmtEuro(prev.arrotondamento_euro)}</td></tr><tr style="border-top:0.5px solid var(--border)"><td style="padding:6px 0;font-weight:500">Totale arrotondato</td><td style="text-align:right;font-size:18px;font-weight:500;color:var(--red)">\${fmtEuro(prev.totale_arrotondato)}</td></tr>\`:''}
@@ -6233,10 +6244,258 @@ async function inviaComunicazioneOrdine(to, cc, oggetto, testo){
   finally{ b.disabled=false; b.textContent="Invia"; }
 }
 
+// ── POSA E TRASFERTA ──────────────────────────────────────────────────
+// Posa: prezzo a porta che dipende da categoria di posa (dall'apertura), tipo cliente
+// (privato/impresa) e fascia di quantità, contata per categoria. Contano solo le righe
+// "posata da noi". Le blindate pagano due voci: posa porta + posa telaio.
+// Trasferta: giornate x posatori x tariffa giornata/uomo.
+// Posa e trasferta sono voci di testata come il trasporto: a prezzo pieno, fuori dagli sconti.
+function extraTestata(d){
+  return (parseFloat(d && d.costo_trasporto)||0) + (parseFloat(d && d.costo_posa)||0) + (parseFloat(d && d.costo_trasferta)||0);
+}
+function etichettaSpese(d){
+  const p = parseFloat(d && d.costo_posa)||0, t = parseFloat(d && d.costo_trasferta)||0;
+  return p && t ? "POSA E TRASFERTA" : p ? "POSA" : t ? "TRASFERTA" : "SPESE";
+}
+function righeDiCui(d){
+  const r = function(lab, v){ return v>0 ? "<tr><td style='color:var(--mid);padding:3px 0;font-size:11px'>di cui "+lab+"</td><td style='text-align:right;font-size:11px;color:var(--mid)'>"+fmtEuro(v)+"</td></tr>" : ""; };
+  return r("trasporto", parseFloat(d && d.costo_trasporto)||0) + r("posa", parseFloat(d && d.costo_posa)||0) + r("trasferta", parseFloat(d && d.costo_trasferta)||0);
+}
+function _escH(t){ return String(t==null?"":t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+
+async function calcolaPosaDoc(mode, docId){
+  const tabRighe = mode==="preventivo"?"righe_preventivo":"righe_ordine";
+  const fk = mode==="preventivo"?"preventivo_id":"ordine_id";
+  const tabDoc = mode==="preventivo"?"preventivi":"ordini_vendita";
+  const [rR, rD, rC, rT, rA, blind] = await Promise.all([
+    sb.from(tabRighe).select("quantita,codice_apertura,codice_serie,posata_da_noi,auto_sopraluce").eq(fk,docId),
+    sb.from(tabDoc).select("tipo_cliente,anagrafiche(tipo_cliente)").eq("id",docId).single(),
+    sb.from("categorie_posa").select("*").eq("attiva",true).order("ordine"),
+    sb.from("tariffe_posa").select("*"),
+    sb.from("tipologie_apertura").select("codice,categoria_posa_id"),
+    _serieBlindate()
+  ]);
+  const doc = rD.data||{};
+  const tipoCliente = doc.tipo_cliente || (doc.anagrafiche && doc.anagrafiche.tipo_cliente) || "impresa";
+  const cat = {}; (rC.data||[]).forEach(function(c){ cat[c.id]=c; });
+  const catPorta = (rC.data||[]).find(function(c){ return c.speciale==="blindata_porta"; });
+  const catTelaio = (rC.data||[]).find(function(c){ return c.speciale==="blindata_telaio"; });
+  const apCat = {}; (rA.data||[]).forEach(function(a){ apCat[a.codice]=a.categoria_posa_id; });
+  const qta = {}; const mancanti = [];
+  const add = function(cid, q){ qta[cid]=(qta[cid]||0)+q; };
+  let porte = 0;
+  (rR.data||[]).forEach(function(r){
+    if(!r.posata_da_noi || r.auto_sopraluce) return;
+    if(r.codice_serie==="ACC" || r.codice_serie==="PAN-BL") return;
+    const q = parseFloat(r.quantita)||0; if(!q) return;
+    porte += q;
+    if(blind.has(r.codice_serie)){
+      if(catPorta) add(catPorta.id, q); else mancanti.push("manca la categoria Blindata - porta");
+      if(catTelaio) add(catTelaio.id, q); else mancanti.push("manca la categoria Blindata - telaio");
+      return;
+    }
+    const cid = apCat[r.codice_apertura];
+    if(cid && cat[cid]) add(cid, q);
+    else mancanti.push("apertura " + (r.codice_apertura||"?") + " senza categoria di posa");
+  });
+  const dettaglio = []; let totale = 0;
+  Object.keys(qta).forEach(function(cid){
+    const n = qta[cid];
+    const fasce = (rT.data||[]).filter(function(t){ return String(t.categoria_id)===String(cid) && t.tipo_cliente===tipoCliente; });
+    const f = fasce.find(function(t){ return n >= (t.da_qta||1) && (t.a_qta==null || n <= t.a_qta); });
+    if(!f){ mancanti.push(cat[cid].nome + ": nessuna tariffa " + tipoCliente + " per " + n + " porte"); }
+    const prezzo = f ? (parseFloat(f.prezzo)||0) : 0;
+    const tot = Math.round(prezzo*n*100)/100;
+    totale += tot;
+    dettaglio.push({categoria:cat[cid].nome, ordine:cat[cid].ordine||0, porte:n, fascia: f ? (f.da_qta + (f.a_qta==null ? "+" : "-" + f.a_qta)) : "—", prezzo:prezzo, totale:tot});
+  });
+  dettaglio.sort(function(a,b){ return a.ordine-b.ordine; });
+  return {totale: Math.round(totale*100)/100, dettaglio: dettaglio, mancanti: Array.from(new Set(mancanti)), tipo_cliente: tipoCliente, porte: porte};
+}
+
+// Ricalcolo automatico (chiamato da ricalcolaTotale): salta se la posa è stata scritta a mano
+async function aggiornaPosaAuto(mode, docId){
+  const tabDoc = mode==="preventivo"?"preventivi":"ordini_vendita";
+  const {data:d} = await sb.from(tabDoc).select("posa_manuale").eq("id",docId).single();
+  if(d && d.posa_manuale) return;
+  const p = await calcolaPosaDoc(mode, docId);
+  await sb.from(tabDoc).update({costo_posa:p.totale, posa_dettaglio:{righe:p.dettaglio, mancanti:p.mancanti, tipo_cliente:p.tipo_cliente, porte:p.porte}}).eq("id",docId);
+}
+async function _tariffaTrasferta(){
+  const {data} = await sb.from("impostazioni").select("valore").eq("chiave","trasferta_giornata_uomo").maybeSingle();
+  return parseFloat(data && data.valore)||0;
+}
+
+async function renderPosaCard(mode, doc){
+  const bloccato = (mode==="preventivo" ? prevBloccato(doc) : ordBloccato(doc));
+  const dis = bloccato ? "disabled" : "";
+  const det = doc.posa_dettaglio || {};
+  const tipo = doc.tipo_cliente || (doc.anagrafiche && doc.anagrafiche.tipo_cliente) || "impresa";
+  const tariffaG = await _tariffaTrasferta();
+  const m = "&quot;"+mode+"&quot;", id = "&quot;"+doc.id+"&quot;";
+  const righe = (det.righe||[]).map(function(r){
+    return "<tr><td>"+_escH(r.categoria)+"</td><td style='text-align:center'>"+r.porte+"</td><td style='text-align:center;color:var(--mid)'>"+_escH(r.fascia)+"</td><td style='text-align:right'>"+fmtEuro(r.prezzo)+"</td><td style='text-align:right'>"+fmtEuro(r.totale)+"</td></tr>";
+  }).join("");
+  const mancanti = (det.mancanti||[]).length ? "<div style='margin-top:6px;padding:6px 10px;background:#fdf0ef;border-radius:var(--radius);font-size:11px;color:var(--red)'>⚠ "+det.mancanti.map(_escH).join("<br>⚠ ")+"<br><span style='color:var(--mid)'>Completa categorie e tariffe in Admin › Imballi, trasporti e posa › Posa e trasferta.</span></div>" : "";
+  const inp = "font-size:13px;padding:3px 6px;border:0.5px solid var(--border);border-radius:4px";
+  return "<div class='card'>"+
+    "<div class='card-title'>Posa e trasferta</div>"+
+    "<table style='font-size:13px;width:100%'>"+
+      "<tr><td style='color:var(--mid);padding:4px 0;width:130px'>Tariffa cliente</td><td>"+
+        "<label style='font-size:12px;margin-right:12px'><input type='radio' name='posa-tipo' value='impresa' "+(tipo==="impresa"?"checked":"")+" "+dis+" onchange='salvaTipoClientePosa("+m+","+id+",this.value)'> Impresa</label>"+
+        "<label style='font-size:12px'><input type='radio' name='posa-tipo' value='privato' "+(tipo==="privato"?"checked":"")+" "+dis+" onchange='salvaTipoClientePosa("+m+","+id+",this.value)'> Privato</label></td></tr>"+
+    "</table>"+
+    (righe ? "<table style='font-size:12px;width:100%;margin-top:6px'><thead><tr><th>Categoria</th><th style='text-align:center'>Porte</th><th style='text-align:center'>Fascia</th><th style='text-align:right'>€/porta</th><th style='text-align:right'>Totale</th></tr></thead><tbody>"+righe+"</tbody></table>"
+      : "<div style='font-size:12px;color:var(--mid);margin:6px 0'>Nessuna porta “posata da noi”: spunta la posa sulle righe dal configuratore (riepilogo della porta).</div>")+
+    mancanti+
+    "<table style='font-size:13px;width:100%;margin-top:8px'>"+
+      "<tr><td style='color:var(--mid);padding:4px 0;width:130px'>Costo posa</td><td><div style='display:flex;align-items:center;gap:6px;flex-wrap:wrap'>"+
+        "<input type='number' step='0.01' value='"+(parseFloat(doc.costo_posa)||"")+"' placeholder='0.00' "+dis+" style='width:100px;"+inp+"' onchange='salvaCostoPosa("+m+","+id+",this.value)'><span style='font-size:12px;color:var(--mid)'>€</span>"+
+        (doc.posa_manuale ? "<span class='badge ba'>scritto a mano</span>" : "")+
+        (bloccato ? "" : "<button class='btn btn-sm' onclick='ricalcolaPosa("+m+","+id+")'>Ricalcola da listino</button>")+
+      "</div></td></tr>"+
+      "<tr><td style='color:var(--mid);padding:4px 0'>Trasferta</td><td><div style='display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px'>"+
+        "<input type='number' id='trf-giorni' min='0' step='0.5' value='"+(parseFloat(doc.trasferta_giornate)||"")+"' placeholder='0' "+dis+" style='width:60px;"+inp+"' onchange='salvaTrasferta("+m+","+id+")'> giornate ×"+
+        "<input type='number' id='trf-posatori' min='0' step='1' value='"+(parseInt(doc.trasferta_posatori)||"")+"' placeholder='0' "+dis+" style='width:60px;"+inp+"' onchange='salvaTrasferta("+m+","+id+")'> posatori × "+fmtEuro(tariffaG)+
+        " = <strong>"+fmtEuro(parseFloat(doc.costo_trasferta)||0)+"</strong>"+
+      "</div></td></tr>"+
+    "</table>"+
+    "<div style='font-size:10px;color:var(--mid);margin-top:6px'>La posa si ricalcola da sola quando cambiano le righe (salvo importo scritto a mano). Posa e trasferta sono a prezzo pieno, fuori dagli sconti, come il trasporto.</div>"+
+  "</div>";
+}
+function _refreshDoc(mode, docId){ if(mode==="preventivo") renderPreventivoDetail(docId); else renderOrdineDetail(docId); }
+async function salvaTipoClientePosa(mode, docId, val){
+  if(await docBloccato(mode, docId)) return;
+  const tabDoc = mode==="preventivo"?"preventivi":"ordini_vendita";
+  await sb.from(tabDoc).update({tipo_cliente:val, posa_manuale:false}).eq("id",docId);
+  await ricalcolaTotale(docId, mode);
+  toast("Tariffa posa: "+val,"ok"); _refreshDoc(mode, docId);
+}
+async function salvaCostoPosa(mode, docId, val){
+  if(await docBloccato(mode, docId)) return;
+  const tabDoc = mode==="preventivo"?"preventivi":"ordini_vendita";
+  await sb.from(tabDoc).update({costo_posa:parseFloat(val)||0, posa_manuale:true}).eq("id",docId);
+  await ricalcolaTotale(docId, mode);
+  toast("Costo posa salvato","ok"); _refreshDoc(mode, docId);
+}
+async function ricalcolaPosa(mode, docId){
+  if(await docBloccato(mode, docId)) return;
+  const tabDoc = mode==="preventivo"?"preventivi":"ordini_vendita";
+  await sb.from(tabDoc).update({posa_manuale:false}).eq("id",docId);
+  await ricalcolaTotale(docId, mode);
+  toast("Posa ricalcolata da listino","ok"); _refreshDoc(mode, docId);
+}
+async function salvaTrasferta(mode, docId){
+  if(await docBloccato(mode, docId)) return;
+  const tabDoc = mode==="preventivo"?"preventivi":"ordini_vendita";
+  const g = parseFloat((document.getElementById("trf-giorni")||{}).value)||0;
+  const p = parseInt((document.getElementById("trf-posatori")||{}).value)||0;
+  const costo = Math.round(g*p*(await _tariffaTrasferta())*100)/100;
+  await sb.from(tabDoc).update({trasferta_giornate:g, trasferta_posatori:p, costo_trasferta:costo}).eq("id",docId);
+  await ricalcolaTotale(docId, mode);
+  toast("Trasferta salvata","ok"); _refreshDoc(mode, docId);
+}
+
+// ── Admin: categorie di posa, tariffe a fasce, trasferta ──
+async function adminPosaBody(){
+  const [rC, rT, rA, tg] = await Promise.all([
+    sb.from("categorie_posa").select("*").order("ordine"),
+    sb.from("tariffe_posa").select("*").order("da_qta"),
+    sb.from("tipologie_apertura").select("codice,nome,categoria_posa_id").order("codice"),
+    _tariffaTrasferta()
+  ]);
+  const cats = rC.data||[], tar = rT.data||[], ap = rA.data||[];
+  const inp = "padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px";
+  const fasceHtml = function(c, tipo){
+    const rows = tar.filter(function(t){ return t.categoria_id===c.id && t.tipo_cliente===tipo; }).map(function(t){
+      return "<tr><td><input type='number' min='1' value='"+(t.da_qta||1)+"' style='width:55px;"+inp+"' onchange='salvaTariffaPosa("+t.id+",&quot;da_qta&quot;,this.value)'></td>"+
+        "<td><input type='number' min='1' value='"+(t.a_qta==null?"":t.a_qta)+"' placeholder='∞' style='width:55px;"+inp+"' onchange='salvaTariffaPosa("+t.id+",&quot;a_qta&quot;,this.value)'></td>"+
+        "<td><input type='number' min='0' step='0.01' value='"+(t.prezzo||0)+"' style='width:75px;"+inp+"' onchange='salvaTariffaPosa("+t.id+",&quot;prezzo&quot;,this.value)'> €</td>"+
+        "<td><button onclick='eliminaTariffaPosa("+t.id+")' style='background:none;border:none;color:var(--mid);cursor:pointer;font-size:15px'>×</button></td></tr>";
+    }).join("");
+    return "<div style='flex:1;min-width:260px'><div style='font-size:12px;font-weight:500;margin-bottom:4px'>"+(tipo==="privato"?"Privato":"Impresa")+"</div>"+
+      "<table style='font-size:12px'><thead><tr><th>Da porte</th><th>A porte</th><th>€ / porta</th><th></th></tr></thead><tbody>"+
+      (rows||"<tr><td colspan='4' style='color:var(--mid);font-style:italic;padding:6px 0'>Nessuna fascia</td></tr>")+
+      "</tbody></table><button class='btn btn-sm' style='margin-top:4px' onclick='aggiungiTariffaPosa("+c.id+",&quot;"+tipo+"&quot;)'>+ Fascia</button></div>";
+  };
+  const catCards = cats.map(function(c){
+    const aperture = ap.filter(function(a){ return a.categoria_posa_id===c.id; }).map(function(a){ return "<span class='tag' title='"+_escH(a.nome)+"'>"+_escH(a.codice)+"</span>"; }).join(" ");
+    const sub = c.speciale==="blindata_porta" ? "Usata per tutte le porte delle serie Blindate (posa porta)" :
+                c.speciale==="blindata_telaio" ? "Usata per tutte le porte delle serie Blindate (posa telaio)" :
+                (aperture || "<span style='color:var(--mid);font-style:italic'>Nessuna apertura assegnata</span>");
+    return adminCard("",
+      "<div style='display:flex;gap:10px;align-items:center;margin-bottom:6px;flex-wrap:wrap'>"+
+        "<input type='text' value='"+_escH(c.nome)+"' style='width:240px;font-weight:500;"+inp+"' onchange='adminSalva(&quot;categorie_posa&quot;,"+c.id+",&quot;nome&quot;,this.value)'>"+
+        "<label style='font-size:12px'><input type='checkbox' "+(c.attiva?"checked":"")+" onchange='adminSalva(&quot;categorie_posa&quot;,"+c.id+",&quot;attiva&quot;,this.checked)'> attiva</label>"+
+        "<button onclick='eliminaCategoriaPosa("+c.id+")' style='background:none;border:none;color:var(--red);cursor:pointer;font-size:12px;margin-left:auto'>Elimina categoria</button>"+
+      "</div>"+
+      "<div style='font-size:11px;margin-bottom:10px'>"+sub+"</div>"+
+      "<div style='display:flex;gap:24px;flex-wrap:wrap'>"+fasceHtml(c,"impresa")+fasceHtml(c,"privato")+"</div>");
+  }).join("");
+  const catOpts = function(sel){ return "<option value=''>— nessuna —</option>"+cats.filter(function(c){ return !c.speciale; }).map(function(c){ return "<option value='"+c.id+"' "+(c.id===sel?"selected":"")+">"+_escH(c.nome)+"</option>"; }).join(""); };
+  const apRows = ap.map(function(a){
+    return "<tr><td><code style='font-size:11px'>"+_escH(a.codice)+"</code></td><td style='font-size:12px'>"+_escH(a.nome)+"</td>"+
+      "<td><select style='"+inp+"' onchange='salvaCategoriaApertura(&quot;"+_escH(a.codice)+"&quot;,this.value)'>"+catOpts(a.categoria_posa_id)+"</select></td></tr>";
+  }).join("");
+  return adminCard("Trasferta",
+      "<div style='display:flex;gap:8px;align-items:center'>"+
+        "<input type='number' id='imp-trasferta' value='"+tg+"' min='0' step='0.01' style='padding:6px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px;font-weight:600;width:120px'>"+
+        "<span style='font-size:13px;color:var(--mid)'>€ per giornata/uomo</span>"+
+        "<button class='btn btn-sm' onclick='salvaImpostazione(&quot;trasferta_giornata_uomo&quot;,&quot;imp-trasferta&quot;)'>Salva</button></div>"+
+      "<div style='font-size:11px;color:var(--mid);margin-top:4px'>Sul documento: giornate × posatori × questa tariffa.</div>") +
+    adminCard("Categorie di posa",
+      "<div style='display:flex;gap:8px;align-items:center;flex-wrap:wrap'>"+
+        "<input type='text' id='cp-nome' placeholder='Nome categoria (es. Scorrevole interno muro)' style='padding:6px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:13px;flex:1;min-width:220px'>"+
+        "<button class='btn btn-red btn-sm' onclick='aggiungiCategoriaPosa()'>+ Aggiungi categoria</button></div>"+
+      "<div style='font-size:11px;color:var(--mid);margin-top:8px'>Prezzo di posa = € a porta della fascia raggiunta. La fascia si conta per categoria: es. 3 scorrevoli e 10 battenti prendono ciascuno la propria fascia. Ogni categoria ha tariffe separate per impresa e privato. Contano solo le porte con la spunta “posata da noi”. Le blindate pagano posa porta + posa telaio.</div>") +
+    catCards +
+    adminCard("Aperture → categoria di posa",
+      "<table><thead><tr><th>Codice</th><th>Apertura</th><th>Categoria di posa</th></tr></thead><tbody>"+apRows+"</tbody></table>");
+}
+async function aggiungiCategoriaPosa(){
+  const nome = ((document.getElementById("cp-nome")||{}).value||"").trim();
+  if(!nome){ toast("Inserisci il nome della categoria","err"); return; }
+  const {error} = await sb.from("categorie_posa").insert({nome:nome, ordine:Date.now()%100000});
+  if(error){ toast("Errore: "+error.message,"err"); return; }
+  toast("Categoria aggiunta","ok"); adminSpedizioni();
+}
+async function eliminaCategoriaPosa(id){
+  if(!confirm("Eliminare la categoria e le sue tariffe? Le aperture assegnate resteranno senza categoria.")) return;
+  const {error} = await sb.from("categorie_posa").delete().eq("id",id);
+  if(error){ toast("Errore: "+error.message,"err"); return; }
+  toast("Categoria eliminata","ok"); adminSpedizioni();
+}
+async function aggiungiTariffaPosa(catId, tipo){
+  const {data:ult} = await sb.from("tariffe_posa").select("a_qta").eq("categoria_id",catId).eq("tipo_cliente",tipo).order("da_qta",{ascending:false}).limit(1);
+  const da = (ult && ult[0] && ult[0].a_qta) ? ult[0].a_qta+1 : 1;
+  const {error} = await sb.from("tariffe_posa").insert({categoria_id:catId, tipo_cliente:tipo, da_qta:da, a_qta:null, prezzo:0});
+  if(error){ toast("Errore: "+error.message,"err"); return; }
+  adminSpedizioni();
+}
+async function salvaTariffaPosa(id, campo, val){
+  let v;
+  if(campo==="a_qta") v = (val===""||val==null) ? null : parseInt(val);
+  else if(campo==="da_qta") v = parseInt(val)||1;
+  else v = parseFloat(val)||0;
+  const {error} = await sb.from("tariffe_posa").update({[campo]:v}).eq("id",id);
+  if(error){ toast("Errore: "+error.message,"err"); return; }
+  toast("Salvato","ok");
+}
+async function eliminaTariffaPosa(id){
+  const {error} = await sb.from("tariffe_posa").delete().eq("id",id);
+  if(error){ toast("Errore: "+error.message,"err"); return; }
+  adminSpedizioni();
+}
+async function salvaCategoriaApertura(codice, val){
+  const {error} = await sb.from("tipologie_apertura").update({categoria_posa_id: val ? parseInt(val) : null}).eq("codice",codice);
+  if(error){ toast("Errore: "+error.message,"err"); return; }
+  toast("Salvato","ok");
+}
+
 // Netto documento: sconti sulle righe, trasporto a prezzo pieno.
 // (nel DB totale_imponibile = somma righe + costo_trasporto)
 function nettoDoc(d){
-  const tr=parseFloat(d&&d.costo_trasporto)||0;
+  const tr=extraTestata(d);
   const righe=(parseFloat(d&&d.totale_imponibile)||0)-tr;
   const sc1=parseFloat(d&&d.sconto1)||0, sc2=parseFloat(d&&d.sconto2)||0;
   return Math.round((righe*(1-sc1/100)*(1-sc2/100)+tr)*100)/100;
@@ -6267,7 +6526,7 @@ async function lanciaInProduzione(id){
   const upd={stato:'in_produzione', data_firma:new Date().toISOString(), settimana_lavorazione:settLav, settimana_consegna:settApp};
   if(fido>0){
     const {data:aperti}=await sb.from('ordini_vendita')
-      .select('id,numero,totale_imponibile,costo_trasporto,sconto1,sconto2,totale_arrotondato,pagato,stato')
+      .select('id,numero,totale_imponibile,costo_trasporto,costo_posa,costo_trasferta,sconto1,sconto2,totale_arrotondato,pagato,stato')
       .eq('anagrafica_id',ord.anagrafica_id).in('stato',STATI_ESPOSIZIONE).neq('id',id);
     const nonPagati=(aperti||[]).filter(o=>!o.pagato);
     const esposto=Math.round(nonPagati.reduce((s,o)=>s+importoFido(o),0)*100)/100;
@@ -6469,6 +6728,8 @@ async function firmaPreventivo(prevId){
     zona_trasporto_id:prev.zona_trasporto_id||null,
     trasporto_mezzo:prev.trasporto_mezzo||'proprio',
     costo_trasporto:prev.costo_trasporto||0,
+    tipo_cliente:prev.tipo_cliente||null, costo_posa:prev.costo_posa||0, posa_dettaglio:prev.posa_dettaglio||null, posa_manuale:!!prev.posa_manuale,
+    trasferta_giornate:prev.trasferta_giornate||0, trasferta_posatori:prev.trasferta_posatori||0, costo_trasferta:prev.costo_trasferta||0,
     totale_imponibile:prev.totale_imponibile,
     totale_netto:prev.totale_netto||prev.totale_imponibile,
     totale_arrotondato:prev.totale_arrotondato||null,
@@ -6643,13 +6904,13 @@ async function nuovoOrdineDiretto(){
 async function renderOrdineDetail(id){
   evidenziaSezione('ordini_vendita');
   const [{data:ord},{data:righe}] = await Promise.all([
-    sb.from('ordini_vendita').select('*,anagrafiche(ragione_sociale,partita_iva,provincia,sede_op_provincia),agenti(nome,cognome),preventivi(numero)').eq('id',id).single(),
+    sb.from('ordini_vendita').select('*,anagrafiche(ragione_sociale,partita_iva,provincia,sede_op_provincia,tipo_cliente),agenti(nome,cognome),preventivi(numero)').eq('id',id).single(),
     sb.from('righe_ordine').select('*').eq('ordine_id',id).order('riga_numero'),
   ]);
   if(!ord) return;
   CFG_TARGET_ID=id; CFG_MODE='ordine';
   window._prevListino=ord.listino;
-  const trasportoCardHtml = await renderTrasportoCard('ordine', ord, righe);
+  const trasportoCardHtml = (await renderTrasportoCard('ordine', ord, righe)) + '<div style="margin-top:14px">' + (await renderPosaCard('ordine', ord)) + '</div>';
 
   const sc1=ord.sconto1||0; const sc2=ord.sconto2||0;
   const netto=nettoDoc(ord);
@@ -6745,8 +7006,8 @@ async function renderOrdineDetail(id){
       '<div class="card">'+
         '<div class="card-title">Riepilogo economico</div>'+
         '<table style="font-size:13px">'+
-          '<tr><td style="color:var(--mid);padding:3px 0;width:130px">Imponibile'+(ord.costo_trasporto>0?' (incl. trasporto)':'')+'</td><td style="text-align:right">'+fmtEuro(ord.totale_imponibile)+'</td></tr>'+
-          (ord.costo_trasporto>0?'<tr><td style="color:var(--mid);padding:3px 0;font-size:11px">di cui trasporto</td><td style="text-align:right;font-size:11px;color:var(--mid)">'+fmtEuro(ord.costo_trasporto)+'</td></tr>':'')+
+          '<tr><td style="color:var(--mid);padding:3px 0;width:130px">Imponibile'+(extraTestata(ord)>0?' (incl. voci a prezzo pieno)':'')+'</td><td style="text-align:right">'+fmtEuro(ord.totale_imponibile)+'</td></tr>'+
+          righeDiCui(ord)+
           '<tr><td style="color:var(--mid);padding:3px 0">Sconto 1</td><td style="text-align:right">'+sc1+'%</td></tr>'+
           '<tr><td style="color:var(--mid);padding:3px 0">Sconto 2</td><td style="text-align:right">'+(sc2||0)+'%</td></tr>'+
           '<tr style="border-top:0.5px solid var(--border)"><td style="padding:6px 0;font-weight:500">Totale netto</td><td style="text-align:right;font-size:'+(ord.totale_arrotondato?'14px':'18px')+';font-weight:500;color:'+(ord.totale_arrotondato?'var(--mid)':'var(--red)')+'">'+fmtEuro(netto)+'</td></tr>'+
@@ -6820,7 +7081,7 @@ const ADMIN_SECTIONS = [
   {id:'distinte',    label:'Distinte base',     icon:'M3 3h10v2H3zM3 7h10v2H3zM3 11h6v2H3z'},
   {id:'compatibilita',label:'Compatibilità',    icon:'M2 8h5M9 8h5M8 2v5M8 9v5'},
   {id:'lavorazioni', label:'Lavorazioni extra', icon:'M4 2h8l2 4-10 0zM2 6h12v10H2zM6 10h4'},
-  {id:'spedizioni',  label:'Imballi e trasporti', icon:'M1 1.5h1.8l1.3 8.2a1 1 0 0 0 1 .8h6.4a1 1 0 0 0 1-.78L14.8 4H3.6'},
+  {id:'spedizioni',  label:'Imballi, trasporti e posa', icon:'M1 1.5h1.8l1.3 8.2a1 1 0 0 0 1 .8h6.4a1 1 0 0 0 1-.78L14.8 4H3.6'},
   {id:'agenti',        label:'Agenti',             icon:'M8 5a3 3 0 100 6 3 3 0 000-6zM2 14c0-3 2-5 6-5s6 2 6 5'},
   {id:'impostazioni',  label:'Impostazioni',       icon:'M8 5a3 3 0 100 6M8 1v2M8 13v2M1 8h2M13 8h2'},
   {id:'magazzino_admin',label:'Magazzino',         icon:'M2 4h12v10H2zM2 4l6-3 6 3M6 14v-4h4v4'},
@@ -6834,7 +7095,7 @@ const ADMIN_SUB = {
   agenti:     ['agenti_lista'],
   impostazioni:['generale','utenti'],
   magazzino_admin:['categorie'],
-  spedizioni:['imballi','trasporti'],
+  spedizioni:['imballi','trasporti','posa'],
 };
 
 let adminSection = 'catalogo';
@@ -8658,9 +8919,11 @@ async function aggiungiLavorazione(){
 // SPEDIZIONI — Imballi e Trasporti
 // ══════════════════════════════════════════════════════
 async function adminSpedizioni(){
-  const tabs=[{id:'imballi',label:'Imballi'},{id:'trasporti',label:'Trasporti'}];
+  const tabs=[{id:'imballi',label:'Imballi'},{id:'trasporti',label:'Trasporti'},{id:'posa',label:'Posa e trasferta'}];
   let body='';
-  if(adminSub==='imballi'){
+  if(adminSub==='posa'){
+    body = await adminPosaBody();
+  } else if(adminSub==='imballi'){
     const {data:imb} = await sb.from('listino_imballi').select('*').order('descrizione');
     const {data:suppFrag} = await sb.from('impostazioni').select('valore').eq('chiave','supplemento_imballo_fragile').maybeSingle();
     const METODI=[['per_pezzo','Per pezzo'],['a_scatola','A scatola'],['a_posizione','A posizione']];
@@ -9229,9 +9492,11 @@ async function costruisciPayloadPDF(tipo, id, soloNetti) {
         sconto2: doc.sconto2 || 0,
         // Scorporo il trasporto: il motore PDF lo ri-aggiunge come voce separata
         // (totale_imponibile nel DB = somma posizioni + costo_trasporto).
-        totale_imponibile: Math.round(((doc.totale_imponibile||0)-(parseFloat(doc.costo_trasporto)||0))*100)/100,
-        totale_netto: Math.round(((doc.totale_imponibile||0)-(parseFloat(doc.costo_trasporto)||0))*(1-(doc.sconto1||0)/100)*(1-(doc.sconto2||0)/100)*100)/100,
+        totale_imponibile: Math.round(((doc.totale_imponibile||0)-extraTestata(doc))*100)/100,
+        totale_netto: Math.round(((doc.totale_imponibile||0)-extraTestata(doc))*(1-(doc.sconto1||0)/100)*(1-(doc.sconto2||0)/100)*100)/100,
         totale_trasporto: parseFloat(doc.costo_trasporto)||0,
+        totale_spese: Math.round(((parseFloat(doc.costo_posa)||0)+(parseFloat(doc.costo_trasferta)||0))*100)/100,
+        etichetta_spese: etichettaSpese(doc),
         arrotondamento: doc.arrotondamento_euro || 0,
         totale_netto_arrotondato: doc.totale_arrotondato || 0,
       },
