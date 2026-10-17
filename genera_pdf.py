@@ -518,6 +518,8 @@ def genera_workbook(data, template_path):
     
     # Copia header prima pagina (righe 1-30)
     cur = copy_rows(ws_prima, ws, 1, HEADER_FIRST_END, 1, m)
+    numero_bc = str(v(doc, 'numero', '') or '').strip()
+    inserisci_barcode_cella(ws, numero_bc)
     
     avail_h = PAGE_H - header_first_h
     used_h = 0
@@ -596,6 +598,7 @@ def genera_workbook(data, template_path):
     # Copia tutto il contenuto della pagina finale
     max_row_finale = ws_finale.max_row
     copy_rows(ws_finale, ws_last, 1, max_row_finale, 1, m)
+    inserisci_barcode_cella(ws_last, numero_bc)
     # Voce "SPESE" del riepilogo: posa e/o trasferta (etichetta decisa dal gestionale)
     etichetta_spese = str(doc.get('etichetta_spese') or '').strip()
     if etichetta_spese:
@@ -643,13 +646,38 @@ def _barcode_png(code):
     buf = io.BytesIO()
     bc = barcode.get('code128', code, writer=ImageWriter())
     bc.write(buf, options={'module_height': 5.0, 'module_width': 0.25, 'quiet_zone': 1.0,
-                           'font_size': 7, 'text_distance': 3.0, 'dpi': 300, 'write_text': True})
+                           'dpi': 300, 'write_text': False})
     buf.seek(0)
     return buf
 
 
+def inserisci_barcode_cella(ws, code, area=('B', 25, 'K', 26), aspetto=7.3):
+    """Barcode del numero documento dentro la cella *BARCODE_DOCUMENTO* (B25:K26) del template.
+    Immagine ancorata ai bordi della cella e già nelle proporzioni del riquadro (margini bianchi),
+    così LibreOffice non la deforma."""
+    png = _barcode_png(code) if code else None
+    if not png:
+        return
+    from PIL import Image as PILImage
+    from openpyxl.drawing.image import Image as XLImage
+    from openpyxl.drawing.spreadsheet_drawing import TwoCellAnchor, AnchorMarker
+    from openpyxl.utils import column_index_from_string
+    bc = PILImage.open(png).convert('RGB')
+    bw, bh = bc.size
+    ch = int(bh / 0.80)                       # 10% di margine sopra e sotto
+    cw = max(int(ch * aspetto), bw + 20)
+    ch = max(ch, int(cw / aspetto))
+    canvas = PILImage.new('RGB', (cw, ch), 'white')
+    canvas.paste(bc, ((cw - bw) // 2, (ch - bh) // 2))
+    out = io.BytesIO(); canvas.save(out, format='PNG'); out.seek(0)
+    img = XLImage(out)
+    c1, r1, c2, r2 = column_index_from_string(area[0]) - 1, area[1] - 1, column_index_from_string(area[2]), area[3]
+    img.anchor = TwoCellAnchor(_from=AnchorMarker(col=c1, row=r1), to=AnchorMarker(col=c2, row=r2))
+    ws.add_image(img)
+
+
 def aggiungi_logo(pdf_path, logo_path, barcode_code=None):
-    """Sovrappone il logo (e il barcode del numero documento, in alto a destra) su ogni pagina del PDF."""
+    """Sovrappone il logo su ogni pagina del PDF."""
     if not os.path.exists(logo_path):
         print(f"Logo non trovato: {logo_path}", file=sys.stderr)
         return
@@ -660,12 +688,6 @@ def aggiungi_logo(pdf_path, logo_path, barcode_code=None):
 
         reader = PdfReader(pdf_path)
         writer = PdfWriter()
-        bc_img = None
-        if barcode_code:
-            png = _barcode_png(barcode_code)
-            if png:
-                from reportlab.lib.utils import ImageReader
-                bc_img = ImageReader(png)
 
         for page in reader.pages:
             w = float(page.mediabox.width)
@@ -675,11 +697,6 @@ def aggiungi_logo(pdf_path, logo_path, barcode_code=None):
             c.drawImage(logo_path, 14*mm, h - 35*mm,
                         width=28*mm, height=28*mm,
                         preserveAspectRatio=True, mask='auto')
-            if bc_img:
-                # in alto a destra, sopra la colonna P.IVA, allineato al bordo dei riquadri
-                bw, bh = 55*mm, 11*mm
-                c.drawImage(bc_img, w - 15*mm - bw, h - 4*mm - bh, width=bw, height=bh,
-                            preserveAspectRatio=True, anchor='ne')
             c.save()
             buf.seek(0)
             overlay = PdfReader(buf).pages[0]
@@ -764,8 +781,7 @@ def genera_preventivo(json_path, pdf_path):
         except: pass
     
     # Sovrapponi logo su ogni pagina
-    numero_doc = str((data.get('documento') or {}).get('numero') or '').strip()
-    aggiungi_logo(pdf_path, LOGO_PATH, numero_doc or None)
+    aggiungi_logo(pdf_path, LOGO_PATH)
     
     print(f"genera_pdf.py {VERSION} OK → {pdf_path}", file=sys.stderr)
 
