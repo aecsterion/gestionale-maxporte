@@ -5679,13 +5679,13 @@ async function salvaNuovoDoc(){
 async function renderPreventivoDetail(id){
   evidenziaSezione('preventivi');
   const [{data:prev},{data:righe}] = await Promise.all([
-    sb.from('preventivi').select('*,anagrafiche(ragione_sociale,partita_iva,provincia,sede_op_provincia,tipo_cliente),agenti(nome,cognome)').eq('id',id).single(),
+    sb.from('preventivi').select('*,anagrafiche(ragione_sociale,partita_iva,provincia,sede_op_provincia,tipo_cliente,canale),agenti(nome,cognome)').eq('id',id).single(),
     sb.from('righe_preventivo').select('*').eq('preventivo_id',id).order('riga_numero'),
   ]);
   if(!prev) return;
   CFG_TARGET_ID=id; CFG_MODE='preventivo';
   window._prevListino=prev.listino;
-  const trasportoCardHtml = (await renderTrasportoCard('preventivo', prev, righe)) + '<div style="margin-top:14px">' + (await renderPosaCard('preventivo', prev)) + '</div>';
+  const trasportoCardHtml = '<div class="grid-2" style="align-items:start">' + (await renderTrasportoCard('preventivo', prev, righe)) + (await renderPosaCard('preventivo', prev)) + '</div>';
 
   const sc1=prev.sconto1||0; const sc2=prev.sconto2||0;
   const netto=nettoDoc(prev);
@@ -6269,7 +6269,7 @@ async function calcolaPosaDoc(mode, docId){
   const tabDoc = mode==="preventivo"?"preventivi":"ordini_vendita";
   const [rR, rD, rC, rT, rA, blind] = await Promise.all([
     sb.from(tabRighe).select("quantita,codice_apertura,codice_serie,posata_da_noi,auto_sopraluce").eq(fk,docId),
-    sb.from(tabDoc).select("tipo_cliente,anagrafiche(tipo_cliente)").eq("id",docId).single(),
+    sb.from(tabDoc).select("tipo_cliente,anagrafiche(tipo_cliente,canale)").eq("id",docId).single(),
     sb.from("categorie_posa").select("*").eq("attiva",true).order("ordine"),
     sb.from("tariffe_posa").select("*"),
     sb.from("tipologie_apertura").select("codice,categoria_posa_id"),
@@ -6277,6 +6277,8 @@ async function calcolaPosaDoc(mode, docId){
   ]);
   const doc = rD.data||{};
   const tipoCliente = doc.tipo_cliente || (doc.anagrafiche && doc.anagrafiche.tipo_cliente) || "impresa";
+  // I rivenditori non hanno diritto alla posa
+  if(doc.anagrafiche && doc.anagrafiche.canale==="rivenditore") return {totale:0, dettaglio:[], mancanti:[], tipo_cliente:tipoCliente, porte:0, rivenditore:true};
   const cat = {}; (rC.data||[]).forEach(function(c){ cat[c.id]=c; });
   const catPorta = (rC.data||[]).find(function(c){ return c.speciale==="blindata_porta"; });
   const catTelaio = (rC.data||[]).find(function(c){ return c.speciale==="blindata_telaio"; });
@@ -6317,9 +6319,9 @@ async function calcolaPosaDoc(mode, docId){
 async function aggiornaPosaAuto(mode, docId){
   const tabDoc = mode==="preventivo"?"preventivi":"ordini_vendita";
   const {data:d} = await sb.from(tabDoc).select("posa_manuale").eq("id",docId).single();
-  if(d && d.posa_manuale) return;
   const p = await calcolaPosaDoc(mode, docId);
-  await sb.from(tabDoc).update({costo_posa:p.totale, posa_dettaglio:{righe:p.dettaglio, mancanti:p.mancanti, tipo_cliente:p.tipo_cliente, porte:p.porte}}).eq("id",docId);
+  if(d && d.posa_manuale && !p.rivenditore) return;
+  await sb.from(tabDoc).update({costo_posa:p.totale, posa_dettaglio:{righe:p.dettaglio, mancanti:p.mancanti, tipo_cliente:p.tipo_cliente, porte:p.porte, rivenditore:!!p.rivenditore}}).eq("id",docId);
 }
 async function _tariffaTrasferta(){
   const {data} = await sb.from("impostazioni").select("valore").eq("chiave","trasferta_giornata_uomo").maybeSingle();
@@ -6327,7 +6329,8 @@ async function _tariffaTrasferta(){
 }
 
 async function renderPosaCard(mode, doc){
-  const bloccato = (mode==="preventivo" ? prevBloccato(doc) : ordBloccato(doc));
+  const riv = !!(doc.anagrafiche && doc.anagrafiche.canale==="rivenditore");
+  const bloccato = riv || (mode==="preventivo" ? prevBloccato(doc) : ordBloccato(doc));
   const dis = bloccato ? "disabled" : "";
   const det = doc.posa_dettaglio || {};
   const tipo = doc.tipo_cliente || (doc.anagrafiche && doc.anagrafiche.tipo_cliente) || "impresa";
@@ -6340,13 +6343,14 @@ async function renderPosaCard(mode, doc){
   const inp = "font-size:13px;padding:3px 6px;border:0.5px solid var(--border);border-radius:4px";
   return "<div class='card'>"+
     "<div class='card-title'>Posa e trasferta</div>"+
+    (riv ? "<div style='font-size:12px;padding:6px 10px;background:var(--beige);border-radius:var(--radius);margin-bottom:6px'>Cliente <strong>rivenditore</strong>: la posa non è prevista.</div>" : "")+
     "<table style='font-size:13px;width:100%'>"+
       "<tr><td style='color:var(--mid);padding:4px 0;width:130px'>Tariffa cliente</td><td>"+
         "<label style='font-size:12px;margin-right:12px'><input type='radio' name='posa-tipo' value='impresa' "+(tipo==="impresa"?"checked":"")+" "+dis+" onchange='salvaTipoClientePosa("+m+","+id+",this.value)'> Impresa</label>"+
         "<label style='font-size:12px'><input type='radio' name='posa-tipo' value='privato' "+(tipo==="privato"?"checked":"")+" "+dis+" onchange='salvaTipoClientePosa("+m+","+id+",this.value)'> Privato</label></td></tr>"+
     "</table>"+
     (righe ? "<table style='font-size:12px;width:100%;margin-top:6px'><thead><tr><th>Categoria</th><th style='text-align:center'>Porte</th><th style='text-align:center'>Fascia</th><th style='text-align:right'>€/porta</th><th style='text-align:right'>Totale</th></tr></thead><tbody>"+righe+"</tbody></table>"
-      : "<div style='font-size:12px;color:var(--mid);margin:6px 0'>Nessuna porta “posata da noi”: spunta la posa sulle righe dal configuratore (riepilogo della porta).</div>")+
+      : riv ? "" : "<div style='font-size:12px;color:var(--mid);margin:6px 0'>Nessuna porta “posata da noi”: spunta la posa sulle righe dal configuratore (riepilogo della porta).</div>")+
     mancanti+
     "<table style='font-size:13px;width:100%;margin-top:8px'>"+
       "<tr><td style='color:var(--mid);padding:4px 0;width:130px'>Costo posa</td><td><div style='display:flex;align-items:center;gap:6px;flex-wrap:wrap'>"+
@@ -6904,13 +6908,13 @@ async function nuovoOrdineDiretto(){
 async function renderOrdineDetail(id){
   evidenziaSezione('ordini_vendita');
   const [{data:ord},{data:righe}] = await Promise.all([
-    sb.from('ordini_vendita').select('*,anagrafiche(ragione_sociale,partita_iva,provincia,sede_op_provincia,tipo_cliente),agenti(nome,cognome),preventivi(numero)').eq('id',id).single(),
+    sb.from('ordini_vendita').select('*,anagrafiche(ragione_sociale,partita_iva,provincia,sede_op_provincia,tipo_cliente,canale),agenti(nome,cognome),preventivi(numero)').eq('id',id).single(),
     sb.from('righe_ordine').select('*').eq('ordine_id',id).order('riga_numero'),
   ]);
   if(!ord) return;
   CFG_TARGET_ID=id; CFG_MODE='ordine';
   window._prevListino=ord.listino;
-  const trasportoCardHtml = (await renderTrasportoCard('ordine', ord, righe)) + '<div style="margin-top:14px">' + (await renderPosaCard('ordine', ord)) + '</div>';
+  const trasportoCardHtml = '<div class="grid-2" style="align-items:start">' + (await renderTrasportoCard('ordine', ord, righe)) + (await renderPosaCard('ordine', ord)) + '</div>';
 
   const sc1=ord.sconto1||0; const sc2=ord.sconto2||0;
   const netto=nettoDoc(ord);
