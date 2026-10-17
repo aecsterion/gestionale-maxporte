@@ -6423,10 +6423,17 @@ async function adminPosaBody(){
       "</tbody></table><button class='btn btn-sm' style='margin-top:4px' onclick='aggiungiTariffaPosa("+c.id+",&quot;"+tipo+"&quot;)'>+ Fascia</button></div>";
   };
   const catCards = cats.map(function(c){
-    const aperture = ap.filter(function(a){ return a.categoria_posa_id===c.id; }).map(function(a){ return "<span class='tag' title='"+_escH(a.nome)+"'>"+_escH(a.codice)+"</span>"; }).join(" ");
+    const aperture = ap.filter(function(a){ return a.categoria_posa_id===c.id; }).map(function(a){
+      return "<span class='tag' title='"+_escH(a.nome)+"' style='display:inline-flex;align-items:center;gap:4px'>"+_escH(a.codice)+
+        "<span title='Togli da questa categoria' onclick='spostaAperturaPosa(&quot;"+_escH(a.codice)+"&quot;,&quot;&quot;)' style='cursor:pointer;color:var(--red);font-weight:600'>×</span></span>";
+    }).join(" ");
+    const altre = ap.filter(function(a){ return a.categoria_posa_id!==c.id; });
+    const nomeCat = function(id){ const x = cats.find(function(k){ return k.id===id; }); return x ? x.nome : ""; };
+    const addSel = "<select style='"+inp+";margin-left:6px' onchange='if(this.value) spostaAperturaPosa(this.value,"+c.id+")'><option value=''>+ aggiungi apertura…</option>"+
+      altre.map(function(a){ return "<option value='"+_escH(a.codice)+"'>"+_escH(a.codice)+" — "+_escH(a.nome)+(a.categoria_posa_id ? " (ora in "+_escH(nomeCat(a.categoria_posa_id))+")" : "")+"</option>"; }).join("")+"</select>";
     const sub = c.speciale==="blindata_porta" ? "Usata per tutte le porte delle serie Blindate (posa porta)" :
                 c.speciale==="blindata_telaio" ? "Usata per tutte le porte delle serie Blindate (posa telaio)" :
-                (aperture || "<span style='color:var(--mid);font-style:italic'>Nessuna apertura assegnata</span>");
+                ((aperture || "<span style='color:var(--mid);font-style:italic'>Nessuna apertura assegnata</span>") + addSel);
     return adminCard("",
       "<div style='display:flex;gap:10px;align-items:center;margin-bottom:6px;flex-wrap:wrap'>"+
         "<input type='text' value='"+_escH(c.nome)+"' style='width:240px;font-weight:500;"+inp+"' onchange='adminSalva(&quot;categorie_posa&quot;,"+c.id+",&quot;nome&quot;,this.value)'>"+
@@ -6488,6 +6495,12 @@ async function salvaTariffaPosa(id, campo, val){
 async function eliminaTariffaPosa(id){
   const {error} = await sb.from("tariffe_posa").delete().eq("id",id);
   if(error){ toast("Errore: "+error.message,"err"); return; }
+  adminSpedizioni();
+}
+async function spostaAperturaPosa(codice, catId){
+  const {error} = await sb.from("tipologie_apertura").update({categoria_posa_id: catId ? parseInt(catId) : null}).eq("codice",codice);
+  if(error){ toast("Errore: "+error.message,"err"); return; }
+  toast(catId ? "Apertura "+codice+" assegnata" : "Apertura "+codice+" tolta dalla categoria","ok");
   adminSpedizioni();
 }
 async function salvaCategoriaApertura(codice, val){
