@@ -29,7 +29,7 @@ Formato: `## data — titolo`, **Area**, **Spunto**, **Stato** (`da valutare` / 
 ## 2026-09-06 — Step mantovana nel configuratore
 **Area:** Configuratore
 **Spunto:** Per le tipologie scorrevoli esterno muro, step di scelta del tipo di mantovana con supplemento per tipo.
-**Stato:** `da valutare`
+**Stato:** `approvato` — PRIORITÀ (18 ott): importante per la corretta configurazione di preventivi e ordini
 
 ---
 
@@ -50,7 +50,7 @@ Formato: `## data — titolo`, **Area**, **Spunto**, **Stato** (`da valutare` / 
 ## 2026-09-06 — Calcolo automatico allargatori telaio
 **Area:** Configuratore
 **Spunto:** Se lo spessore muro supera la copertura del telaio, calcolo automatico degli allargatori necessari.
-**Stato:** `da valutare`
+**Stato:** `approvato` — PRIORITÀ (18 ott): importante per la corretta configurazione di preventivi e ordini
 
 ---
 
