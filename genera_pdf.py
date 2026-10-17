@@ -662,13 +662,16 @@ def inserisci_barcode_cella(ws, code, area=('B', 25, 'K', 26), aspetto=7.3):
     from openpyxl.drawing.image import Image as XLImage
     from openpyxl.drawing.spreadsheet_drawing import TwoCellAnchor, AnchorMarker
     from openpyxl.utils import column_index_from_string
-    bc = PILImage.open(png).convert('RGB')
+    # Sfondo TRASPARENTE (solo le barre nere): l'immagine non copre i bordi della cella
+    bc = PILImage.open(png).convert('L')
+    alpha = bc.point(lambda p: 255 if p < 128 else 0)
+    bars = PILImage.new('RGBA', bc.size, (0, 0, 0, 255)); bars.putalpha(alpha)
     bw, bh = bc.size
-    ch = int(bh / 0.80)                       # 10% di margine sopra e sotto
-    cw = max(int(ch * aspetto), bw + 20)
+    ch = int(bh / 0.60)                       # 20% di margine sopra e sotto
+    cw = max(int(ch * aspetto), int(bw / 0.80))   # almeno 10% di margine per lato
     ch = max(ch, int(cw / aspetto))
-    canvas = PILImage.new('RGB', (cw, ch), 'white')
-    canvas.paste(bc, ((cw - bw) // 2, (ch - bh) // 2))
+    canvas = PILImage.new('RGBA', (cw, ch), (255, 255, 255, 0))
+    canvas.paste(bars, ((cw - bw) // 2, (ch - bh) // 2), bars)
     out = io.BytesIO(); canvas.save(out, format='PNG'); out.seek(0)
     img = XLImage(out)
     c1, r1, c2, r2 = column_index_from_string(area[0]) - 1, area[1] - 1, column_index_from_string(area[2]), area[3]
