@@ -667,8 +667,8 @@ def inserisci_barcode_cella(ws, code, area=('B', 25, 'K', 26), aspetto=7.3):
     alpha = bc.point(lambda p: 255 if p < 128 else 0)
     bars = PILImage.new('RGBA', bc.size, (0, 0, 0, 255)); bars.putalpha(alpha)
     bw, bh = bc.size
-    ch = int(bh / 0.60)                       # 20% di margine sopra e sotto
-    cw = max(int(ch * aspetto), int(bw / 0.80))   # almeno 10% di margine per lato
+    ch = int(bh / 0.76)                       # 12% di margine sopra e sotto
+    cw = max(int(ch * aspetto), int(bw / 0.88))   # almeno 6% di margine per lato
     ch = max(ch, int(cw / aspetto))
     canvas = PILImage.new('RGBA', (cw, ch), (255, 255, 255, 0))
     canvas.paste(bars, ((cw - bw) // 2, (ch - bh) // 2), bars)
