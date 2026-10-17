@@ -4911,7 +4911,24 @@ async function selAccPannello(){
   cfgUpdatePrice();cfgRiepilogo();
 }
 
+// Il cliente del documento in configurazione è un rivenditore? (niente posa)
+async function _cfgClienteRivenditore(){
+  let anaId = null;
+  if(CFG_TARGET_ID){
+    const tab = CFG_MODE==="preventivo" ? "preventivi" : "ordini_vendita";
+    const r = await sb.from(tab).select("anagrafica_id").eq("id",CFG_TARGET_ID).maybeSingle();
+    anaId = r.data && r.data.anagrafica_id;
+  } else {
+    const sel = document.getElementById("ndoc-clienti");
+    anaId = sel && sel.value;
+  }
+  if(!anaId) return false;
+  const a = await sb.from("anagrafiche").select("canale").eq("id",anaId).maybeSingle();
+  return !!(a.data && a.data.canale==="rivenditore");
+}
 async function cfgRiepilogo(){
+  CFG._rivenditore = await _cfgClienteRivenditore();
+  if(CFG._rivenditore && CFG.posata_da_noi){ CFG.posata_da_noi = false; }
   const tot = cfgTotale();
   // Vincoli quantità da archivio (validi anche per accessori: unico campo quantità)
   const _qMin = CFG._qtaMin||1;
@@ -4922,7 +4939,7 @@ async function cfgRiepilogo(){
   await calcolaImballo();
   const _imbTot = CFG._imballo_totale||0;
   // Porte (non accessori/pannelli): mostra la spunta "posata da noi" se la serie ha un imballo-posa
-  const _mostraPosa = !CFG._isAccessorio && !CFG._isPannelloBlindato;
+  const _mostraPosa = !CFG._isAccessorio && !CFG._isPannelloBlindato && !CFG._rivenditore;
   const desc = [
     CFG.nome_serie, CFG.nome_modello, CFG.nome_finitura,
     CFG.pannello_bugna?CFG.pannello_bugna:'',

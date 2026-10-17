@@ -633,8 +633,23 @@ def genera_workbook(data, template_path):
 
 # ── Logo overlay sul PDF ──────────────────────────────────────────────────
 
-def aggiungi_logo(pdf_path, logo_path):
-    """Sovrappone il logo su ogni pagina del PDF."""
+def _barcode_png(code):
+    """Code128 del numero documento (stesso formato della scheda di produzione)."""
+    try:
+        import barcode
+        from barcode.writer import ImageWriter
+    except Exception:
+        return None
+    buf = io.BytesIO()
+    bc = barcode.get('code128', code, writer=ImageWriter())
+    bc.write(buf, options={'module_height': 5.0, 'module_width': 0.25, 'quiet_zone': 1.0,
+                           'font_size': 7, 'text_distance': 3.0, 'dpi': 300, 'write_text': True})
+    buf.seek(0)
+    return buf
+
+
+def aggiungi_logo(pdf_path, logo_path, barcode_code=None):
+    """Sovrappone il logo (e il barcode del numero documento, in alto a destra) su ogni pagina del PDF."""
     if not os.path.exists(logo_path):
         print(f"Logo non trovato: {logo_path}", file=sys.stderr)
         return
@@ -645,6 +660,12 @@ def aggiungi_logo(pdf_path, logo_path):
 
         reader = PdfReader(pdf_path)
         writer = PdfWriter()
+        bc_img = None
+        if barcode_code:
+            png = _barcode_png(barcode_code)
+            if png:
+                from reportlab.lib.utils import ImageReader
+                bc_img = ImageReader(png)
 
         for page in reader.pages:
             w = float(page.mediabox.width)
@@ -654,6 +675,11 @@ def aggiungi_logo(pdf_path, logo_path):
             c.drawImage(logo_path, 14*mm, h - 35*mm,
                         width=28*mm, height=28*mm,
                         preserveAspectRatio=True, mask='auto')
+            if bc_img:
+                # in alto a destra, sopra la colonna P.IVA, allineato al bordo dei riquadri
+                bw, bh = 55*mm, 11*mm
+                c.drawImage(bc_img, w - 15*mm - bw, h - 4*mm - bh, width=bw, height=bh,
+                            preserveAspectRatio=True, anchor='ne')
             c.save()
             buf.seek(0)
             overlay = PdfReader(buf).pages[0]
@@ -738,7 +764,8 @@ def genera_preventivo(json_path, pdf_path):
         except: pass
     
     # Sovrapponi logo su ogni pagina
-    aggiungi_logo(pdf_path, LOGO_PATH)
+    numero_doc = str((data.get('documento') or {}).get('numero') or '').strip()
+    aggiungi_logo(pdf_path, LOGO_PATH, numero_doc or None)
     
     print(f"genera_pdf.py {VERSION} OK → {pdf_path}", file=sys.stderr)
 
