@@ -151,3 +151,11 @@ Formato: `## data — titolo`, **Area**, **Spunto**, **Stato** (`da valutare` / 
 **Area:** Conferme / Produzione / Logistica
 **Spunto:** Email automatiche al cliente per: lancio in produzione, slittamento della data di consegna/approntamento, commessa pronta (approntata). Tutte dal mittente ufficio@maxporte.it (come le conferme d'ordine); commerciale@maxporte.it resta solo per i preventivi.
 **Stato:** `fatto` — 11 ott: email (da ufficio@) proposte già compilate dopo lancio, commessa pronta e cambio settimana di approntamento
+
+---
+
+## 2026-07-12 (ripreso 18 ott) — Ottimizzazione ordine posizioni per la produzione
+**Area:** Produzione / Scheda di produzione
+**Spunto:** Prima del lancio, riordinare le posizioni della commessa per ridurre i cambi di setup e la confusione in reparto. Criteri definiti con Simone (luglio): 1) tipologia apertura (tutte le BAT insieme, poi CS, SI, SE…); 2) larghezza crescente; 3) altezza crescente; 4) spessore telaio crescente. Criteri aggiuntivi approvati in linea di principio: finitura (colori uguali consecutivi, utile per le laccate), modello, serratura.
+**Decisioni (luglio):** pulsante "Ottimizza per produzione" (non automatico): il documento commerciale tiene la numerazione voluta dal cliente (001, 002…), la scheda di produzione mostra le righe riordinate con la posizione cliente sempre visibile ("Pos. cliente 003"). Evidenziare nella scheda tutto ciò che è fuori standard: misure fuori standard (giallo), colori speciali RAL/NCS/Pantone (arancio), tipologie particolari FM/COM/Varsavia (rosso chiaro), accessori obbligatori come staffe e pinna (badge).
+**Stato:** `approvato` — da costruire (non ancora nel gestionale al 18 ott)
