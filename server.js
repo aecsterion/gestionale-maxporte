@@ -2348,7 +2348,14 @@ async function stampaSchedaProduzione(ordineId){
   if(!ord){ toast('Ordine non trovato','err'); return; }
   let zona='';
   if(ord.zona_trasporto_id){ const {data:z}=await sb.from('zone_trasporto').select('nome').eq('id',ord.zona_trasporto_id).single(); zona=z?.nome||''; }
-  const R=righe||[];
+  // Sequenza di produzione (calcolata al lancio); se assente si ricalcola ora
+  let R=righe||[];
+  if(R.length && R.some(r=>r.seq_produzione==null)){
+    await calcolaSequenzaProduzione(ordineId);
+    const {data:r2}=await sb.from('righe_ordine').select('*').eq('ordine_id',ordineId);
+    R=r2||R;
+  }
+  R=R.slice().sort((a,b)=>((a.seq_produzione??1e6)-(b.seq_produzione??1e6))||((a.riga_numero||0)-(b.riga_numero||0)));
   const isPorta=r=>r.codice_serie!=='ACC' && r.codice_serie!=='PAN-BL' && !!r.codice_apertura;
   const posizioni=R.map(r=>{
     const porta=isPorta(r);
@@ -6526,6 +6533,48 @@ async function salvaCategoriaApertura(codice, val){
   toast("Salvato","ok");
 }
 
+// ── SEQUENZA DI PRODUZIONE ────────────────────────────────────────────
+// Ordine di lavorazione delle posizioni, calcolato al lancio e salvato su ogni riga
+// (righe_ordine.seq_produzione). Criteri decisi con Simone: tipologia apertura, larghezza,
+// altezza, spessore telaio (crescenti); poi finitura, modello, serratura per raggruppare.
+// Il sopraluce automatico resta subito dopo la sua porta; accessori e pannelli in fondo.
+// Vale per tutto ciò che è interno; la posizione cliente (riga_numero) resta il riferimento.
+function _numSeq(v){ const n = parseFloat(String(v==null?"":v).replace(",", ".")); return isNaN(n) ? 1e9 : n; }
+function _cmpSeq(a, b){
+  const t = function(x){ return String(x||""); };
+  return t(a.codice_apertura).localeCompare(t(b.codice_apertura)) ||
+    _numSeq(a.larghezza_mm) - _numSeq(b.larghezza_mm) ||
+    _numSeq(a.altezza_mm) - _numSeq(b.altezza_mm) ||
+    _numSeq(a.spessore_muro_cm || a.spessore_mm) - _numSeq(b.spessore_muro_cm || b.spessore_mm) ||
+    t(a.codice_finitura).localeCompare(t(b.codice_finitura)) ||
+    t(a.codice_modello).localeCompare(t(b.codice_modello)) ||
+    t(a.codice_serratura).localeCompare(t(b.codice_serratura)) ||
+    (a.riga_numero||0) - (b.riga_numero||0);
+}
+async function calcolaSequenzaProduzione(ordineId){
+  const {data:righe} = await sb.from("righe_ordine").select("id,riga_numero,codice_serie,codice_apertura,larghezza_mm,altezza_mm,spessore_muro_cm,spessore_mm,codice_finitura,codice_modello,codice_serratura,collegamento_id,auto_sopraluce").eq("ordine_id",ordineId);
+  const R = righe || [];
+  const isAcc = function(r){ return r.codice_serie==="ACC" || r.codice_serie==="PAN-BL" || !r.codice_apertura; };
+  const sopra = R.filter(function(r){ return r.auto_sopraluce && r.collegamento_id; });
+  const porte = R.filter(function(r){ return !(r.auto_sopraluce && r.collegamento_id) && !isAcc(r); }).sort(_cmpSeq);
+  const altre = R.filter(function(r){ return !(r.auto_sopraluce && r.collegamento_id) && isAcc(r); }).sort(function(a,b){ return (a.riga_numero||0)-(b.riga_numero||0); });
+  const seq = []; const usati = {};
+  porte.forEach(function(p){
+    seq.push(p);
+    if(p.collegamento_id) sopra.filter(function(s){ return s.collegamento_id===p.collegamento_id; }).forEach(function(s){ seq.push(s); usati[s.id]=1; });
+  });
+  sopra.filter(function(s){ return !usati[s.id]; }).forEach(function(s){ seq.push(s); });
+  altre.forEach(function(a){ seq.push(a); });
+  await Promise.all(seq.map(function(r, i){ return sb.from("righe_ordine").update({seq_produzione:i+1}).eq("id",r.id); }));
+  return seq;
+}
+async function ottimizzaPerProduzione(ordineId){
+  const seq = await calcolaSequenzaProduzione(ordineId);
+  const elenco = seq.map(function(r){ return String(r.riga_numero||"").padStart(3,"0"); }).join(" › ");
+  toast("Sequenza di produzione aggiornata: " + elenco, "ok");
+  renderOrdineDetail(ordineId);
+}
+
 // Netto documento: sconti sulle righe, trasporto a prezzo pieno.
 // (nel DB totale_imponibile = somma righe + costo_trasporto)
 function nettoDoc(d){
@@ -6598,6 +6647,7 @@ async function lanciaInProduzione(id){
     toast('Scaricati '+n+' articoli coprifili','ok');
   }
   if(upd.fido_forzato_da) notifica({tipo:'fido', titolo:'Fido forzato: '+(ord.numero||''), testo:(ord.anagrafiche&&ord.anagrafiche.ragione_sociale||'')+' — lanciato in produzione oltre il fido da '+upd.fido_forzato_da, link_tipo:'ordine', link_id:id, ruoli:['admin','super_admin']});
+  await calcolaSequenzaProduzione(id);
   toast(upd.fido_forzato_da?'Lanciato in produzione (fido forzato)':'Lanciato in produzione','ok');
   renderOrdineDetail(id);
   apriComunicazioneOrdine(id,'lancio');
@@ -7008,6 +7058,7 @@ async function renderOrdineDetail(id){
       '<button class="btn btn-sm" onclick="esportaPDF(\\'ordine\\',\\''+id+'\\')">&#128196; Esporta PDF</button>'+
       bottoniApprovazione+
       (['in_produzione','pronto','evaso','spedito'].includes(ord.stato)?'<button class="btn btn-sm" onclick="stampaSchedaProduzione(\\''+id+'\\')">&#128196; Scheda produzione</button>':'')+
+      (ord.stato==='in_produzione'?'<button class="btn btn-sm" title="Ricalcola l\\'ordine di lavorazione delle posizioni (tipologia, larghezza, altezza, spessore telaio…)" onclick="ottimizzaPerProduzione(\\''+id+'\\')">&#8645; Ottimizza per produzione</button>':'')+
       (puoModificare?
         '<button class="btn btn-sm" onclick="apriModificaOrdine(\\''+id+'\\')" style="display:inline-flex;align-items:center;gap:5px">'+
         '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Modifica</button>'+
