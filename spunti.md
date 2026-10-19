@@ -160,3 +160,14 @@ Formato: `## data — titolo`, **Area**, **Spunto**, **Stato** (`da valutare` / 
 **Decisioni (luglio):** pulsante "Ottimizza per produzione" (non automatico): il documento commerciale tiene la numerazione voluta dal cliente (001, 002…), la scheda di produzione mostra le righe riordinate con la posizione cliente sempre visibile ("Pos. cliente 003"). Evidenziare nella scheda tutto ciò che è fuori standard: misure fuori standard (giallo), colori speciali RAL/NCS/Pantone (arancio), tipologie particolari FM/COM/Varsavia (rosso chiaro), accessori obbligatori come staffe e pinna (badge).
 **Deciso (19 ott):** l'ordine ottimizzato si calcola una volta al lancio e si salva su ogni riga (sequenza di produzione); vale per tutto ciò che è interno (scheda, terminali, packing list, ordine delle etichette). La posizione cliente resta sempre visibile e resta il riferimento su etichette collo e documenti al cliente. Ricalcolabile con il pulsante finché la produzione non è iniziata.
 **Stato:** `fatto` (v1, 19 ott) — proposta confermata da Simone; sequenza salvata in righe_ordine.seq_produzione al lancio, pulsante "Ottimizza per produzione" sulla conferma in produzione, scheda di produzione in sequenza con Pos = posizione cliente. RESTANO: evidenziazioni fuori standard nella scheda; uso della sequenza in terminali ed etichette quando li costruiamo.
+
+
+---
+
+## 2026-10-19 — Scorrevoli esterni/interni: abbinamento telaio e cassone non funzionante
+**Area:** Configuratore
+**Spunto (Simone):** le regole in Admin › Telaio e componenti › Scorrevoli esterni (telaio) e Scorrevoli interni (cassone) non sembrano funzionare.
+**Diagnosi (19 ott):** SE — la tabella scorrevoli_esterni non è MAI letta dal configuratore; per gli SE il configuratore cerca in regole_telaio la famiglia "SE", che non ha regole → nessuna spalla; inoltre scorrevoli_esterni non ha una colonna spalla (solo accessorio, mm, prezzi tutti vuoti). SI — scorrevoli_interni è letta ma lo spessore muro non serve: l'operatore sceglie il cassone a mano dall'elenco (90/100/108/125/150), prezzi vuoti → "Da definire".
+**Domande aperte per Simone (da riprendere alla prossima sessione):** 1) SE: quale spalla telaio, unica o per fascia di spessore? 2) SI: cassone scelto in automatico dallo spessore (il più piccolo che copre il muro)? 3) SI: oltre il cassone più grande si aggiunge un allargatore come per le battenti?
+**Nota dati:** regola CS 120→15 in regole_telaio ha "a" = 15 invece di 150 (da correggere da Simone).
+**Stato:** `approvato` — da riprendere (legato agli allargatori telaio)
