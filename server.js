@@ -7058,7 +7058,6 @@ async function renderOrdineDetail(id){
       '<button class="btn btn-sm" onclick="esportaPDF(\\'ordine\\',\\''+id+'\\')">&#128196; Esporta PDF</button>'+
       bottoniApprovazione+
       (['in_produzione','pronto','evaso','spedito'].includes(ord.stato)?'<button class="btn btn-sm" onclick="stampaSchedaProduzione(\\''+id+'\\')">&#128196; Scheda produzione</button>':'')+
-      (ord.stato==='in_produzione'?'<button class="btn btn-sm" title="Ricalcola l\\'ordine di lavorazione delle posizioni (tipologia, larghezza, altezza, spessore telaio…)" onclick="ottimizzaPerProduzione(\\''+id+'\\')">&#8645; Ottimizza per produzione</button>':'')+
       (puoModificare?
         '<button class="btn btn-sm" onclick="apriModificaOrdine(\\''+id+'\\')" style="display:inline-flex;align-items:center;gap:5px">'+
         '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Modifica</button>'+
