@@ -29,7 +29,7 @@ Formato: `## data — titolo`, **Area**, **Spunto**, **Stato** (`da valutare` / 
 ## 2026-09-06 — Step mantovana nel configuratore
 **Area:** Configuratore
 **Spunto:** Per le tipologie scorrevoli esterno muro, step di scelta del tipo di mantovana con supplemento per tipo.
-**Stato:** `approvato` — PRIORITÀ (18 ott): importante per la corretta configurazione di preventivi e ordini
+**Stato:** `fatto` (19 ott) — step Mantovana dopo i coprifili per le aperture SE…, tabella mantovane (TINTA/ALU, supplemento fisso da Admin › Telaio e componenti › Scorrevoli esterni), riepilogo, PDF, scheda produzione (note posizione). Restano: distinta base; "senza mantovana" quando arrivano gli scorrevoli speciali (colonna tipologie_apertura.senza_mantovana già pronta).
 **Decisioni (18 ott):** per ora due tipi: *in tinta* (stessa finitura della porta) e *in alluminio*; supplemento fisso per tipo; scelta obbligatoria per tutti gli scorrevoli esterno muro (anche doppia anta); "senza mantovana" solo per alcune tipologie di scorrevole esterno speciale, ancora da aggiungere al gestionale; la mantovana va sia nella scheda di produzione sia nella distinta.
 
 ---

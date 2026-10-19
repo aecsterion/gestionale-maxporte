@@ -1408,6 +1408,7 @@ async function buildPreventivoPayload(id){
       finitura_coprifili:(r.codice_finitura_telaio&&r.codice_finitura_telaio!==r.codice_finitura)?(r.nome_finitura_telaio||''):'',
       finitura_telaio:(r.codice_finitura_telaio&&r.codice_finitura_telaio!==r.codice_finitura)?(r.nome_finitura_telaio||''):'',
       prezzo_coprifili:r.prezzo_coprifili||0,
+      mantovana:r.nome_mantovana||'',prezzo_mantovana:r.prezzo_mantovana||0,
       imballo:r.codice_imballo?(_imbMap[r.codice_imballo]||r.codice_imballo):'',prezzo_imballo:r.prezzo_imballo_totale||0,
       prezzo_base:r.prezzo_base||0,prezzo_finitura:r.prezzo_finitura||0,
       prezzo_apertura:r.prezzo_apertura||0,prezzo_telaio:r.prezzo_telaio||0,
@@ -2362,7 +2363,7 @@ async function stampaSchedaProduzione(ordineId){
     const lav=[]; const c=r.coprifili_config;
     if(c&&typeof c==='object'){ if(c.spingere&&c.spingere.lavorazione) lav.push('Coprif. spingere: '+c.spingere.lavorazione); if(c.tirare&&c.tirare.lavorazione) lav.push('Coprif. tirare: '+c.tirare.lavorazione); }
     const sop = r.codice_modello==='SOP';
-    const note=[r.note_riga, sop&&r.nome_tipo_vetro?('Vetro: '+r.nome_tipo_vetro):'', r.stanza?('Stanza: '+r.stanza):'', ...lav].filter(Boolean).join(' — ');
+    const note=[r.note_riga, sop&&r.nome_tipo_vetro?('Vetro: '+r.nome_tipo_vetro):'', r.nome_mantovana?('Mantovana: '+r.nome_mantovana):'', r.stanza?('Stanza: '+r.stanza):'', ...lav].filter(Boolean).join(' — ');
     return {
       pos:r.riga_numero, modello:(r.nome_modello||'')+(r.codice_modello?' ('+r.codice_modello+')':''),
       finitura:r.nome_finitura||r.codice_finitura||'', l:r.larghezza_mm||'', h:r.altezza_mm||'',
@@ -2515,6 +2516,7 @@ function resetCFG(){
     pannello_bugna:null, colore_alu:null, colore_pietra:null,
     tipo_vetro:null, apertura:null, senso:null,
     serratura:null, cilindro:null, pomolino:null,
+    mantovana:null, nome_mantovana:'', p_mantovana:0,
     larghezza:null, altezza:null, misura_custom:false,
     spessore:null, spalla:null, accessorio_telaio:null,
     ferramenta:null, maniglia:null, colore_maniglia:null,
@@ -2651,7 +2653,7 @@ function cfgTotale(){
     (CFG.p_acc_telaio||0)+
     (CFG.p_ferramenta||0)+(CFG.p_maniglia||0)+(CFG.p_extra_incisioni||0)+
     (CFG.p_serratura||0)+(CFG.p_cilindro||0)+(CFG.p_pomolino||0)+
-    (CFG._p_varsavia||0)+(CFG.p_coprifili||0)
+    (CFG._p_varsavia||0)+(CFG.p_coprifili||0)+(_isScorrevoleEsterno()?(CFG.p_mantovana||0):0)
   )*100)/100;
 }
 
@@ -2707,6 +2709,7 @@ async function modificaRiga(tabella, rigaId, docId, mode, listino_in){
   CFG.colore_pietra=r.codice_colore_pietra||null; CFG.nome_colore_pietra=r.nome_colore_pietra||'';
   CFG.tipo_vetro=r.codice_tipo_vetro||null; CFG.nome_tipo_vetro=r.nome_tipo_vetro||'';
   CFG.apertura=r.codice_apertura||null; CFG.nome_apertura=r.nome_apertura||'';
+  CFG.mantovana=r.codice_mantovana||null; CFG.nome_mantovana=r.nome_mantovana||''; CFG.p_mantovana=parseFloat(r.prezzo_mantovana)||0;
   CFG.senso=r.senso_apertura||null;
   CFG.larghezza=r.larghezza_mm||null; CFG.altezza=r.altezza_mm||null;
   CFG.misura_custom=!!r.misura_custom;
@@ -2781,7 +2784,7 @@ function closeCfg(){
 let _cfgStepCorrente = 'serie';  // step attualmente mostrato (per il pulsante "Avanti")
 // Step che hanno già un pulsante "Avanti" proprio dentro la scheda: lì la barra
 // non deve mostrare un secondo Avanti (evita il doppione).
-const _STEP_CON_AVANTI_PROPRIO = ['finitura_telaio','opzioni','misure','spessore','coprifili','ferramenta','acc_misure','acc_sopraluce','acc_spessore','acc_pannello','acc_qta'];
+const _STEP_CON_AVANTI_PROPRIO = ['finitura_telaio','opzioni','misure','spessore','coprifili','mantovana','ferramenta','acc_misure','acc_sopraluce','acc_spessore','acc_pannello','acc_qta'];
 function updateCfgNav(step){
   const nav = document.getElementById('cfg-nav');
   if(!nav) return;
@@ -2809,6 +2812,7 @@ async function renderCfgStep(step){
   else if(step==='misure') await cfgMisure();
   else if(step==='spessore') await cfgSpessore();
   else if(step==='coprifili') await cfgCoprifili();
+  else if(step==='mantovana') await cfgMantovana();
   else if(step==='ferramenta') await cfgFerramenta();
   else if(step==='maniglia') await cfgManiglia();
   else if(step==='colore_maniglia') await cfgColoreManiglia();
@@ -2844,7 +2848,7 @@ function usaIndirizzoCliente(){
 }
 
 const CFG_STEPS = ['serie','modello','finitura','finitura_telaio','opzioni','apertura','serratura','misure','spessore','coprifili','ferramenta','maniglia','riepilogo'];
-const CFG_LABELS = {serie:'Serie',modello:'Modello',finitura:'Finitura',finitura_telaio:'Colore telaio',opzioni:'Opzioni',apertura:'Apertura',misure:'Misure',spessore:'Spessore muro',coprifili:'Coprifili',ferramenta:'Ferramenta',riepilogo:'Riepilogo'};
+const CFG_LABELS = {serie:'Serie',modello:'Modello',finitura:'Finitura',finitura_telaio:'Colore telaio',opzioni:'Opzioni',apertura:'Apertura',misure:'Misure',spessore:'Spessore muro',coprifili:'Coprifili',mantovana:'Mantovana',ferramenta:'Ferramenta',riepilogo:'Riepilogo'};
 
 // Step accessori
 const CFG_ACC_STEPS = {
@@ -2872,7 +2876,9 @@ function cfgSequenzaEffettiva(){
   if(haOpzioni) seq.push('opzioni');
   seq.push('apertura','serratura');
   if(CFG._richiede_cilindro) seq.push('cilindro');
-  seq.push('misure','spessore','coprifili','ferramenta');
+  seq.push('misure','spessore','coprifili');
+  if(_isScorrevoleEsterno()) seq.push('mantovana');
+  seq.push('ferramenta');
   if(!CFG._maniglia_esclusa) seq.push('maniglia','colore_maniglia');
   if(CFG._richiede_pomolino) seq.push('pomolino');
   seq.push('riepilogo');
@@ -4113,7 +4119,7 @@ function avanzaDaCoprifili(){
     if(!_altezzaSopraluce()){ toast('Sopraluce: inserisci un\\'altezza foro muro di almeno '+((parseInt(CFG.altezza)||0)+121)+' mm','err'); return; }
     if(!CFG._sop_vetro){ toast('Sopraluce: scegli il vetro','err'); return; }
   }
-  renderCfgStep('ferramenta');
+  renderCfgStep(_isScorrevoleEsterno() ? 'mantovana' : 'ferramenta');
 }
 // Costruisce la riga SOP dalla porta (riga = oggetto riga porta appena composto)
 async function costruisciRigaSopraluce(riga){
@@ -4978,6 +4984,7 @@ async function cfgRiepilogo(){
     CFG.p_telaio>0&&{label:'Telaio / Spalla ('+CFG.spalla+')',val:CFG.p_telaio},
     CFG.p_acc_telaio>0&&{label:'Accessorio telaio ('+CFG.accessorio_telaio+')',val:CFG.p_acc_telaio},
     (CFG.p_coprifili||0)>0&&{label:'Supplemento coprifili',val:CFG.p_coprifili},
+    _isScorrevoleEsterno()&&(CFG.p_mantovana||0)>0&&{label:'Mantovana '+(CFG.nome_mantovana||''),val:CFG.p_mantovana},
     p_doppia_eff>0&&{label:'Supplemento doppia anta'+(CFG.apertura==='CS2A'?' incl. €124':''),val:p_doppia_eff},
     p_fh_eff>0&&{label:'Supplemento fuori misura H'+(CFG._fuori_h_pct?\` (+\${CFG._fuori_h_pct}%)\`:''),val:p_fh_eff},
     p_fl_eff>0&&{label:'Supplemento fuori misura L (+'+CFG._fuori_l_pct+'%)',val:p_fl_eff},
@@ -5003,6 +5010,7 @@ async function cfgRiepilogo(){
       \${_imbTot>0?\`<tr><td style="padding:3px 0;color:var(--mid)">Imballo (\${CFG._imballo_desc})\${CFG._imballo_metodo==='a_scatola'?\` — \${Math.ceil((CFG.quantita||1)/Math.max(1,CFG._imballo_capienza||1))} scatola/e\`:''}</td><td style="text-align:right;font-weight:500">€ \${_imbTot.toLocaleString('it-IT',{minimumFractionDigits:2})}</td></tr>\`:''}
     </table>
     \${(CFG.finitura_telaio && CFG.finitura_telaio!==CFG.finitura)?\`<div style="font-size:11px;color:var(--mid);margin-bottom:4px">Colore telaio e coprifili: <strong>\${CFG.nome_finitura_telaio}</strong></div>\`:''}
+    \${(_isScorrevoleEsterno()&&CFG.nome_mantovana)?\`<div style="font-size:11px;color:var(--mid);margin-bottom:4px">Mantovana: <strong>\${CFG.nome_mantovana}</strong></div>\`:''}
     \${CFG.escludi_coprifili
       ? '<div style="font-size:11px;color:var(--mid);margin-bottom:12px">Coprifili: <strong>esclusi</strong></div>'
       : ((CFG.cf_larg_spingere||CFG.cf_larg_tirare)
@@ -5101,6 +5109,9 @@ async function aggiungiRigaAlDocumento(){
       colore_nome: CFG.nome_finitura_telaio || CFG.nome_finitura || null
     },
     prezzo_coprifili: CFG.escludi_coprifili ? 0 : (CFG.p_coprifili||0),
+    codice_mantovana: _isScorrevoleEsterno() ? (CFG.mantovana||null) : null,
+    nome_mantovana: _isScorrevoleEsterno() ? (CFG.nome_mantovana||null) : null,
+    prezzo_mantovana: _isScorrevoleEsterno() ? (CFG.p_mantovana||0) : 0,
     note_riga:CFG.note_riga,
     stanza:CFG.stanza||null
   };
@@ -5642,7 +5653,7 @@ async function salvaNuovoDoc(){
     };
 
     let docId, docNumero;
-    const RIGHE_FIELDS = ['codice_serie','nome_serie','codice_modello','nome_modello','codice_finitura','nome_finitura','pannello_bugna','codice_colore_alu','nome_colore_alu','codice_colore_pietra','nome_colore_pietra','codice_tipo_vetro','nome_tipo_vetro','codice_apertura','nome_apertura','senso_apertura','larghezza_mm','altezza_mm','misura_custom','spessore_muro_cm','codice_spalla','tipo_accessorio_telaio','codice_ferramenta','nome_ferramenta','codice_maniglia','nome_maniglia','codice_colore_maniglia','nome_colore_maniglia','prezzo_base','prezzo_vetro','prezzo_finitura','prezzo_bugna','prezzo_inserto','prezzo_apertura','prezzo_telaio','prezzo_accessorio_telaio','prezzo_ferramenta','prezzo_maniglia','prezzo_extra_incisioni','prezzo_unitario','quantita','sconto_riga','prezzo_totale_riga','note_riga','stanza','escludi_telaio','escludi_coprifili','coprifili_config','codice_imballo','prezzo_imballo_unitario','prezzo_imballo_totale','posata_da_noi','prezzo_coprifili','con_sopraluce','collegamento_id','auto_sopraluce','compat_approvate','spessore_mm','codice_finitura_telaio','nome_finitura_telaio','codice_serratura','nome_serratura','prezzo_serratura','codice_cilindro','nome_cilindro','prezzo_cilindro','codice_pomolino','nome_pomolino','prezzo_pomolino'];
+    const RIGHE_FIELDS = ['codice_serie','nome_serie','codice_modello','nome_modello','codice_finitura','nome_finitura','pannello_bugna','codice_colore_alu','nome_colore_alu','codice_colore_pietra','nome_colore_pietra','codice_tipo_vetro','nome_tipo_vetro','codice_apertura','nome_apertura','senso_apertura','larghezza_mm','altezza_mm','misura_custom','spessore_muro_cm','codice_spalla','tipo_accessorio_telaio','codice_ferramenta','nome_ferramenta','codice_maniglia','nome_maniglia','codice_colore_maniglia','nome_colore_maniglia','prezzo_base','prezzo_vetro','prezzo_finitura','prezzo_bugna','prezzo_inserto','prezzo_apertura','prezzo_telaio','prezzo_accessorio_telaio','prezzo_ferramenta','prezzo_maniglia','prezzo_extra_incisioni','prezzo_unitario','quantita','sconto_riga','prezzo_totale_riga','note_riga','stanza','escludi_telaio','escludi_coprifili','coprifili_config','codice_imballo','prezzo_imballo_unitario','prezzo_imballo_totale','posata_da_noi','prezzo_coprifili','con_sopraluce','collegamento_id','auto_sopraluce','compat_approvate','spessore_mm','codice_finitura_telaio','nome_finitura_telaio','codice_serratura','nome_serratura','prezzo_serratura','codice_cilindro','nome_cilindro','prezzo_cilindro','codice_pomolino','nome_pomolino','prezzo_pomolino','codice_mantovana','nome_mantovana','prezzo_mantovana'];
 
     if(editId){
       // MODIFICA — update del documento esistente (senza toccare numero/creato_da)
@@ -6573,6 +6584,72 @@ async function ottimizzaPerProduzione(ordineId){
   const elenco = seq.map(function(r){ return String(r.riga_numero||"").padStart(3,"0"); }).join(" › ");
   toast("Sequenza di produzione aggiornata: " + elenco, "ok");
   renderOrdineDetail(ordineId);
+}
+
+// ── MANTOVANA (scorrevoli esterno muro) ───────────────────────────────
+// Scelta obbligatoria per tutte le aperture SE…; "Senza mantovana" solo per le aperture
+// con la spunta senza_mantovana (scorrevoli speciali). Supplemento fisso per tipo.
+// "In tinta" = stessa finitura della porta.
+function _isScorrevoleEsterno(){ return String(CFG.apertura||"").indexOf("SE")===0; }
+async function cfgMantovana(){
+  const [rM, rA] = await Promise.all([
+    sb.from("mantovane").select("*").eq("attivo",true).order("ordine"),
+    sb.from("tipologie_apertura").select("senza_mantovana").eq("codice",CFG.apertura).maybeSingle()
+  ]);
+  const opz = (rM.data||[]).slice();
+  const senza = !!(rA.data && rA.data.senza_mantovana);
+  if(senza) opz.push({codice:"NESSUNA", nome:"Senza mantovana", supplemento:0, in_tinta:false});
+  const card = function(m){
+    const sel = CFG.mantovana===m.codice;
+    const sub = m.in_tinta ? ("Stessa finitura della porta" + (CFG.nome_finitura ? " — "+CFG.nome_finitura : "")) : (m.codice==="NESSUNA" ? "Solo per scorrevoli speciali" : "");
+    const sp = parseFloat(m.supplemento)||0;
+    return "<div onclick='selMantovana(&quot;"+_escH(m.codice)+"&quot;)' style='border:"+(sel?"2px solid var(--red)":"0.5px solid var(--border)")+";border-radius:var(--radius);padding:12px 14px;cursor:pointer;background:"+(sel?"var(--red-bg)":"var(--white)")+"'>"+
+      "<div style='font-size:13px;font-weight:500;color:"+(sel?"var(--red)":"var(--dark)")+"'>"+_escH(m.nome)+"</div>"+
+      (sub ? "<div style='font-size:11px;color:var(--mid);margin-top:2px'>"+_escH(sub)+"</div>" : "")+
+      "<div style='font-size:11px;color:var(--mid);margin-top:4px'>"+(sp>0 ? "+€ "+sp.toLocaleString("it-IT",{minimumFractionDigits:2}) : "Inclusa")+"</div></div>";
+  };
+  window._mantovaneOpz = opz;
+  // Riallinea nome/prezzo della scelta già fatta (es. finitura cambiata dopo)
+  const gia = opz.find(function(x){ return x.codice===CFG.mantovana; });
+  if(gia){ CFG.nome_mantovana = gia.codice==="NESSUNA" ? "Senza mantovana" : (gia.in_tinta ? (gia.nome + (CFG.nome_finitura ? " — "+CFG.nome_finitura : "")) : gia.nome); CFG.p_mantovana = parseFloat(gia.supplemento)||0; }
+  else if(CFG.mantovana){ CFG.mantovana = null; CFG.nome_mantovana = ""; CFG.p_mantovana = 0; }
+  document.getElementById("cfg-body").innerHTML =
+    "<div style='font-size:13px;font-weight:500;margin-bottom:4px'>Mantovana</div>"+
+    "<div style='font-size:12px;color:var(--mid);margin-bottom:12px'>Scorrevole esterno muro: scegli il tipo di mantovana.</div>"+
+    "<div style='display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:16px'>"+opz.map(card).join("")+"</div>"+
+    "<div style='display:flex;justify-content:flex-end'><button class='btn btn-red btn-sm' onclick='avanzaDaMantovana()'>Avanti →</button></div>";
+  cfgUpdatePrice();
+}
+function selMantovana(cod){
+  const m = (window._mantovaneOpz||[]).find(function(x){ return x.codice===cod; });
+  if(!m) return;
+  CFG.mantovana = m.codice;
+  CFG.nome_mantovana = m.codice==="NESSUNA" ? "Senza mantovana" : (m.in_tinta ? (m.nome + (CFG.nome_finitura ? " — "+CFG.nome_finitura : "")) : m.nome);
+  CFG.p_mantovana = parseFloat(m.supplemento)||0;
+  cfgMantovana();
+}
+function avanzaDaMantovana(){
+  if(!CFG.mantovana){ toast("Scegli la mantovana","err"); return; }
+  renderCfgStep("ferramenta");
+}
+async function adminMantovaneCard(){
+  const {data} = await sb.from("mantovane").select("*").order("ordine");
+  const inp = "padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px";
+  const rows = (data||[]).map(function(m){
+    return "<tr><td><code style='font-size:11px'>"+_escH(m.codice)+"</code></td>"+
+      "<td><input type='text' value='"+_escH(m.nome)+"' style='width:180px;"+inp+"' onchange='adminSalva(&quot;mantovane&quot;,"+m.id+",&quot;nome&quot;,this.value)'></td>"+
+      "<td><input type='number' min='0' step='0.01' value='"+(m.supplemento||0)+"' style='width:90px;"+inp+"' onchange='salvaSupplementoMantovana("+m.id+",this.value)'> €</td>"+
+      "<td style='text-align:center'><input type='checkbox' "+(m.in_tinta?"checked":"")+" onchange='adminSalva(&quot;mantovane&quot;,"+m.id+",&quot;in_tinta&quot;,this.checked)'></td>"+
+      "<td style='text-align:center'><input type='checkbox' "+(m.attivo?"checked":"")+" onchange='adminSalva(&quot;mantovane&quot;,"+m.id+",&quot;attivo&quot;,this.checked)'></td></tr>";
+  }).join("");
+  return adminCard("Mantovane (scorrevoli esterno muro)",
+    "<table><thead><tr><th>Codice</th><th>Nome</th><th>Supplemento</th><th style='text-align:center'>In tinta</th><th style='text-align:center'>Attiva</th></tr></thead><tbody>"+rows+"</tbody></table>"+
+    "<div style='font-size:11px;color:var(--mid);margin-top:8px'>Supplemento fisso a porta. “In tinta” = stessa finitura della porta. La scelta è obbligatoria per tutti gli scorrevoli esterno muro; “Senza mantovana” compare solo per le aperture con la spunta “Senza mantovana” (scorrevoli speciali).</div>");
+}
+async function salvaSupplementoMantovana(id, val){
+  const {error} = await sb.from("mantovane").update({supplemento: parseFloat(val)||0}).eq("id",id);
+  if(error){ toast("Errore: "+error.message,"err"); return; }
+  toast("Salvato","ok");
 }
 
 // Netto documento: sconti sulle righe, trasporto a prezzo pieno.
@@ -8092,7 +8169,7 @@ async function adminScorExt(){
   document.getElementById('admin-sub').innerHTML=adminCard('Scorrevoli esterni — prezzi per fascia spessore',\`
     <div style="margin-bottom:10px"><button class="btn btn-red btn-sm" onclick="nuovoScorExt()">+ Aggiungi</button></div>
     <table><thead><tr><th>Tipologia</th><th>Spessore muro (mm)</th><th>Accessorio</th><th>Mm</th><th>Prezzo A (€)</th><th>Prezzo P (€)</th><th></th></tr></thead>
-    <tbody>\${rows}</tbody></table>\`);
+    <tbody>\${rows}</tbody></table>\`) + (await adminMantovaneCard());
 }
 
 async function nuovoScorExt(){
@@ -9616,6 +9693,8 @@ async function costruisciPayloadPDF(tipo, id, soloNetti) {
         finitura_coprifili: (r.codice_finitura_telaio && r.codice_finitura_telaio!==r.codice_finitura) ? (r.nome_finitura_telaio||'') : '',
         finitura_telaio: (r.codice_finitura_telaio && r.codice_finitura_telaio!==r.codice_finitura) ? (r.nome_finitura_telaio||'') : '',
         prezzo_coprifili: r.prezzo_coprifili || 0,
+        mantovana: r.nome_mantovana || '',
+        prezzo_mantovana: r.prezzo_mantovana || 0,
         // Imballo per posizione
         imballo: r.codice_imballo ? (_imbMap[r.codice_imballo] || r.codice_imballo) : '',
         prezzo_imballo: r.prezzo_imballo_totale || 0,
