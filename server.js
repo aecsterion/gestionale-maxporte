@@ -3915,7 +3915,7 @@ async function calcolaTelaio(spessore, fam){
   const {data:spalla} = await sb.from('telai_spalle')
     .select('*').eq('codice',regola.codice_spalla).eq('famiglia_apertura',fam).maybeSingle();
   const prezzoSpalla = spalla?.[\`prezzo_\${listino().toLowerCase()}\`]||0;
-  const prezzoAcc = regola[\`prezzo_access_\${listino()}\`]||0;
+  const prezzoAcc = parseFloat(regola[\`prezzo_access_\${listino().toLowerCase()}\`])||0;
 
   CFG.spalla=regola.codice_spalla;
   CFG.accessorio_telaio=regola.tipo_accessorio!=='nessuno'?regola.tipo_accessorio:null;
@@ -6652,6 +6652,38 @@ async function salvaSupplementoMantovana(id, val){
   toast("Salvato","ok");
 }
 
+// Form in linea per una nuova regola spessore → telaio (al posto dei prompt)
+function _formNuovaRegola(){
+  const inp = "padding:5px 8px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:12px";
+  return "<div style='display:flex;gap:6px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px;padding-bottom:12px;border-bottom:0.5px solid var(--border)'>"+
+    "<label style='font-size:11px;color:var(--mid)'>Famiglia<br><input id='nr-fam' placeholder='BAT' style='width:70px;text-transform:uppercase;"+inp+"'></label>"+
+    "<label style='font-size:11px;color:var(--mid)'>Spessore da (mm)<br><input id='nr-da' type='number' style='width:80px;"+inp+"'></label>"+
+    "<label style='font-size:11px;color:var(--mid)'>a (mm)<br><input id='nr-a' type='number' style='width:80px;"+inp+"'></label>"+
+    "<label style='font-size:11px;color:var(--mid)'>Spalla<br><input id='nr-spalla' placeholder='107_B32' style='width:100px;"+inp+"'></label>"+
+    "<label style='font-size:11px;color:var(--mid)'>Accessorio<br><select id='nr-acc' style='"+inp+"'><option value='nessuno'>nessuno</option><option value='allargamento'>allargamento</option><option value='rifilatura'>rifilatura</option></select></label>"+
+    "<label style='font-size:11px;color:var(--mid)'>Mm<br><input id='nr-mm' type='number' style='width:65px;"+inp+"'></label>"+
+    "<label style='font-size:11px;color:var(--mid)'>Costo A €<br><input id='nr-pa' type='number' step='0.01' style='width:75px;"+inp+"'></label>"+
+    "<label style='font-size:11px;color:var(--mid)'>Costo P €<br><input id='nr-pp' type='number' step='0.01' style='width:75px;"+inp+"'></label>"+
+    "<button class='btn btn-red btn-sm' onclick='salvaNuovaRegola()'>+ Aggiungi regola</button></div>";
+}
+async function salvaNuovaRegola(){
+  const v = function(id){ const el = document.getElementById(id); return el ? String(el.value).trim() : ""; };
+  const num = function(x){ const n = parseFloat(String(x).replace(",", ".")); return isNaN(n) ? null : n; };
+  const rec = {
+    famiglia_apertura: v("nr-fam").toUpperCase(), spessore_da_cm: num(v("nr-da")), spessore_a_cm: num(v("nr-a")),
+    codice_spalla: v("nr-spalla"), tipo_accessorio: v("nr-acc") || "nessuno", cm_accessorio: num(v("nr-mm")),
+    prezzo_access_a: num(v("nr-pa")), prezzo_access_p: num(v("nr-pp"))
+  };
+  if(!rec.famiglia_apertura || rec.spessore_da_cm==null || rec.spessore_a_cm==null || !rec.codice_spalla){ toast("Compila famiglia, spessore da/a e spalla","err"); return; }
+  if(rec.spessore_a_cm < rec.spessore_da_cm){ toast("Lo spessore «a» è minore di «da»","err"); return; }
+  const {data, error} = await sb.from("regole_telaio").insert([rec]).select("id").single();
+  if(error){ toast("Errore: "+error.message,"err"); return; }
+  window._regolaNuovaId = data && data.id;
+  toast("Regola aggiunta: "+rec.famiglia_apertura+" "+rec.spessore_da_cm+"–"+rec.spessore_a_cm+" mm (evidenziata in giallo)","ok");
+  await adminRegole();
+  const el = document.getElementById("regola-nuova"); if(el) el.scrollIntoView({behavior:"smooth", block:"center"});
+}
+
 // Netto documento: sconti sulle righe, trasporto a prezzo pieno.
 // (nel DB totale_imponibile = somma righe + costo_trasporto)
 function nettoDoc(d){
@@ -8116,7 +8148,7 @@ async function nuovaSpalla(){
 
 async function adminRegole(){
   const {data} = await sb.from('regole_telaio').select('*').order('famiglia_apertura').order('spessore_da_cm');
-  const rows=(data||[]).map(r=>\`<tr>
+  const rows=(data||[]).map(r=>\`<tr \${r.id===window._regolaNuovaId?'id="regola-nuova" style="background:#fff6d6"':''}>
     <td>\${inlineInput(r.famiglia_apertura,\`adminSalva('regole_telaio','\${r.id}','famiglia_apertura',this.value)\`,'70px','text')}</td>
     <td style="display:flex;gap:4px;align-items:center">
       \${inlineInput(r.spessore_da_cm,\`adminSalva('regole_telaio','\${r.id}','spessore_da_cm',this.value)\`,'55px','number')}
@@ -8127,13 +8159,14 @@ async function adminRegole(){
     <td>\${inlineInput(r.codice_spalla,\`adminSalva('regole_telaio','\${r.id}','codice_spalla',this.value)\`,'90px','text')}</td>
     <td>\${inlineInput(r.tipo_accessorio||'',\`adminSalva('regole_telaio','\${r.id}','tipo_accessorio',this.value)\`,'90px','text','—')}</td>
     <td>\${inlineInput(r.cm_accessorio||'',\`adminSalva('regole_telaio','\${r.id}','cm_accessorio',this.value)\`,'55px','number','—')}</td>
-    <td>\${inlineInput(r.prezzo_access_A??'',\`adminSalva('regole_telaio','\${r.id}','prezzo_access_A',this.value)\`,'70px','number','€')}</td>
-    <td>\${inlineInput(r.prezzo_access_P??'',\`adminSalva('regole_telaio','\${r.id}','prezzo_access_P',this.value)\`,'70px','number','€')}</td>
+    <td>\${inlineInput(r.prezzo_access_a??'',\`adminSalva('regole_telaio','\${r.id}','prezzo_access_a',this.value)\`,'70px','number','€')}</td>
+    <td>\${inlineInput(r.prezzo_access_p??'',\`adminSalva('regole_telaio','\${r.id}','prezzo_access_p',this.value)\`,'70px','number','€')}</td>
     <td>\${inlineInput(r.note||'',\`adminSalva('regole_telaio','\${r.id}','note',this.value)\`,'120px','text','—')}</td>
     <td><button onclick="eliminaRigaAdmin('regole_telaio','\${r.id}','adminRegole')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px">×</button></td>
   </tr>\`).join('');
   document.getElementById('admin-sub').innerHTML=adminCard('Regole abbinamento spessore → telaio',\`
-    <div style="margin-bottom:10px"><button class="btn btn-red btn-sm" onclick="nuovaRegola()">+ Aggiungi regola</button></div>
+    \${_formNuovaRegola()}
+    <div style="font-size:11px;color:var(--mid);margin-bottom:8px">Le regole sono ordinate per famiglia e spessore: una regola nuova compare nel suo gruppo (evidenziata in giallo), non in fondo.</div>
     <div style="overflow-x:auto"><table>
       <thead><tr><th>Famiglia</th><th>Spessore (mm)</th><th>Spalla</th><th>Accessorio</th><th>Mm</th><th>Costo A (€)</th><th>Costo P (€)</th><th>Note</th><th></th></tr></thead>
       <tbody>\${rows}</tbody>
@@ -9350,7 +9383,7 @@ async function adminSalva(tabella, id, campo, valore){
   const numericFields=['sovrapprezzo_a','sovrapprezzo_p','prezzo_a','prezzo_p','prezzo_base',
     'prezzo_vetro','prezzo_extra_incisioni','sovrapprezzo_bugna_A','sovrapprezzo_bugna_P',
     'maggiorazione_pct','spalla_cm','spessore_da_cm','spessore_a_cm','cm_accessorio',
-    'prezzo_access_A','prezzo_access_P','spalla_cassone_cm','quantita',
+    'prezzo_access_A','prezzo_access_P','prezzo_access_a','prezzo_access_p','spalla_cassone_cm','quantita',
     'percentuale_provvigione','sconto_base_pct','sconto_max_pct',
     'prezzo','min_porte','max_porte','prezzo_proprio','prezzo_corriere',
     'supplemento','ordine','larghezza_spingere','larghezza_tirare','aste_spingere','aste_tirare',
