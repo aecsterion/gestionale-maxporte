@@ -3878,29 +3878,9 @@ async function calcolaTelaio(spessore, fam){
   if(!sp||sp<5){ document.getElementById('cfg-telaio-result').innerHTML=''; return; }
   CFG.spessore=sp;
 
-  // Per scorrevoli interni usiamo logica cassone
-  if(fam==='SI'){
-    const {data:kits} = await sb.from('scorrevoli_interni')
-      .select('*').eq('codice_apertura',CFG.apertura).order('spalla_cassone_cm');
-    if(!kits||kits.length===0){
-      document.getElementById('cfg-telaio-result').innerHTML=\`<div style="background:var(--amber-bg);border-radius:var(--radius);padding:10px;font-size:12px;color:var(--amber-tx)">Nessun kit cassone configurato per questa tipologia.</div>\`;
-      return;
-    }
-    let html=\`<div style="font-size:12px;font-weight:500;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.4px;color:var(--mid)">Seleziona il cassone</div>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">\`;
-    kits.forEach(k=>{
-      const prezzo = k[\`prezzo_\${listino().toLowerCase()}\`]||0;
-      html+=\`<div onclick="selCassone('\${k.kit_telaio_codice}',\${prezzo},'\${k.codice_cassone}')"
-        style="border:\${CFG.spalla===k.kit_telaio_codice?'2px solid var(--red)':'0.5px solid var(--border)'};border-radius:var(--radius);padding:8px 10px;cursor:pointer;background:\${CFG.spalla===k.kit_telaio_codice?'var(--red-bg)':'var(--white)'}">
-        <div style="font-size:12px;font-weight:500">\${k.codice_cassone}</div>
-        <div style="font-size:11px;color:var(--mid)">\${k.spalla_cassone_cm} cm</div>
-        <div style="font-size:12px;color:var(--red);font-weight:500">\${prezzo?'€ '+prezzo:'Da definire'}</div>
-      </div>\`;
-    });
-    html+='</div>';
-    document.getElementById('cfg-telaio-result').innerHTML=html;
-    return;
-  }
+  // Scorrevoli: regole dedicate (Admin › Telaio e componenti › Scorrevoli interni/esterni)
+  if(fam==='SI'){ await _calcTelaioSI(sp); return; }
+  if(fam==='SE'){ await _calcTelaioSE(sp); return; }
 
   // Per tutti gli altri: regole_telaio
   const {data:regole} = await sb.from('regole_telaio')
@@ -6682,6 +6662,82 @@ async function salvaNuovaRegola(){
   toast("Regola aggiunta: "+rec.famiglia_apertura+" "+rec.spessore_da_cm+"–"+rec.spessore_a_cm+" mm (evidenziata in giallo)","ok");
   await adminRegole();
   const el = document.getElementById("regola-nuova"); if(el) el.scrollIntoView({behavior:"smooth", block:"center"});
+}
+
+// ── Telaio scorrevoli: regole da Admin › Telaio e componenti ──────────
+// SE: tabella scorrevoli_esterni (per codice apertura e fascia di spessore: accessorio, mm, prezzo).
+// SI: tabella scorrevoli_interni (cassoni): scelta automatica del cassone più piccolo che copre
+//     lo spessore del muro; l'operatore può comunque sceglierne un altro.
+function _boxTelaio(titolo, sotto, prezzo, extra){
+  return "<div style='background:var(--beige);border-radius:var(--radius);padding:12px 14px;border:0.5px solid var(--border)'>"+
+    "<div style='font-size:12px;font-weight:500;margin-bottom:6px;color:var(--mid);text-transform:uppercase;letter-spacing:0.4px'>Telaio abbinato automaticamente</div>"+
+    "<div style='display:flex;justify-content:space-between;align-items:center'><div><div style='font-size:14px;font-weight:500'>"+titolo+"</div>"+
+    (sotto ? "<div style='font-size:11px;color:var(--mid);margin-top:2px'>"+sotto+"</div>" : "")+"</div>"+
+    "<div style='font-size:14px;font-weight:500;color:var(--red)'>"+(prezzo ? "€ "+prezzo : "Prezzo da definire")+"</div></div>"+(extra||"")+"</div>";
+}
+async function _calcTelaioSE(sp){
+  const out = document.getElementById("cfg-telaio-result");
+  const {data} = await sb.from("scorrevoli_esterni").select("*").eq("codice_apertura",CFG.apertura).lte("spessore_da_cm",sp).gte("spessore_a_cm",sp);
+  const r = data && data[0];
+  if(!r){
+    CFG.spalla=null; CFG.accessorio_telaio=null; CFG.p_telaio=0; CFG.p_acc_telaio=0;
+    out.innerHTML = "<div style='background:var(--red-bg);border-radius:var(--radius);padding:10px;font-size:12px;color:var(--red-tx)'>Nessuna regola per "+_escH(CFG.apertura)+" con spessore "+sp+" mm — aggiungila in Admin › Telaio e componenti › Scorrevoli esterni, o contatta l'ufficio tecnico.</div>";
+    cfgUpdatePrice(); return;
+  }
+  const prezzo = parseFloat(r["prezzo_"+listino().toLowerCase()])||0;
+  CFG.spalla = "SE " + r.spessore_da_cm + "-" + r.spessore_a_cm;
+  CFG.accessorio_telaio = (r.tipo_accessorio && r.tipo_accessorio!=="nessuno") ? r.tipo_accessorio + (r.cm_accessorio ? " "+parseFloat(r.cm_accessorio)+" mm" : "") : null;
+  CFG.p_telaio = prezzo; CFG.p_acc_telaio = 0;
+  const acc = CFG.accessorio_telaio ? "<div style='margin-top:8px;padding:8px 10px;background:var(--amber-bg);border-radius:var(--radius);font-size:12px;color:var(--amber-tx)'>Accessorio necessario: <strong>"+_escH(CFG.accessorio_telaio)+"</strong></div>" : "";
+  out.innerHTML = _boxTelaio("Scorrevole esterno — fascia "+r.spessore_da_cm+"–"+r.spessore_a_cm+" mm", "", prezzo, acc);
+  cfgUpdatePrice();
+}
+async function _calcTelaioSI(sp){
+  const out = document.getElementById("cfg-telaio-result");
+  const {data} = await sb.from("scorrevoli_interni").select("*").eq("codice_apertura",CFG.apertura).order("spalla_cassone_cm");
+  const kits = data || [];
+  if(!kits.length){
+    out.innerHTML = "<div style='background:var(--amber-bg);border-radius:var(--radius);padding:10px;font-size:12px;color:var(--amber-tx)'>Nessun cassone configurato per "+_escH(CFG.apertura)+" — aggiungilo in Admin › Telaio e componenti › Scorrevoli interni.</div>";
+    return;
+  }
+  window._kitsSI = kits;
+  // Spessore cambiato → si torna alla scelta automatica
+  if(CFG._cassone_sp !== sp){
+    const giaScelto = CFG._cassone_sp===undefined && CFG.spalla && kits.some(function(k){ return k.kit_telaio_codice===CFG.spalla; });
+    CFG._cassone_manuale = !!giaScelto;
+    CFG._cassone_sp = sp;
+  }
+  let avviso = "";
+  if(!CFG._cassone_manuale){
+    let k = kits.find(function(x){ return (parseFloat(x.spalla_cassone_cm)||0) >= sp; });
+    if(!k){ k = kits[kits.length-1]; avviso = "Il muro ("+sp+" mm) è più spesso del cassone più grande ("+k.spalla_cassone_cm+" mm): verificare con l'ufficio tecnico."; }
+    _applicaCassone(k);
+  }
+  const sel = kits.find(function(x){ return x.kit_telaio_codice===CFG.spalla; });
+  const cards = kits.map(function(k){
+    const on = CFG.spalla===k.kit_telaio_codice;
+    const pr = parseFloat(k["prezzo_"+listino().toLowerCase()])||0;
+    return "<div onclick='scegliCassone(&quot;"+_escH(k.kit_telaio_codice)+"&quot;)' style='border:"+(on?"2px solid var(--red)":"0.5px solid var(--border)")+";border-radius:var(--radius);padding:8px 10px;cursor:pointer;background:"+(on?"var(--red-bg)":"var(--white)")+"'>"+
+      "<div style='font-size:12px;font-weight:500'>"+_escH(k.codice_cassone)+"</div><div style='font-size:11px;color:var(--mid)'>"+k.spalla_cassone_cm+" mm</div>"+
+      "<div style='font-size:12px;color:var(--red);font-weight:500'>"+(pr ? "€ "+pr : "Da definire")+"</div></div>";
+  }).join("");
+  out.innerHTML =
+    (sel ? _boxTelaio("Cassone "+_escH(sel.codice_cassone)+" — "+sel.spalla_cassone_cm+" mm", "Kit "+_escH(sel.kit_telaio_codice)+(CFG._cassone_manuale ? " · scelto a mano" : " · il più piccolo che copre il muro"), CFG.p_telaio, "") : "")+
+    (avviso ? "<div style='margin-top:8px;padding:8px 10px;background:var(--amber-bg);border-radius:var(--radius);font-size:12px;color:var(--amber-tx)'>"+avviso+"</div>" : "")+
+    "<div style='font-size:11px;color:var(--mid);margin:10px 0 6px'>Altri cassoni disponibili (clic per cambiare):</div>"+
+    "<div style='display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:6px'>"+cards+"</div>";
+  cfgUpdatePrice();
+}
+function _applicaCassone(k){
+  CFG.spalla = k.kit_telaio_codice; CFG._cassone = k.codice_cassone;
+  CFG.p_telaio = parseFloat(k["prezzo_"+listino().toLowerCase()])||0;
+  CFG.accessorio_telaio = null; CFG.p_acc_telaio = 0;
+}
+function scegliCassone(kit){
+  const k = (window._kitsSI||[]).find(function(x){ return x.kit_telaio_codice===kit; });
+  if(!k) return;
+  _applicaCassone(k); CFG._cassone_manuale = true;
+  _calcTelaioSI(CFG._cassone_sp);
 }
 
 // Netto documento: sconti sulle righe, trasporto a prezzo pieno.
