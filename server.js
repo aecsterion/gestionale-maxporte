@@ -1402,7 +1402,7 @@ async function buildPreventivoPayload(id){
       colore_maniglia:r.nome_colore_maniglia||'',vetro:r.nome_tipo_vetro||'',
       bugna:maiuscola(r.pannello_bugna),colore_inserto:r.nome_colore_alu||r.nome_colore_pietra||'',
       stanza:r.stanza||'',note_riga:r.note_riga||'',
-      lavorazioni_extra:r.lavorazioni_extra||'',
+      lavorazioni_extra:r.lavorazioni_extra||'',prezzo_lavorazioni_extra:r.prezzo_lavorazioni_extra||0,
       prezzo_cilindro:r.prezzo_cilindro||0,prezzo_pomolino:r.prezzo_pomolino||0,
       coprifili:descrCoprifiliPDF(r),
       finitura_coprifili:(r.codice_finitura_telaio&&r.codice_finitura_telaio!==r.codice_finitura)?(r.nome_finitura_telaio||''):'',
@@ -2664,7 +2664,8 @@ function cfgTotale(){
     (CFG.p_acc_telaio||0)+
     (CFG.p_ferramenta||0)+(CFG.p_maniglia||0)+(CFG.p_extra_incisioni||0)+
     (CFG.p_serratura||0)+(CFG.p_cilindro||0)+(CFG.p_pomolino||0)+
-    (CFG._p_varsavia||0)+(CFG.p_coprifili||0)+(_isScorrevoleEsterno()?(CFG.p_mantovana||0):0)
+    (CFG._p_varsavia||0)+(CFG.p_coprifili||0)+(_isScorrevoleEsterno()?(CFG.p_mantovana||0):0)+
+    (CFG._isPannelloBlindato?(CFG.p_taglio_pannello||0):0)
   )*100)/100;
 }
 
@@ -2721,6 +2722,7 @@ async function modificaRiga(tabella, rigaId, docId, mode, listino_in){
   CFG.tipo_vetro=r.codice_tipo_vetro||null; CFG.nome_tipo_vetro=r.nome_tipo_vetro||'';
   CFG.apertura=r.codice_apertura||null; CFG.nome_apertura=r.nome_apertura||'';
   CFG.mantovana=r.codice_mantovana||null; CFG.nome_mantovana=r.nome_mantovana||''; CFG.p_mantovana=parseFloat(r.prezzo_mantovana)||0;
+  if(r.codice_serie==='PAN-BL'){ CFG._pannelloTipo = r.lavorazioni_extra ? 'taglio' : 'intero'; CFG.p_taglio_pannello=parseFloat(r.prezzo_lavorazioni_extra)||0; }
   CFG.senso=r.senso_apertura||null;
   CFG.larghezza=r.larghezza_mm||null; CFG.altezza=r.altezza_mm||null;
   CFG.misura_custom=!!r.misura_custom;
@@ -4822,7 +4824,8 @@ async function cfgAccPannello(){
     \'<div><label style="font-size:12px;color:var(--mid);display:block;margin-bottom:6px">Senso apertura</label>\'+
     \'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px" id="sensi-grid">\'+sensiHtml+\'</div>\'+
     \'<input type="hidden" id="pannello-senso" value="\'+sensoSel+\'"></div>\'+
-    \'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">\'+
+    _htmlTipoPannello()+
+    \'<div id="pannello-misure-box" style="display:\'+(CFG._pannelloTipo===\'taglio\'?\'block\':\'none\')+\'"><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">\'+
     \'<div><label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Larghezza (mm)\'+( lMax?\' &mdash; max \'+lMax+\' mm\':\'\')+\'</label>\'+
     \'<input type="number" id="pan-l" value="\'+( CFG.larghezza||\'\' )+\'" placeholder="es. 900"\'+
     \' style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px"\'+
@@ -4831,7 +4834,7 @@ async function cfgAccPannello(){
     \'<input type="number" id="pan-a" value="\'+( CFG.altezza||\'\' )+\'" placeholder="es. 2200"\'+
     \' style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:14px"\'+
     \' oninput="aggiornaZoccoliPreview(this.value)"></div></div>\'+
-    \'<div id="zoccoli-preview"></div>\'+
+    \'<div id="zoccoli-preview"></div></div>\'+
     \'<button class="btn btn-red" onclick="selAccPannello()">Avanti &rarr;</button></div>\';
   if(CFG.altezza) aggiornaZoccoliPreview(CFG.altezza);
 }
@@ -4890,22 +4893,22 @@ function selTipoPannello(tipo){
     const title = el.querySelector('div');
     if(title) title.style.color = sel?'var(--red)':'var(--dark)';
   });
-  const misureBox = document.getElementById('pannello-misure-box');
-  if(misureBox) misureBox.style.display = tipo==='taglio'?'grid':'none';
+  _applicaTipoPannelloUI();
 }
 
 async function selAccPannello(){
   const senso=document.getElementById(\'pannello-senso\')?.value;
   if(!senso){toast(\'Seleziona il senso di apertura\',\'err\');return;}
-  const l=parseInt(document.getElementById(\'pan-l\')?.value||0);
-  const a=parseInt(document.getElementById(\'pan-a\')?.value||0);
-  if(!l||!a){toast(\'Inserisci larghezza e altezza\',\'err\');return;}
   const panMag=CFG._panMag;
+  const intero = CFG._pannelloTipo!==\'taglio\' && !!panMag;
+  const l= intero ? parseInt(panMag.larghezza_mm||0) : parseInt(document.getElementById(\'pan-l\')?.value||0);
+  const a= intero ? parseInt(panMag.altezza_mm||0) : parseInt(document.getElementById(\'pan-a\')?.value||0);
+  if(!l||!a){toast(\'Inserisci larghezza e altezza\',\'err\');return;}
   const hMag=panMag?.altezza_mm||0;
   const lMax=panMag?.larghezza_mm||0;
   if(lMax>0&&l>lMax){toast(\'Larghezza massima: \'+lMax+\' mm\',\'err\');return;}
   CFG.senso=senso;CFG.larghezza=l;CFG.altezza=a;CFG.misura_custom=false;
-  CFG.p_extra=CFG._suppTaglioPannello||0;
+  CFG.p_taglio_pannello = intero ? 0 : (CFG._suppTaglioPannello||0);
   CFG._zoccoliAuto=0;CFG._hTaglioPannello=a;CFG._hMagPannello=hMag;
   if(hMag>0&&a>hMag){
     let z=0; while(hMag+z*80<a) z++;
@@ -4977,6 +4980,7 @@ async function cfgRiepilogo(){
     CFG.p_acc_telaio>0&&{label:'Accessorio telaio ('+CFG.accessorio_telaio+')',val:CFG.p_acc_telaio},
     (CFG.p_coprifili||0)>0&&{label:'Supplemento coprifili',val:CFG.p_coprifili},
     _isScorrevoleEsterno()&&(CFG.p_mantovana||0)>0&&{label:'Mantovana '+(CFG.nome_mantovana||''),val:CFG.p_mantovana},
+    CFG._isPannelloBlindato&&(CFG.p_taglio_pannello||0)>0&&{label:'Taglio a misura',val:CFG.p_taglio_pannello},
     p_doppia_eff>0&&{label:'Supplemento doppia anta'+(CFG.apertura==='CS2A'?' incl. €124':''),val:p_doppia_eff},
     p_fh_eff>0&&{label:'Supplemento fuori misura H'+(CFG._fuori_h_pct?\` (+\${CFG._fuori_h_pct}%)\`:''),val:p_fh_eff},
     p_fl_eff>0&&{label:'Supplemento fuori misura L (+'+CFG._fuori_l_pct+'%)',val:p_fl_eff},
@@ -5104,6 +5108,8 @@ async function aggiungiRigaAlDocumento(){
     codice_mantovana: _isScorrevoleEsterno() ? (CFG.mantovana||null) : null,
     nome_mantovana: _isScorrevoleEsterno() ? (CFG.nome_mantovana||null) : null,
     prezzo_mantovana: _isScorrevoleEsterno() ? (CFG.p_mantovana||0) : 0,
+    lavorazioni_extra: (CFG._isPannelloBlindato && CFG._pannelloTipo==='taglio') ? 'Taglio a misura' : null,
+    prezzo_lavorazioni_extra: CFG._isPannelloBlindato ? (CFG.p_taglio_pannello||0) : 0,
     note_riga:CFG.note_riga,
     stanza:CFG.stanza||null
   };
@@ -5645,7 +5651,7 @@ async function salvaNuovoDoc(){
     };
 
     let docId, docNumero;
-    const RIGHE_FIELDS = ['codice_serie','nome_serie','codice_modello','nome_modello','codice_finitura','nome_finitura','pannello_bugna','codice_colore_alu','nome_colore_alu','codice_colore_pietra','nome_colore_pietra','codice_tipo_vetro','nome_tipo_vetro','codice_apertura','nome_apertura','senso_apertura','larghezza_mm','altezza_mm','misura_custom','spessore_muro_cm','codice_spalla','tipo_accessorio_telaio','codice_ferramenta','nome_ferramenta','codice_maniglia','nome_maniglia','codice_colore_maniglia','nome_colore_maniglia','prezzo_base','prezzo_vetro','prezzo_finitura','prezzo_bugna','prezzo_inserto','prezzo_apertura','prezzo_telaio','prezzo_accessorio_telaio','prezzo_ferramenta','prezzo_maniglia','prezzo_extra_incisioni','prezzo_unitario','quantita','sconto_riga','prezzo_totale_riga','note_riga','stanza','escludi_telaio','escludi_coprifili','coprifili_config','codice_imballo','prezzo_imballo_unitario','prezzo_imballo_totale','posata_da_noi','prezzo_coprifili','con_sopraluce','collegamento_id','auto_sopraluce','compat_approvate','spessore_mm','codice_finitura_telaio','nome_finitura_telaio','codice_serratura','nome_serratura','prezzo_serratura','codice_cilindro','nome_cilindro','prezzo_cilindro','codice_pomolino','nome_pomolino','prezzo_pomolino','codice_mantovana','nome_mantovana','prezzo_mantovana'];
+    const RIGHE_FIELDS = ['codice_serie','nome_serie','codice_modello','nome_modello','codice_finitura','nome_finitura','pannello_bugna','codice_colore_alu','nome_colore_alu','codice_colore_pietra','nome_colore_pietra','codice_tipo_vetro','nome_tipo_vetro','codice_apertura','nome_apertura','senso_apertura','larghezza_mm','altezza_mm','misura_custom','spessore_muro_cm','codice_spalla','tipo_accessorio_telaio','codice_ferramenta','nome_ferramenta','codice_maniglia','nome_maniglia','codice_colore_maniglia','nome_colore_maniglia','prezzo_base','prezzo_vetro','prezzo_finitura','prezzo_bugna','prezzo_inserto','prezzo_apertura','prezzo_telaio','prezzo_accessorio_telaio','prezzo_ferramenta','prezzo_maniglia','prezzo_extra_incisioni','prezzo_unitario','quantita','sconto_riga','prezzo_totale_riga','note_riga','stanza','escludi_telaio','escludi_coprifili','coprifili_config','codice_imballo','prezzo_imballo_unitario','prezzo_imballo_totale','posata_da_noi','prezzo_coprifili','con_sopraluce','collegamento_id','auto_sopraluce','compat_approvate','spessore_mm','codice_finitura_telaio','nome_finitura_telaio','codice_serratura','nome_serratura','prezzo_serratura','codice_cilindro','nome_cilindro','prezzo_cilindro','codice_pomolino','nome_pomolino','prezzo_pomolino','codice_mantovana','nome_mantovana','prezzo_mantovana','lavorazioni_extra','prezzo_lavorazioni_extra'];
 
     if(editId){
       // MODIFICA — update del documento esistente (senza toccare numero/creato_da)
@@ -6750,6 +6756,29 @@ function scegliCassone(kit){
   if(!k) return;
   _applicaCassone(k); CFG._cassone_manuale = true;
   _calcTelaioSI(CFG._cassone_sp);
+}
+
+// Pannello blindato: scelta intero (misura di magazzino) / tagliato a misura (+ supplemento
+// da Admin › Lavorazioni extra). Il supplemento entra nel prezzo e va sulla riga come lavorazione extra.
+function _htmlTipoPannello(){
+  const pm = CFG._panMag;
+  if(!pm){ CFG._pannelloTipo = "taglio"; }
+  if(!CFG._pannelloTipo) CFG._pannelloTipo = "intero";
+  const supp = CFG._suppTaglioPannello||0;
+  const card = function(t, titolo, sotto, dis){
+    const on = CFG._pannelloTipo===t;
+    return "<div id='tipo-"+t+"' onclick='"+(dis?"":"selTipoPannello(&quot;"+t+"&quot;)")+"' style='border:"+(on?"2px solid var(--red)":"0.5px solid var(--border)")+";border-radius:var(--radius);padding:10px 12px;cursor:"+(dis?"not-allowed":"pointer")+";opacity:"+(dis?"0.5":"1")+";background:"+(on?"var(--red-bg)":"var(--white)")+"'>"+
+      "<div style='font-size:13px;font-weight:500;color:"+(on?"var(--red)":"var(--dark)")+"'>"+titolo+"</div><div style='font-size:11px;color:var(--mid);margin-top:2px'>"+sotto+"</div></div>";
+  };
+  return "<div><label style='font-size:12px;color:var(--mid);display:block;margin-bottom:6px'>Pannello</label>"+
+    "<div style='display:grid;grid-template-columns:1fr 1fr;gap:8px'>"+
+    card("intero","Intero", pm ? ("Misura di magazzino "+pm.altezza_mm+" × "+pm.larghezza_mm+" mm — nessun supplemento") : "Nessun pannello a magazzino per questa finitura", !pm)+
+    card("taglio","Tagliato a misura", supp>0 ? ("+€ "+supp.toLocaleString("it-IT",{minimumFractionDigits:2})+" a pannello") : "Supplemento da impostare in Admin › Lavorazioni extra", false)+
+    "</div></div>";
+}
+function _applicaTipoPannelloUI(){
+  const box = document.getElementById("pannello-misure-box");
+  if(box) box.style.display = CFG._pannelloTipo==="taglio" ? "block" : "none";
 }
 
 // Netto documento: sconti sulle righe, trasporto a prezzo pieno.
@@ -9799,6 +9828,8 @@ async function costruisciPayloadPDF(tipo, id, soloNetti) {
         prezzo_coprifili: r.prezzo_coprifili || 0,
         mantovana: r.nome_mantovana || '',
         prezzo_mantovana: r.prezzo_mantovana || 0,
+        lavorazioni_extra: r.lavorazioni_extra || '',
+        prezzo_lavorazioni_extra: r.prezzo_lavorazioni_extra || 0,
         // Imballo per posizione
         imballo: r.codice_imballo ? (_imbMap[r.codice_imballo] || r.codice_imballo) : '',
         prezzo_imballo: r.prezzo_imballo_totale || 0,
