@@ -9481,7 +9481,8 @@ async function salvaPrezzo(codModello, listino, campo, valore){
     if(error){toast('Errore: '+error.message,'err');return;}
   }
   toast('Prezzo salvato','ok');
-  adminModelli();
+  // Resta nella pagina da cui si è salvato (Prezzi e listini o Catalogo › Modelli)
+  if(adminSub==='listini') adminListini(); else adminModelli();
 }
 
 async function toggleCampo(tabella, id, campo, attualeStr){
