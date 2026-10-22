@@ -3607,7 +3607,8 @@ async function loadSerieLaccate(){
 function famigliaSerie(){
   const s=CFG.serie||'';
   const f=CFG.finitura||'';
-  if(f==='GREZZA') return 'GREZZA';
+  // Grezza: in archivio la finitura è codice GRZ / nome "GREZZA" (prima si controllava solo il codice GREZZA, mai usato)
+  if(f==='GREZZA' || f==='GRZ' || /^grezz/i.test(CFG.nome_finitura||'')) return 'GREZZA';
   if(isSerieLaccata(s)) return 'LACCATA';
   return 'TAM_MAS';
 }
