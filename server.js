@@ -4799,13 +4799,18 @@ async function cfgAccPannello(){
     .select(\'altezza_mm,larghezza_mm,spessore_mm,giacenza\')
     .eq(\'categoria\',\'PAN-BL\').eq(\'codice_finitura\',CFG.finitura||\'\').order(\'altezza_mm\',{ascending:false});
   CFG._panMag=magP?.[0]||null;
+  // Articolo non ancora in anagrafica magazzino: misura standard dei pannelli (Admin › Misure std › PAN-BL)
+  if(!CFG._panMag){
+    const {data:ms}=await sb.from('misure_standard').select('larghezza_mm,altezza_mm').eq('famiglia_apertura','PAN-BL').order('altezza_mm',{ascending:false}).limit(1);
+    if(ms&&ms[0]) CFG._panMag={altezza_mm:ms[0].altezza_mm, larghezza_mm:ms[0].larghezza_mm, giacenza:null, _standard:true};
+  }
   const hMag=CFG._panMag?.altezza_mm||0;
   const lMax=CFG._panMag?.larghezza_mm||0;
   const sensi=[\'Interno DX\',\'Esterno DX\',\'Interno SX\',\'Esterno SX\',\'Nessuno\'];
   const sensoSel=CFG.senso||\'\' ;
   var infoMag=CFG._panMag
     ?\'<div style="background:var(--beige);border-radius:var(--radius);padding:10px 14px;font-size:12px;margin-bottom:14px;border:0.5px solid var(--border)">\'+
-      \'<strong>Pannello a magazzino:</strong> \'+hMag+\' x \'+lMax+\' mm\'+
+      \'<strong>\'+(CFG._panMag._standard?\'Misura standard pannello\':\'Pannello a magazzino\')+\':</strong> \'+hMag+\' x \'+lMax+\' mm\'+
       (CFG._panMag.giacenza!=null?\' &mdash; Giacenza: <strong>\'+CFG._panMag.giacenza+\' pz</strong>\':\'\')+\'</div>\'
     :\'<div style="background:var(--amber-bg);border-radius:var(--radius);padding:10px 14px;font-size:12px;margin-bottom:14px;color:var(--amber-tx)">\'+
       \'Nessun pannello per la finitura <strong>\'+( CFG.finitura||\'\' )+\'</strong>.</div>\';
@@ -4900,7 +4905,8 @@ async function selAccPannello(){
   const senso=document.getElementById(\'pannello-senso\')?.value;
   if(!senso){toast(\'Seleziona il senso di apertura\',\'err\');return;}
   const panMag=CFG._panMag;
-  const intero = CFG._pannelloTipo!==\'taglio\' && !!panMag;
+  const intero = CFG._pannelloTipo!==\'taglio\';
+  if(intero && !panMag){toast(\'Manca la misura del pannello intero: impostala in Admin › Misure std (PAN-BL) o scegli Tagliato a misura\',\'err\');return;}
   const l= intero ? parseInt(panMag.larghezza_mm||0) : parseInt(document.getElementById(\'pan-l\')?.value||0);
   const a= intero ? parseInt(panMag.altezza_mm||0) : parseInt(document.getElementById(\'pan-a\')?.value||0);
   if(!l||!a){toast(\'Inserisci larghezza e altezza\',\'err\');return;}
@@ -6762,7 +6768,6 @@ function scegliCassone(kit){
 // da Admin › Lavorazioni extra). Il supplemento entra nel prezzo e va sulla riga come lavorazione extra.
 function _htmlTipoPannello(){
   const pm = CFG._panMag;
-  if(!pm){ CFG._pannelloTipo = "taglio"; }
   if(!CFG._pannelloTipo) CFG._pannelloTipo = "intero";
   const supp = CFG._suppTaglioPannello||0;
   const card = function(t, titolo, sotto, dis){
@@ -6772,7 +6777,7 @@ function _htmlTipoPannello(){
   };
   return "<div><label style='font-size:12px;color:var(--mid);display:block;margin-bottom:6px'>Pannello</label>"+
     "<div style='display:grid;grid-template-columns:1fr 1fr;gap:8px'>"+
-    card("intero","Intero", pm ? ("Misura di magazzino "+pm.altezza_mm+" × "+pm.larghezza_mm+" mm — nessun supplemento") : "Nessun pannello a magazzino per questa finitura", !pm)+
+    card("intero","Intero", pm ? ("Misura "+pm.altezza_mm+" × "+pm.larghezza_mm+" mm — nessun supplemento") : "Misura intera da definire in Admin › Misure std (PAN-BL)", false)+
     card("taglio","Tagliato a misura", supp>0 ? ("+€ "+supp.toLocaleString("it-IT",{minimumFractionDigits:2})+" a pannello") : "Supplemento da impostare in Admin › Lavorazioni extra", false)+
     "</div></div>";
 }
