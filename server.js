@@ -3816,12 +3816,23 @@ async function avanzaASpessore(){
 }
 
 async function cfgSpessore(){
-  const fam = CFG.apertura?.startsWith('SI')?'SI':
+  // Famiglia dall'archivio aperture (Catalogo › Aperture). Prima era dedotta dal codice e tutto ciò
+  // che non era SI/SE/FM/COM/ROTO/CS finiva nelle regole BAT (es. SALOON V/V).
+  // Se una famiglia non ha regole telaio proprie si usano quelle BAT.
+  let fam = CFG.apertura?.startsWith('SI')?'SI':
     CFG.apertura?.startsWith('SE')?'SE':
     CFG.apertura?.startsWith('FM')?'FM':
     CFG.apertura==='COM'?'COM':
     CFG.apertura==='ROTO'?'ROTO':
     CFG.apertura?.startsWith('CS')?'CS':'BAT';
+  if(CFG.apertura && !['SI','SE','FM'].includes(fam)){
+    const {data:ta} = await sb.from('tipologie_apertura').select('famiglia').eq('codice',CFG.apertura).maybeSingle();
+    const famDb = ta && ta.famiglia;
+    if(famDb && famDb!==fam){
+      const {count} = await sb.from('regole_telaio').select('id',{count:'exact',head:true}).eq('famiglia_apertura',famDb);
+      if(count>0) fam = famDb;
+    }
+  }
 
   // Filo muro: telaio in alluminio a misura unica, compreso nel prezzo della porta.
   // Nessuna domanda spessore, nessuna spalla/prezzo telaio separato.
