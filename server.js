@@ -7564,7 +7564,7 @@ async function adminModelli(){
     <button class="btn btn-red btn-sm" onclick="nuovoModello('\${serieFilter}')">+ Aggiungi modello</button>
   </div>
   \${adminCard(\`Modelli — \${serieFilter}\`,\`
-    <div style="font-size:11px;color:var(--mid);margin-bottom:8px">Flag cliccabili: <b>V</b>=vetro <b>P</b>=pannello/bugna <b>A</b>=inserto alluminio <b>I</b>=inserto pietra <b>T</b>=pantografatura</div>
+    <div style="font-size:11px;color:var(--mid);margin-bottom:8px">Flag cliccabili: <b>V</b>=vetro <b>P</b>=pannello/bugna <b>A</b>=inserto alluminio <b>I</b>=inserto pietra <b>T</b>=pantografatura · I prezzi A/P, vetro e incisioni sono gli stessi di <b>Prezzi e listini › Listini A e P</b>: modificarli qui o lì è uguale.</div>
     <div style="overflow-x:auto"><table>
       <thead><tr><th>Codice</th><th>Nome</th><th>Serie</th><th>Variante</th><th>Flag</th><th>Prezzo A</th><th>Prezzo P</th><th>Vetro A</th><th>Extra incis.</th><th>Staffe A</th><th>Staffe P</th><th>Q.min</th><th>Step</th><th>Img</th><th>Stato</th><th></th></tr></thead>
       <tbody>\${rows}</tbody>
@@ -8080,6 +8080,7 @@ async function adminListini(){
     </tr>\`;
   }).join('');
   document.getElementById('admin-sub').innerHTML=adminCard('Listini A e P — prezzi base e vetro',\`
+    <div style="font-size:11px;color:var(--mid);margin-bottom:8px">Sono gli stessi prezzi di <b>Catalogo › Modelli</b>: modificarli qui o lì è uguale.</div>
     <div style="overflow-x:auto"><table>
       <thead><tr><th>Serie</th><th>Codice</th><th>Modello</th><th>Base A (€)</th><th>Base P (€)</th><th>Vetro A</th><th>Vetro P</th><th>Incis. A</th><th>Stato</th></tr></thead>
       <tbody>\${rows}</tbody>
