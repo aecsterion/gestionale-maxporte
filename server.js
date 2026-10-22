@@ -7480,6 +7480,7 @@ async function adminSerie(){
     <td><select onchange="adminSalva('serie','\${s.id}','codice_imballo_posa',this.value)" style="padding:3px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:11px">\${imbOpts(s.codice_imballo_posa)}</select></td>
     <td style="text-align:center"><input type="checkbox" \${s.imballo_fragile?'checked':''} onchange="toggleCampo('serie','\${s.id}','imballo_fragile',\${!!s.imballo_fragile})" title="Prodotti fragili/vetro: applica supplemento"></td>
     <td style="text-align:center"><input type="checkbox" \${s.blindata?'checked':''} onchange="toggleCampo('serie','\${s.id}','blindata',\${!!s.blindata})" title="Porte blindate: nel trasporto contano a prezzo blindata"></td>
+    <td style="text-align:center"><input type="checkbox" \${s.e_laccata?'checked':''} onchange="toggleCampo('serie','\${s.id}','e_laccata',\${!!s.e_laccata})" title="Serie laccata: finiture a fascia/percentuale e supplementi COM/FM del gruppo Laccate"></td>
     <td>
       \${s.immagine_url?\`<img src="\${s.immagine_url}" style="width:36px;height:36px;object-fit:cover;border-radius:4px;margin-right:6px">\`:'<span style="font-size:11px;color:var(--mid)">—</span>'}
       <label style="cursor:pointer"><input type="file" accept="image/*" style="display:none" onchange="uploadImmagine('serie','\${s.id}',this)"><span class="btn btn-sm" style="font-size:11px">📷</span></label>
@@ -7488,9 +7489,9 @@ async function adminSerie(){
     <td><button onclick="eliminaRigaAdmin('serie','\${s.id}','adminSerie')" style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:16px" title="Elimina">×</button></td>
   </tr>\`).join('');
   document.getElementById('admin-sub').innerHTML=adminCard('Serie',\`
-    <table><thead><tr><th>Codice</th><th>Nome</th><th>Descrizione</th><th>Imballo</th><th>Imballo se posata</th><th style="text-align:center" title="Fragile / vetro">Fragile</th><th style="text-align:center" title="Porte blindate (trasporto)">Blindata</th><th>Immagine</th><th>Stato</th><th></th></tr></thead>
+    <table><thead><tr><th>Codice</th><th>Nome</th><th>Descrizione</th><th>Imballo</th><th>Imballo se posata</th><th style="text-align:center" title="Fragile / vetro">Fragile</th><th style="text-align:center" title="Porte blindate (trasporto)">Blindata</th><th style="text-align:center" title="Serie laccata">Laccata</th><th>Immagine</th><th>Stato</th><th></th></tr></thead>
     <tbody>\${rows}</tbody></table>
-    <div style="font-size:11px;color:var(--mid);margin-top:8px">"Imballo" = imballo di default della serie. "Imballo se posata" = imballo alternativo per le porte posate da noi. "Fragile" = aggiunge il supplemento fragili/vetro. "Blindata" = nel trasporto le porte della serie contano a prezzo porta blindata.</div>\`,
+    <div style="font-size:11px;color:var(--mid);margin-top:8px">"Imballo" = imballo di default della serie. "Imballo se posata" = imballo alternativo per le porte posate da noi. "Fragile" = aggiunge il supplemento fragili/vetro. "Blindata" = nel trasporto le porte della serie contano a prezzo porta blindata. "Laccata" = le finiture si prezzano a fascia/percentuale e i supplementi COM/FM usano il gruppo Laccate (altrimenti Tamburate + Massellate).</div>\`,
     \`<button class="btn btn-red btn-sm" onclick="nuovaRiga('serie',{codice:'NUOVA',nome:'Nuova serie',attiva:true},'adminSerie')">+ Aggiungi serie</button>\`);
 }
 
