@@ -2363,7 +2363,18 @@ async function stampaSchedaProduzione(ordineId){
     const lav=[]; const c=r.coprifili_config;
     if(c&&typeof c==='object'){ if(c.spingere&&c.spingere.lavorazione) lav.push('Coprif. spingere: '+c.spingere.lavorazione); if(c.tirare&&c.tirare.lavorazione) lav.push('Coprif. tirare: '+c.tirare.lavorazione); }
     const sop = r.codice_modello==='SOP';
-    const note=[r.note_riga, sop&&r.nome_tipo_vetro?('Vetro: '+r.nome_tipo_vetro):'', r.nome_mantovana?('Mantovana: '+r.nome_mantovana):'', r.stanza?('Stanza: '+r.stanza):'', ...lav].filter(Boolean).join(' — ');
+    // Fuori standard da evidenziare (decisione luglio 2026): misure fuori standard (giallo),
+    // colori speciali (arancio), tipologie particolari FM/COM/Varsavia (rosso chiaro), accessori obbligatori (nota)
+    const _spec=(cod,nome)=>cod==='SPECIALE' || /\\b(RAL|NCS|PANTONE)\\b/i.test(nome||'');
+    const _var = r.codice_modello==='VAR' && /^S[IE]/.test(r.codice_apertura||'');
+    const evid={};
+    if(r.misura_custom){ evid.S='giallo'; evid.U='giallo'; }
+    if(_spec(r.codice_finitura,r.nome_finitura)) evid.K='arancio';
+    if(r.codice_finitura_telaio && r.codice_finitura_telaio!==r.codice_finitura && _spec(r.codice_finitura_telaio,r.nome_finitura_telaio)) evid.AS='arancio';
+    if(/^(FM|COM)/.test(r.codice_apertura||'') || _var) evid.AC='rosso';
+    const obbl = _var ? '● STAFFE VARSAVIA OBBLIGATORIE' : '';
+    if(obbl) evid.BD='rosso';
+    const note=[obbl, r.note_riga, sop&&r.nome_tipo_vetro?('Vetro: '+r.nome_tipo_vetro):'', r.nome_mantovana?('Mantovana: '+r.nome_mantovana):'', r.stanza?('Stanza: '+r.stanza):'', ...lav].filter(Boolean).join(' — ');
     return {
       pos:r.riga_numero, modello:(r.nome_modello||'')+(r.codice_modello?' ('+r.codice_modello+')':''),
       finitura:r.nome_finitura||r.codice_finitura||'', l:r.larghezza_mm||'', h:r.altezza_mm||'',
@@ -2374,7 +2385,7 @@ async function stampaSchedaProduzione(ordineId){
       telaio: porta ? (r.escludi_telaio?'NO':(r.codice_spalla||'')) : (sop?(r.codice_spalla||''):''),
       finitura_telaio: ((porta||sop) && !r.escludi_telaio && (porta||r.codice_spalla)) ? (r.nome_finitura_telaio||r.nome_finitura||'') : '',
       coprifili: porta ? _descrCoprifiliScheda(r) : '',
-      note
+      note, evidenzia: evid
     };
   });
   // Packing list

@@ -16,6 +16,7 @@ import openpyxl
 from openpyxl.drawing.image import Image as XLImage
 from openpyxl.utils import get_column_letter, column_index_from_string
 from openpyxl.worksheet.cell_range import CellRange
+from openpyxl.styles import PatternFill, Font, Alignment
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 TEMPLATE = os.path.join(BASE, 'template_produzione.xlsx')
@@ -30,6 +31,11 @@ POS_COLS = [
 POS_ROW = 9            # riga dati modello nel template
 POS_ROW_H = 19.75
 LAST_COL = 61          # BI
+
+# Evidenziazioni fuori standard (colonna → colore dal payload 'evidenzia')
+EVID_COLORI = {'giallo': 'FFE45C', 'arancio': 'FFD199', 'rosso': 'F8C4C0'}
+LEGENDA = ('Legenda:  giallo = misura fuori standard  ·  arancio = colore speciale (RAL/NCS/Pantone)  ·  '
+           'rosso chiaro = tipologia particolare (FM, COM, Varsavia) o accessorio obbligatorio')
 
 # packing list: blocchi (col. inizio, col. fine, mappa cella→campo)
 PK_ROW = 11
@@ -185,8 +191,24 @@ def build_scheda(ws, t, posizioni):
             c.value = s(p.get(key))
             if c.alignment.wrap_text:
                 lines = max(lines, est_lines(c.value, _chars_per_line(ws, POS_ROW, col, c)))
+            colore = EVID_COLORI.get((p.get('evidenzia') or {}).get(col, ''))
+            if colore:
+                c.fill = PatternFill('solid', start_color=colore, end_color=colore)
+                f = c.font
+                c.font = Font(name=f.name, size=f.sz, bold=True, italic=f.i, color=f.color)
         ws.row_dimensions[r].height = max(POS_ROW_H, 12.5 * lines + 5)
     last = POS_ROW + n - 1
+    if any(p.get('evidenzia') for p in posizioni):
+        last += 1
+        for m in list(ws.merged_cells.ranges):
+            if m.min_row <= last <= m.max_row:
+                ws.unmerge_cells(str(m))
+        ws.merge_cells(f'A{last}:BI{last}')
+        lc = ws[f'A{last}']
+        lc.value = LEGENDA
+        lc.font = Font(name='Calibri', size=8, italic=True, color='666666')
+        lc.alignment = Alignment(horizontal='left', vertical='center', wrap_text=False)
+        ws.row_dimensions[last].height = 14
     ws.print_area = f'A1:BI{last}'
     ws.print_title_rows = '1:8'
 
