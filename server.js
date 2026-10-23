@@ -6757,7 +6757,7 @@ async function _calcTelaioSI(sp){
       "<div style='font-size:12px;color:var(--red);font-weight:500'>"+(pr ? "€ "+pr : "Da definire")+"</div></div>";
   }).join("");
   out.innerHTML =
-    (sel ? _boxTelaio("Cassone "+_escH(sel.codice_cassone)+" — "+sel.spalla_cassone_cm+" mm", "Kit "+_escH(sel.kit_telaio_codice)+(CFG._cassone_manuale ? " · scelto a mano" : " · il più piccolo che copre il muro"), CFG.p_telaio, "") : "")+
+    (sel ? _boxTelaio("Kit "+_escH(sel.kit_telaio_codice), "", CFG.p_telaio, "") : "")+
     (avviso ? "<div style='margin-top:8px;padding:8px 10px;background:var(--amber-bg);border-radius:var(--radius);font-size:12px;color:var(--amber-tx)'>"+avviso+"</div>" : "")+
     "<div style='font-size:11px;color:var(--mid);margin:10px 0 6px'>Altri cassoni disponibili (clic per cambiare):</div>"+
     "<div style='display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:6px'>"+cards+"</div>";
