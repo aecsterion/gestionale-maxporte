@@ -171,3 +171,10 @@ Formato: `## data — titolo`, **Area**, **Spunto**, **Stato** (`da valutare` / 
 **Domande aperte per Simone (da riprendere alla prossima sessione):** 1) SE: quale spalla telaio, unica o per fascia di spessore? 2) SI: cassone scelto in automatico dallo spessore (il più piccolo che copre il muro)? 3) SI: oltre il cassone più grande si aggiunge un allargatore come per le battenti?
 **Nota dati:** regola CS 120→15 in regole_telaio ha "a" = 15 invece di 150 (da correggere da Simone).
 **Stato:** `fatto` (21 ott) — Simone: le risposte sono già nelle tabelle admin. SE ora legge scorrevoli_esterni (codice apertura + fascia spessore → accessorio/mm/prezzo fascia; telaio registrato come "SE da-a"); SI sceglie in automatico il cassone più piccolo che copre il muro (oltre il più grande: avviso), scelta manuale ancora possibile.
+
+---
+
+## 2026-10-23 — PROMEMORIA per la prossima sessione
+**Area:** Compatibilità
+**Spunto (Simone):** ricordargli che deve finire di configurare le compatibilità apertura → maniglia per le tipologie scorrevoli (Admin › Compatibilità).
+**Stato:** `promemoria` — da ricordare a inizio prossima sessione scritta
