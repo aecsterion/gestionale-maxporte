@@ -4837,10 +4837,10 @@ async function cfgAccPannello(){
     \'<button class="btn btn-sm" onclick="renderCfgStep(&apos;finitura&apos;)">&larr; Indietro</button>\'+
     \'</div>\'+infoMag+
     \'<div style="display:grid;gap:14px;max-width:440px">\'+
-    \'<div><label style="font-size:12px;color:var(--mid);display:block;margin-bottom:6px">Senso apertura</label>\'+
+    _htmlTipoPannello()+
+    \'<div id="sensi-box"><label style="font-size:12px;color:var(--mid);display:block;margin-bottom:6px">Senso apertura <span id="sensi-nota" style="font-size:11px"></span></label>\'+
     \'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px" id="sensi-grid">\'+sensiHtml+\'</div>\'+
     \'<input type="hidden" id="pannello-senso" value="\'+sensoSel+\'"></div>\'+
-    _htmlTipoPannello()+
     \'<div id="pannello-misure-box" style="display:\'+(CFG._pannelloTipo===\'taglio\'?\'block\':\'none\')+\'"><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">\'+
     \'<div><label style="font-size:12px;color:var(--mid);display:block;margin-bottom:4px">Larghezza (mm)\'+( lMax?\' &mdash; max \'+lMax+\' mm\':\'\')+\'</label>\'+
     \'<input type="number" id="pan-l" value="\'+( CFG.larghezza||\'\' )+\'" placeholder="es. 900"\'+
@@ -4852,6 +4852,7 @@ async function cfgAccPannello(){
     \' oninput="aggiornaZoccoliPreview(this.value)"></div></div>\'+
     \'<div id="zoccoli-preview"></div></div>\'+
     \'<button class="btn btn-red" onclick="selAccPannello()">Avanti &rarr;</button></div>\';
+  _applicaTipoPannelloUI();
   if(CFG.altezza) aggiornaZoccoliPreview(CFG.altezza);
 }
 
@@ -6793,8 +6794,15 @@ function _htmlTipoPannello(){
     "</div></div>";
 }
 function _applicaTipoPannelloUI(){
+  const taglio = CFG._pannelloTipo==="taglio";
   const box = document.getElementById("pannello-misure-box");
-  if(box) box.style.display = CFG._pannelloTipo==="taglio" ? "block" : "none";
+  if(box) box.style.display = taglio ? "block" : "none";
+  // Pannello intero: niente senso di apertura (campo disattivato, vale "Nessuno")
+  const grid = document.getElementById("sensi-grid");
+  const nota = document.getElementById("sensi-nota");
+  if(grid){ grid.style.opacity = taglio ? "1" : "0.4"; grid.style.pointerEvents = taglio ? "auto" : "none"; }
+  if(nota) nota.textContent = taglio ? "" : "— non serve per il pannello intero";
+  if(!taglio){ const h = document.getElementById("pannello-senso"); if(h) h.value = "Nessuno"; selSensoPannello("Nessuno"); }
 }
 
 // Netto documento: sconti sulle righe, trasporto a prezzo pieno.
