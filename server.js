@@ -1398,7 +1398,7 @@ async function buildPreventivoPayload(id){
       spalla:r.codice_spalla||(r.spessore_muro_cm?r.spessore_muro_cm+'cm':''),
       ferramenta:r.nome_ferramenta||'',serratura:r.nome_serratura||'',
       cilindro:r.nome_cilindro||'',pomolino:r.nome_pomolino||'',
-      maniglia:r.nome_maniglia||'',versione_maniglia:'',
+      maniglia:(r.nome_maniglia||'')+(r.nome_maniglia2?' + '+r.nome_maniglia2+' (2ª anta)':''),versione_maniglia:'',
       colore_maniglia:r.nome_colore_maniglia||'',vetro:r.nome_tipo_vetro||'',
       bugna:maiuscola(r.pannello_bugna),colore_inserto:r.nome_colore_alu||r.nome_colore_pietra||'',
       stanza:r.stanza||'',note_riga:r.note_riga||'',
@@ -1412,7 +1412,7 @@ async function buildPreventivoPayload(id){
       imballo:r.codice_imballo?(_imbMap[r.codice_imballo]||r.codice_imballo):'',prezzo_imballo:r.prezzo_imballo_totale||0,
       prezzo_base:r.prezzo_base||0,prezzo_finitura:r.prezzo_finitura||0,
       prezzo_apertura:r.prezzo_apertura||0,prezzo_telaio:r.prezzo_telaio||0,
-      prezzo_ferramenta:r.prezzo_ferramenta||0,prezzo_maniglia:r.prezzo_maniglia||0,
+      prezzo_ferramenta:r.prezzo_ferramenta||0,prezzo_maniglia:(parseFloat(r.prezzo_maniglia)||0)+(parseFloat(r.prezzo_maniglia2)||0),
       prezzo_serratura:r.prezzo_serratura||0,prezzo_vetro:r.prezzo_vetro||0,
       prezzo_bugna:r.prezzo_bugna||0,prezzo_extra:r.prezzo_extra_incisioni||0,
       prezzo_unitario:r.prezzo_unitario||0,prezzo_totale:r.prezzo_totale_riga||0,
@@ -2394,6 +2394,7 @@ async function stampaSchedaProduzione(ordineId){
   R.forEach(r=>{
     const q=parseFloat(r.quantita)||1;
     if(r.codice_maniglia && r.codice_maniglia!=='NESSUNA') agg(minut,'Maniglia '+(r.nome_maniglia||r.codice_maniglia)+(r.nome_colore_maniglia?' — '+r.nome_colore_maniglia:''),'pz',q);
+    if(r.codice_maniglia2) agg(minut,'Maniglia '+(r.nome_maniglia2||r.codice_maniglia2)+(r.nome_colore_maniglia?' — '+r.nome_colore_maniglia:''),'pz',q);
     if(r.codice_cilindro) agg(minut,'Cilindro '+(r.nome_cilindro||r.codice_cilindro),'pz',q);
     if(r.codice_pomolino) agg(minut,'Pomolino WC '+(r.nome_pomolino||r.codice_pomolino),'pz',q);
   });
@@ -2662,7 +2663,7 @@ function cfgTotale(){
     tot_porta + p_misura + p_fh + p_fl +
     (CFG.p_vetro||0)+(CFG.p_bugna||0)+(CFG.p_inserto||0)+
     (CFG.p_acc_telaio||0)+
-    (CFG.p_ferramenta||0)+(CFG.p_maniglia||0)+(CFG.p_extra_incisioni||0)+
+    (CFG.p_ferramenta||0)+(CFG.p_maniglia||0)+(_isScorrevoleDoppia()?(CFG.p_maniglia2||0):0)+(CFG.p_extra_incisioni||0)+
     (CFG.p_serratura||0)+(CFG.p_cilindro||0)+(CFG.p_pomolino||0)+
     (CFG._p_varsavia||0)+(CFG.p_coprifili||0)+(_isScorrevoleEsterno()?(CFG.p_mantovana||0):0)+
     (CFG._isPannelloBlindato?(CFG.p_taglio_pannello||0):0)
@@ -2733,6 +2734,7 @@ async function modificaRiga(tabella, rigaId, docId, mode, listino_in){
   CFG.cilindro=r.codice_cilindro||null; CFG.nome_cilindro=r.nome_cilindro||''; CFG.p_cilindro=parseFloat(r.prezzo_cilindro)||0;
   CFG.pomolino=r.codice_pomolino||null; CFG.nome_pomolino=r.nome_pomolino||''; CFG.p_pomolino=parseFloat(r.prezzo_pomolino)||0;
   CFG.maniglia=r.codice_maniglia||null; CFG.nome_maniglia=r.nome_maniglia||'';
+  CFG.maniglia2=r.codice_maniglia2||null; CFG.nome_maniglia2=r.nome_maniglia2||''; CFG.p_maniglia2=parseFloat(r.prezzo_maniglia2)||0;
   CFG.colore_maniglia=r.codice_colore_maniglia||null; CFG.nome_colore_maniglia=r.nome_colore_maniglia||'';
   CFG.quantita=r.quantita||1; CFG.note_riga=r.note_riga||''; CFG.stanza=r.stanza||'';
   CFG.posata_da_noi=!!r.posata_da_noi;
@@ -4405,6 +4407,7 @@ async function cfgManiglia(){
 async function selManiglia(cod,nome,pr){
   CFG.maniglia=cod;CFG.nome_maniglia=nome;CFG.p_maniglia=pr;
   CFG._maniglia_esclusa=(cod==='NESSUNA');
+  await aggiornaManigliaGemella();
   cfgUpdatePrice();
   if(cod==='NESSUNA'){
     CFG.colore_maniglia=null;CFG.nome_colore_maniglia='';
@@ -4436,6 +4439,7 @@ async function cfgColoreManiglia(){
 
 async function selColoreManiglia(cod,nome,prezzo){
   CFG.colore_maniglia=cod;CFG.nome_colore_maniglia=nome;CFG.p_maniglia=prezzo;
+  await aggiornaManigliaGemella();
   cfgUpdatePrice();await cfgRiepilogo();
 }
 
@@ -4998,6 +5002,7 @@ async function cfgRiepilogo(){
     CFG.p_acc_telaio>0&&{label:'Accessorio telaio ('+CFG.accessorio_telaio+')',val:CFG.p_acc_telaio},
     (CFG.p_coprifili||0)>0&&{label:'Supplemento coprifili',val:CFG.p_coprifili},
     _isScorrevoleEsterno()&&(CFG.p_mantovana||0)>0&&{label:'Mantovana '+(CFG.nome_mantovana||''),val:CFG.p_mantovana},
+    _isScorrevoleDoppia()&&(CFG.p_maniglia2||0)>0&&{label:'Seconda anta: '+(CFG.nome_maniglia2||''),val:CFG.p_maniglia2},
     CFG._isPannelloBlindato&&(CFG.p_taglio_pannello||0)>0&&{label:'Taglio a misura',val:CFG.p_taglio_pannello},
     p_doppia_eff>0&&{label:'Supplemento doppia anta'+(CFG.apertura==='CS2A'?' incl. €124':''),val:p_doppia_eff},
     p_fh_eff>0&&{label:'Supplemento fuori misura H'+(CFG._fuori_h_pct?\` (+\${CFG._fuori_h_pct}%)\`:''),val:p_fh_eff},
@@ -5024,6 +5029,7 @@ async function cfgRiepilogo(){
       \${_imbTot>0?\`<tr><td style="padding:3px 0;color:var(--mid)">Imballo (\${CFG._imballo_desc})\${CFG._imballo_metodo==='a_scatola'?\` — \${Math.ceil((CFG.quantita||1)/Math.max(1,CFG._imballo_capienza||1))} scatola/e\`:''}</td><td style="text-align:right;font-weight:500">€ \${_imbTot.toLocaleString('it-IT',{minimumFractionDigits:2})}</td></tr>\`:''}
     </table>
     \${(CFG.finitura_telaio && CFG.finitura_telaio!==CFG.finitura)?\`<div style="font-size:11px;color:var(--mid);margin-bottom:4px">Colore telaio e coprifili: <strong>\${CFG.nome_finitura_telaio}</strong></div>\`:''}
+    \${(_isScorrevoleDoppia()&&CFG.nome_maniglia2)?\`<div style="font-size:11px;color:var(--mid);margin-bottom:4px">Seconda anta: <strong>\${CFG.nome_maniglia2}</strong>\${CFG.p_maniglia2>0?'':' (inclusa)'}</div>\`:''}
     \${(_isScorrevoleEsterno()&&CFG.nome_mantovana)?\`<div style="font-size:11px;color:var(--mid);margin-bottom:4px">Mantovana: <strong>\${CFG.nome_mantovana}</strong></div>\`:''}
     \${CFG.escludi_coprifili
       ? '<div style="font-size:11px;color:var(--mid);margin-bottom:12px">Coprifili: <strong>esclusi</strong></div>'
@@ -5092,6 +5098,9 @@ async function aggiungiRigaAlDocumento(){
     codice_spalla:CFG.spalla, tipo_accessorio_telaio:CFG.accessorio_telaio,
     codice_ferramenta:CFG.ferramenta, nome_ferramenta:CFG.nome_ferramenta,
     codice_maniglia:CFG.maniglia, nome_maniglia:CFG.nome_maniglia,
+    codice_maniglia2: _isScorrevoleDoppia() ? (CFG.maniglia2||null) : null,
+    nome_maniglia2: _isScorrevoleDoppia() ? (CFG.nome_maniglia2||null) : null,
+    prezzo_maniglia2: _isScorrevoleDoppia() ? (CFG.p_maniglia2||0) : 0,
     codice_colore_maniglia:CFG.colore_maniglia, nome_colore_maniglia:CFG.nome_colore_maniglia||'',
     prezzo_base:CFG.p_base, prezzo_vetro:CFG.p_vetro,
     prezzo_finitura:CFG.p_finitura, prezzo_bugna:CFG.p_bugna,
@@ -5669,7 +5678,7 @@ async function salvaNuovoDoc(){
     };
 
     let docId, docNumero;
-    const RIGHE_FIELDS = ['codice_serie','nome_serie','codice_modello','nome_modello','codice_finitura','nome_finitura','pannello_bugna','codice_colore_alu','nome_colore_alu','codice_colore_pietra','nome_colore_pietra','codice_tipo_vetro','nome_tipo_vetro','codice_apertura','nome_apertura','senso_apertura','larghezza_mm','altezza_mm','misura_custom','spessore_muro_cm','codice_spalla','tipo_accessorio_telaio','codice_ferramenta','nome_ferramenta','codice_maniglia','nome_maniglia','codice_colore_maniglia','nome_colore_maniglia','prezzo_base','prezzo_vetro','prezzo_finitura','prezzo_bugna','prezzo_inserto','prezzo_apertura','prezzo_telaio','prezzo_accessorio_telaio','prezzo_ferramenta','prezzo_maniglia','prezzo_extra_incisioni','prezzo_unitario','quantita','sconto_riga','prezzo_totale_riga','note_riga','stanza','escludi_telaio','escludi_coprifili','coprifili_config','codice_imballo','prezzo_imballo_unitario','prezzo_imballo_totale','posata_da_noi','prezzo_coprifili','con_sopraluce','collegamento_id','auto_sopraluce','compat_approvate','spessore_mm','codice_finitura_telaio','nome_finitura_telaio','codice_serratura','nome_serratura','prezzo_serratura','codice_cilindro','nome_cilindro','prezzo_cilindro','codice_pomolino','nome_pomolino','prezzo_pomolino','codice_mantovana','nome_mantovana','prezzo_mantovana','lavorazioni_extra','prezzo_lavorazioni_extra'];
+    const RIGHE_FIELDS = ['codice_serie','nome_serie','codice_modello','nome_modello','codice_finitura','nome_finitura','pannello_bugna','codice_colore_alu','nome_colore_alu','codice_colore_pietra','nome_colore_pietra','codice_tipo_vetro','nome_tipo_vetro','codice_apertura','nome_apertura','senso_apertura','larghezza_mm','altezza_mm','misura_custom','spessore_muro_cm','codice_spalla','tipo_accessorio_telaio','codice_ferramenta','nome_ferramenta','codice_maniglia','nome_maniglia','codice_colore_maniglia','nome_colore_maniglia','prezzo_base','prezzo_vetro','prezzo_finitura','prezzo_bugna','prezzo_inserto','prezzo_apertura','prezzo_telaio','prezzo_accessorio_telaio','prezzo_ferramenta','prezzo_maniglia','prezzo_extra_incisioni','prezzo_unitario','quantita','sconto_riga','prezzo_totale_riga','note_riga','stanza','escludi_telaio','escludi_coprifili','coprifili_config','codice_imballo','prezzo_imballo_unitario','prezzo_imballo_totale','posata_da_noi','prezzo_coprifili','con_sopraluce','collegamento_id','auto_sopraluce','compat_approvate','spessore_mm','codice_finitura_telaio','nome_finitura_telaio','codice_serratura','nome_serratura','prezzo_serratura','codice_cilindro','nome_cilindro','prezzo_cilindro','codice_pomolino','nome_pomolino','prezzo_pomolino','codice_mantovana','nome_mantovana','prezzo_mantovana','lavorazioni_extra','prezzo_lavorazioni_extra','codice_maniglia2','nome_maniglia2','prezzo_maniglia2'];
 
     if(editId){
       // MODIFICA — update del documento esistente (senza toccare numero/creato_da)
@@ -6852,6 +6861,32 @@ async function _archivioFiltroB(aTipo, aCod, bTipo){
     return new Set((data||[]).map(function(f){ return f.codice_finitura; }));
   }
   return null;
+}
+
+// Scorrevoli doppia anta: la seconda anta riceve la conchiglia "gemella" dello stesso modello.
+// Con serratura: scelta (chiave/cilindro/WC) + cieca; senza serratura: 2 cieche.
+// Il gemello è il codice con suffisso -C (es. EAQ-CH → EAQ-C). Prezzo: se il pezzo ha un prezzo
+// (per colore o listino) si somma; se è incluso resta incluso anche sulla seconda anta.
+function _isScorrevoleDoppia(){ return /^S[IE]/.test(String(CFG.apertura||"")) && String(CFG.apertura||"").indexOf("2A")>=0; }
+function _codiceCieca(cod){
+  const p = String(cod||"").split("-");
+  if(p.length<2) return null;
+  p[p.length-1] = "C";
+  return p.join("-");
+}
+async function aggiornaManigliaGemella(){
+  CFG.maniglia2 = null; CFG.nome_maniglia2 = ""; CFG.p_maniglia2 = 0;
+  if(!_isScorrevoleDoppia() || !CFG.maniglia || CFG.maniglia==="NESSUNA") return;
+  const cod2 = _codiceCieca(CFG.maniglia);
+  if(!cod2) return;
+  const {data:m2} = await sb.from("maniglie").select("*").eq("codice",cod2).maybeSingle();
+  if(!m2) return;
+  let prezzo = parseFloat(m2["prezzo_"+listino().toLowerCase()])||0;
+  if(CFG.colore_maniglia){
+    const {data:c2} = await sb.from("colori_maniglia").select("prezzo_maniglia").eq("codice_maniglia",cod2).eq("codice_colore",CFG.colore_maniglia).maybeSingle();
+    if(c2) prezzo = parseFloat(c2.prezzo_maniglia)||0;
+  }
+  CFG.maniglia2 = cod2; CFG.nome_maniglia2 = m2.nome; CFG.p_maniglia2 = prezzo;
 }
 
 // Netto documento: sconti sulle righe, trasporto a prezzo pieno.
@@ -9891,7 +9926,7 @@ async function costruisciPayloadPDF(tipo, id, soloNetti) {
         serratura: r.nome_serratura || '',
         cilindro: r.nome_cilindro || '',
         pomolino: r.nome_pomolino || '',
-        maniglia: r.nome_maniglia || '',
+        maniglia: (r.nome_maniglia || '') + (r.nome_maniglia2 ? ' + ' + r.nome_maniglia2 + ' (2ª anta)' : ''),
         versione_maniglia: '',
         colore_maniglia: r.nome_colore_maniglia || '',
         vetro: r.nome_tipo_vetro || '',
@@ -9916,7 +9951,7 @@ async function costruisciPayloadPDF(tipo, id, soloNetti) {
         prezzo_apertura: r.prezzo_apertura || 0,
         prezzo_telaio: r.prezzo_telaio || 0,
         prezzo_ferramenta: r.prezzo_ferramenta || 0,
-        prezzo_maniglia: r.prezzo_maniglia || 0,
+        prezzo_maniglia: (parseFloat(r.prezzo_maniglia)||0) + (parseFloat(r.prezzo_maniglia2)||0),
         prezzo_serratura: r.prezzo_serratura || 0,
         prezzo_cilindro: r.prezzo_cilindro || 0,
         prezzo_pomolino: r.prezzo_pomolino || 0,
