@@ -6805,6 +6805,55 @@ function _applicaTipoPannelloUI(){
   if(!taglio){ const h = document.getElementById("pannello-senso"); if(h) h.value = "Nessuno"; selSensoPannello("Nessuno"); }
 }
 
+// Compatibilità: opzioni B già escluse dall'archivio (stesse regole del configuratore) non si mostrano.
+// Ritorna un Set di codici B ammessi, oppure null se per quella coppia non c'è un filtro d'archivio.
+async function _archivioFiltroB(aTipo, aCod, bTipo){
+  const A = String(aCod||"").toUpperCase().trim();
+  if(!A) return null;
+  if(aTipo==="apertura" && bTipo==="maniglia"){
+    const {data} = await sb.from("maniglie").select("codice,versione,aperture_escluse").eq("attivo",true);
+    const scorr = /^S[IE]/.test(A) || A.indexOf("S/")===0;
+    const libro = A.indexOf("LIBRO")===0;
+    const ok = new Set();
+    (data||[]).forEach(function(m){
+      if(m.codice==="NESSUNA"){ ok.add(m.codice); return; }
+      if(_aperturaEsclusa(m.aperture_escluse, A)) return;
+      const v = String(m.versione||"").toUpperCase();
+      if(scorr){ if(v==="SCORREVOLE") ok.add(m.codice); return; }
+      if(libro){ if(v==="LIBRO") ok.add(m.codice); return; }
+      if(!v || ["CHIAVE","CILINDRO","WC"].indexOf(v)>=0) ok.add(m.codice);   // come il configuratore (i MANIGLIONE oggi non compaiono mai)
+    });
+    return ok;
+  }
+  if(aTipo==="apertura" && bTipo==="serratura"){
+    const {data} = await sb.from("tipi_serratura").select("codice,famiglie_apertura").eq("attiva",true);
+    const fam = /^S[IE]/.test(A) || A.indexOf("S/")===0 ? "SCORREVOLE" : A.indexOf("LIBRO")===0 ? "LIBRO" :
+      A.indexOf("CS")===0 ? "CS" : A.indexOf("COM")===0 ? "COM" : A.indexOf("FM")===0 ? "FM" : A.indexOf("ROTO")===0 ? "ROTO" : "BAT";
+    const ok = new Set();
+    (data||[]).forEach(function(s){
+      if(!s.famiglie_apertura){ ok.add(s.codice); return; }
+      const fams = s.famiglie_apertura.split(",").map(function(x){ return x.trim().toUpperCase(); }).filter(Boolean);
+      if(fams.some(function(f){ return A===f || A.indexOf(f+"/")===0 || A.indexOf(f+" ")===0 || fam===f; })) ok.add(s.codice);
+    });
+    return ok;
+  }
+  if(aTipo==="serie" && bTipo==="modello"){
+    const {data} = await sb.from("modelli").select("codice").eq("codice_serie",aCod);
+    return new Set((data||[]).map(function(m){ return m.codice; }));
+  }
+  if((aTipo==="serie" || aTipo==="modello") && bTipo==="finitura"){
+    let serie = aCod;
+    if(aTipo==="modello"){
+      const {data:m} = await sb.from("modelli").select("codice_serie").eq("codice",aCod).maybeSingle();
+      serie = m && m.codice_serie;
+      if(!serie) return null;
+    }
+    const {data} = await sb.from("finiture").select("codice_finitura").eq("codice_serie",serie);
+    return new Set((data||[]).map(function(f){ return f.codice_finitura; }));
+  }
+  return null;
+}
+
 // Netto documento: sconti sulle righe, trasporto a prezzo pieno.
 // (nel DB totale_imponibile = somma righe + costo_trasporto)
 function nettoDoc(d){
@@ -9021,7 +9070,11 @@ async function adminCompatibilita(){
   const bTipo = document.getElementById('compat-b-tipo')?.value||'finitura';
 
   const aItems = ENTITA[aTipo]?.items||[];
-  const bItems = ENTITA[bTipo]?.items||[];
+  const bTutti = ENTITA[bTipo]?.items||[];
+  // Nasconde le opzioni B che l'archivio esclude già per l'A scelto (es. maniglie non da scorrevole)
+  const ammessiArch = aCodice ? await _archivioFiltroB(aTipo, aCodice, bTipo) : null;
+  const bItems = ammessiArch ? bTutti.filter(i=>ammessiArch.has(i.codice||i[ENTITA[bTipo].codKey])) : bTutti;
+  const nascosteArch = bTutti.length - bItems.length;
 
   // Opzioni per i select
   const tipiOpts = Object.entries(ENTITA).map(([k,v])=>\`<option value="\${k}">\${v.label}</option>\`).join('');
@@ -9104,7 +9157,7 @@ async function adminCompatibilita(){
             <select id="compat-b-tipo" onchange="adminCompatibilita()" style="width:100%;padding:6px 8px;border:0.5px solid var(--border);border-radius:var(--radius);font-size:12px;font-family:inherit;margin-bottom:6px">
               \${Object.entries(ENTITA).map(([k,v])=>\`<option value="\${k}" \${k===bTipo?'selected':''}>\${v.label}</option>\`).join('')}
             </select>
-            <div style="font-size:11px;color:var(--mid)">\${bItems.length} opzioni disponibili</div>
+            <div style="font-size:11px;color:var(--mid)">\${bItems.length} opzioni disponibili\${nascosteArch>0?' · '+nascosteArch+' nascoste perché già escluse dall\\'archivio':''}</div>
           </div>
         </div>
         <div style="max-height:calc(100vh - 380px);overflow-y:auto;border:0.5px solid var(--border);border-radius:var(--radius)">
